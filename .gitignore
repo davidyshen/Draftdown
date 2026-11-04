@@ -35,3 +35,6 @@ migrate_working_dir/
 windows/flutter/ephemeral/
 linux/flutter/ephemeral/
 macos/Flutter/ephemeral/
+
+# Pandoc binary
+assets/bin/pandoc.exe
