@@ -1,0 +1,665 @@
+import 'dart:async';
+import 'dart:io';
+import 'package:flutter/foundation.dart';
+import 'package:markdown/markdown.dart' as md;
+import 'package:path_provider/path_provider.dart';
+import '../controllers/editor_controller.dart';
+import '../models/citation_item.dart';
+import 'pandoc_service.dart';
+
+/// Service generating publication-quality HTML and PDF documents directly
+/// from Markdown, matching the editor preview's typography, deep green code styling,
+/// and unaccented academic citations without requiring Pandoc or LaTeX.
+class DirectExportService {
+  /// Deep green colour specified for code blocks and inline code
+  static const String codeGreenColor = '#166534';
+
+  /// Resolve page margin stylesheet definition based on selected margin mode
+  static String resolvePageMargin(String marginSize) {
+    switch (marginSize.toLowerCase()) {
+      case 'thin':
+        // 50% thinner than medium (1in * 0.5 = 0.5in)
+        return '0.5in';
+      case 'thick':
+        // 25% thicker than medium only on the sides (top/bottom: 1in, sides: 1.25in)
+        return '1in 1.25in';
+      case 'medium':
+      default:
+        return '1in';
+    }
+  }
+
+  /// Locate the pre-installed system browser executable (Edge / Chrome) for headless PDF printing
+  Future<String?> findBrowserExecutable() async {
+    if (Platform.isWindows) {
+      final localAppData = Platform.environment['LOCALAPPDATA'];
+      final candidates = [
+        r'C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe',
+        r'C:\Program Files\Microsoft\Edge\Application\msedge.exe',
+        r'C:\Program Files\Google\Chrome\Application\chrome.exe',
+        r'C:\Program Files (x86)\Google\Chrome\Application\chrome.exe',
+        if (localAppData != null)
+          '$localAppData\\Microsoft\\Edge\\Application\\msedge.exe',
+        if (localAppData != null)
+          '$localAppData\\Google\\Chrome\\Application\\chrome.exe',
+      ];
+      for (final candidate in candidates) {
+        if (File(candidate).existsSync()) {
+          return candidate;
+        }
+      }
+    } else if (Platform.isMacOS) {
+      const candidates = [
+        '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
+        '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+        '/Applications/Chromium.app/Contents/MacOS/Chromium',
+      ];
+      for (final candidate in candidates) {
+        if (File(candidate).existsSync()) {
+          return candidate;
+        }
+      }
+    } else if (Platform.isLinux) {
+      const candidates = [
+        '/usr/bin/google-chrome',
+        '/usr/bin/chromium-browser',
+        '/usr/bin/chromium',
+        '/usr/bin/microsoft-edge',
+      ];
+      for (final candidate in candidates) {
+        if (File(candidate).existsSync()) {
+          return candidate;
+        }
+      }
+    }
+    return null;
+  }
+
+  /// Resolve citation item from controller bibliographies
+  CitationItem? _resolveCitation(String key, EditorController controller) {
+    final clean = key.trim().replaceAll(RegExp(r'^[@\-]'), '').toLowerCase();
+    for (final item in controller.citations) {
+      if (item.key.trim().replaceAll('@', '').toLowerCase() == clean) {
+        return item;
+      }
+    }
+    for (final item in controller.zoteroCitations) {
+      if (item.key.trim().replaceAll('@', '').toLowerCase() == clean) {
+        return item;
+      }
+    }
+    return null;
+  }
+
+  /// Format an individual citation segment in normal weight and colour
+  String _formatCitationSegment(
+    String segment, {
+    required bool bracketed,
+    required EditorController controller,
+  }) {
+    var raw = segment.trim();
+    bool suppressAuthor = raw.startsWith('-');
+    if (suppressAuthor) raw = raw.substring(1).trim();
+    if (raw.startsWith('@')) raw = raw.substring(1).trim();
+
+    String key;
+    String? locator;
+    final commaIdx = raw.indexOf(',');
+    if (commaIdx != -1) {
+      key = raw.substring(0, commaIdx).trim();
+      locator = raw.substring(commaIdx + 1).trim();
+    } else {
+      key = raw.trim();
+    }
+
+    final item = _resolveCitation(key, controller);
+    String authorsStr;
+    String yearStr;
+
+    if (item != null) {
+      authorsStr = item.shortAuthorSummary;
+      yearStr = item.effectiveYear;
+    } else {
+      authorsStr = CitationItem.inferAuthorFromKey(key);
+      final yearMatch = RegExp(r'(19\d\d|20\d\d)').firstMatch(key);
+      yearStr = yearMatch?.group(0) ?? 'n.d.';
+    }
+
+    final yearDisplay = yearStr.isNotEmpty ? yearStr : 'n.d.';
+    final locatorDisplay =
+        (locator != null && locator.isNotEmpty) ? ', $locator' : '';
+
+    if (bracketed) {
+      if (suppressAuthor) {
+        return '$yearDisplay$locatorDisplay';
+      } else {
+        return '$authorsStr, $yearDisplay$locatorDisplay';
+      }
+    } else {
+      return '$authorsStr ($yearDisplay$locatorDisplay)';
+    }
+  }
+
+  /// Replace citation keys with formatted plain-text citations and append references
+  String _processMarkdownForExport({
+    required String markdown,
+    required EditorController controller,
+  }) {
+    var processed = markdown;
+
+    // 1. Replace bracketed citations: [@key1; @key2, p. 5]
+    final bracketRegex = RegExp(r'\[(-?@[a-zA-Z0-9_\-:#\/]+(?:[^\n\]]*))\]');
+    processed = processed.replaceAllMapped(bracketRegex, (match) {
+      final inner = match.group(1)!;
+      final segments = inner.split(';').map((s) => s.trim()).toList();
+      final formatted = segments
+          .map((s) => _formatCitationSegment(
+                s,
+                bracketed: true,
+                controller: controller,
+              ))
+          .join('; ');
+      return '<span class="citation">($formatted)</span>';
+    });
+
+    // 2. Replace in-text citations: @key or @key [p. 10]
+    final inTextRegex =
+        RegExp(r'(?<![\w@])@([a-zA-Z0-9_\-:#\/]+)(?:\[([^\]]+)\])?');
+    processed = processed.replaceAllMapped(inTextRegex, (match) {
+      final key = match.group(1)!;
+      final loc = match.group(2);
+      final segmentText = loc != null ? '@$key, $loc' : '@$key';
+      final formatted = _formatCitationSegment(
+        segmentText,
+        bracketed: false,
+        controller: controller,
+      );
+      return '<span class="citation">$formatted</span>';
+    });
+
+    // 3. Append References section if citations were present and no heading exists
+    final citedKeys = CitationItem.extractCitedKeys(markdown);
+    if (citedKeys.isNotEmpty) {
+      final hasExistingReferences = RegExp(
+        r'^(?:#{1,6}\s*(?:References|Bibliography)|<a\s+name="references">)',
+        caseSensitive: false,
+        multiLine: true,
+      ).hasMatch(markdown);
+
+      if (!hasExistingReferences) {
+        final buffer = StringBuffer(processed);
+        buffer.writeln('\n\n---\n\n## References\n');
+
+        final sortedKeys = citedKeys.toList()..sort();
+        for (final key in sortedKeys) {
+          final item = _resolveCitation(key, controller);
+          if (item != null) {
+            final authors = item.authorsSummary;
+            final yearStr = item.effectiveYear != 'n.d.'
+                ? item.effectiveYear
+                : (item.year != null && item.year!.isNotEmpty
+                    ? item.year!
+                    : '');
+            final yearDisplay = yearStr.isNotEmpty ? ' ($yearStr)' : '';
+            final title = item.title;
+            final venue = (item.venue != null && item.venue!.trim().isNotEmpty)
+                ? ' *${item.venue}*.'
+                : '';
+            final doi = (item.doi != null && item.doi!.trim().isNotEmpty)
+                ? ' DOI: ${item.doi}.'
+                : '';
+            final url = (item.url != null &&
+                    item.url!.trim().isNotEmpty &&
+                    item.doi == null)
+                ? ' Available at: ${item.url}.'
+                : '';
+            buffer.writeln(
+                '- **$authors**$yearDisplay. *$title*.$venue$doi$url');
+          } else {
+            final seg = _formatCitationSegment(
+              '@$key',
+              bracketed: false,
+              controller: controller,
+            );
+            buffer.writeln('- **$seg**. Citekey: `$key`');
+          }
+        }
+        processed = buffer.toString();
+      }
+    }
+
+    return processed;
+  }
+
+  /// Generate a complete, standalone HTML document mimicking the preview styles
+  String generateHtmlDocument({
+    required String markdown,
+    required EditorController controller,
+    String? title,
+    String pageSize = 'a4',
+    String marginSize = 'medium',
+  }) {
+    final docTitle = title ?? controller.currentFileName.replaceAll('.md', '');
+    final processedMarkdown = _processMarkdownForExport(
+      markdown: markdown,
+      controller: controller,
+    );
+
+    // Convert markdown to HTML using GitHub Flavored Markdown
+    final htmlBody = md.markdownToHtml(
+      processedMarkdown,
+      extensionSet: md.ExtensionSet.gitHubFlavored,
+    );
+
+    final bodyFont = controller.renderBodyFont;
+    final headerFont = controller.effectiveRenderHeaderFont;
+    final codeFont = controller.editorFontFamily;
+    final effectivePageSize =
+        pageSize.toLowerCase() == 'letter' ? 'letter' : 'A4';
+    final effectiveMargin = resolvePageMargin(marginSize);
+
+    return '''<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>$docTitle</title>
+
+  <!-- KaTeX for high-fidelity formula rendering -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+          onload="renderMathInElement(document.body, {delimiters: [{left: '\$\$', right: '\$\$', display: true}, {left: '\$', right: '\$', display: false}]});"></script>
+
+  <style>
+    :root {
+      --body-font: '$bodyFont', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      --header-font: '$headerFont', Georgia, serif;
+      --code-font: '$codeFont', Consolas, "Cascadia Code", "Courier New", monospace;
+      --code-green: $codeGreenColor;
+    }
+
+    @page {
+      size: $effectivePageSize portrait;
+      margin: $effectiveMargin;
+    }
+
+    *, *::before, *::after {
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: var(--body-font);
+      font-size: 11pt;
+      line-height: 1.6;
+      color: #0f172a;
+      background: #f8fafc;
+      margin: 0;
+      padding: 40px 20px;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    .page-container {
+      max-width: 850px;
+      margin: 0 auto;
+      background: #ffffff;
+      padding: 56px 64px;
+      border: 1px solid #cbd5e1;
+      border-radius: 2px;
+      box-shadow: 0 4px 16px rgba(15, 23, 42, 0.08), 0 1px 4px rgba(15, 23, 42, 0.04);
+    }
+
+    /* Headings */
+    h1, h2, h3, h4, h5, h6 {
+      font-family: var(--header-font);
+      color: #0f172a;
+      font-weight: 700;
+      line-height: 1.35;
+      margin-top: 1.5em;
+      margin-bottom: 0.5em;
+    }
+
+    h1 {
+      font-size: 2.1em;
+      border-bottom: 1px solid #e2e8f0;
+      padding-bottom: 0.3em;
+      margin-top: 0;
+    }
+
+    h2 {
+      font-size: 1.55em;
+      border-bottom: 1px solid #f1f5f9;
+      padding-bottom: 0.25em;
+    }
+
+    h3 { font-size: 1.25em; }
+    h4 { font-size: 1.1em; }
+    h5 { font-size: 1.0em; }
+    h6 { font-size: 0.9em; color: #64748b; }
+
+    p {
+      margin-top: 0;
+      margin-bottom: 1.15em;
+    }
+
+    /* Code Blocks & Inline Code: Monospace font, no background, deep green text */
+    code, pre {
+      font-family: var(--code-font);
+    }
+
+    pre {
+      background: transparent !important;
+      background-color: transparent !important;
+      color: var(--code-green) !important;
+      font-size: 0.95em;
+      line-height: 1.5;
+      padding: 10px 0;
+      margin: 16px 0;
+      border: none;
+      overflow-x: auto;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+
+    pre code {
+      background: transparent !important;
+      background-color: transparent !important;
+      color: var(--code-green) !important;
+      font-size: inherit;
+      padding: 0;
+      border: none;
+    }
+
+    p code, li code, td code, th code {
+      background: transparent !important;
+      background-color: transparent !important;
+      color: var(--code-green) !important;
+      font-size: 0.92em;
+      padding: 0 2px;
+      font-weight: 500;
+    }
+
+    /* References and Citations: Normal weight, normal body colour, no coloured badges */
+    .citation {
+      font-weight: normal !important;
+      color: inherit !important;
+      background: transparent !important;
+      padding: 0 !important;
+      border: none !important;
+    }
+
+    /* Blockquotes */
+    blockquote {
+      border-left: 3.5px solid #2563eb;
+      margin: 18px 0;
+      padding: 8px 18px;
+      color: #475569;
+      font-style: italic;
+      background: #f8fafc;
+      border-radius: 0 4px 4px 0;
+    }
+
+    /* Tables */
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 20px 0;
+      font-size: 0.95em;
+    }
+
+    th, td {
+      border: 1px solid #cbd5e1;
+      padding: 8px 14px;
+      text-align: left;
+    }
+
+    th {
+      font-family: var(--header-font);
+      background: #f1f5f9;
+      font-weight: 700;
+      color: #0f172a;
+    }
+
+    tr:nth-child(even) td {
+      background: #f8fafc;
+    }
+
+    /* Lists */
+    ul, ol {
+      padding-left: 24px;
+      margin-bottom: 1.15em;
+    }
+
+    li {
+      margin-bottom: 0.4em;
+    }
+
+    hr {
+      border: none;
+      border-top: 1px solid #e2e8f0;
+      margin: 32px 0;
+    }
+
+    /* Print Stylesheet for exact Word Processor fidelity */
+    @media print {
+      body {
+        background: transparent !important;
+        padding: 0 !important;
+      }
+      .page-container {
+        border: none !important;
+        box-shadow: none !important;
+        padding: 0 !important;
+        max-width: none !important;
+        margin: 0 !important;
+      }
+      pre, pre code, p code, li code, td code {
+        background: transparent !important;
+        color: var(--code-green) !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+      .citation {
+        font-weight: normal !important;
+        color: inherit !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="page-container">
+    $htmlBody
+  </div>
+</body>
+</html>
+''';
+  }
+
+  /// Export directly to a standalone HTML file
+  Future<PandocResult> exportHtml({
+    required String markdown,
+    required String targetPath,
+    required EditorController controller,
+    String? title,
+    String pageSize = 'a4',
+  }) async {
+    final stopwatch = Stopwatch()..start();
+    try {
+      final targetFile = File(targetPath);
+      if (!await targetFile.parent.exists()) {
+        await targetFile.parent.create(recursive: true);
+      }
+
+      final html = generateHtmlDocument(
+        markdown: markdown,
+        controller: controller,
+        title: title,
+        pageSize: pageSize,
+      );
+
+      await targetFile.writeAsString(html);
+      stopwatch.stop();
+
+      return PandocResult(
+        success: true,
+        exitCode: 0,
+        targetFile: targetPath,
+        stdout: 'HTML document exported successfully matching preview typography',
+        stderr: '',
+        duration: stopwatch.elapsed,
+      );
+    } catch (e) {
+      stopwatch.stop();
+      return PandocResult(
+        success: false,
+        exitCode: -1,
+        targetFile: targetPath,
+        stdout: '',
+        stderr: e.toString(),
+        duration: stopwatch.elapsed,
+        errorMessage: 'Direct HTML export failed: $e',
+      );
+    }
+  }
+
+  /// Export directly to a publication-grade PDF file using the pre-installed system browser engine
+  Future<PandocResult> exportPdf({
+    required String markdown,
+    required String targetPath,
+    required EditorController controller,
+    String? title,
+    String pageSize = 'a4',
+    String marginSize = 'medium',
+  }) async {
+    final stopwatch = Stopwatch()..start();
+    final browserExe = await findBrowserExecutable();
+
+    if (browserExe == null) {
+      stopwatch.stop();
+      return PandocResult(
+        success: false,
+        exitCode: -1,
+        targetFile: targetPath,
+        stdout: '',
+        stderr: 'No compatible browser executable found for direct PDF export.',
+        duration: stopwatch.elapsed,
+        errorMessage:
+            'A compatible browser (Microsoft Edge or Google Chrome) was not detected. Please install Microsoft Edge or Google Chrome to enable direct PDF export.',
+      );
+    }
+
+    File? tempHtmlFile;
+    Directory? tempProfileDir;
+
+    try {
+      // 1. Generate preview-matched HTML
+      final html = generateHtmlDocument(
+        markdown: markdown,
+        controller: controller,
+        title: title,
+        pageSize: pageSize,
+        marginSize: marginSize,
+      );
+
+      final tempDir = await getTemporaryDirectory();
+      final tempTimestamp = DateTime.now().millisecondsSinceEpoch;
+      tempHtmlFile = File(
+          '${tempDir.path}${Platform.pathSeparator}mdwriter_pdf_$tempTimestamp.html');
+      await tempHtmlFile.writeAsString(html);
+
+      tempProfileDir = Directory(
+          '${tempDir.path}${Platform.pathSeparator}mdwriter_pdf_profile_$tempTimestamp');
+      if (!await tempProfileDir.exists()) {
+        await tempProfileDir.create(recursive: true);
+      }
+
+      final targetFile = File(targetPath);
+      if (!await targetFile.parent.exists()) {
+        await targetFile.parent.create(recursive: true);
+      }
+
+      // Convert local file path to file:/// URL with escaped spaces
+      final fileUri = tempHtmlFile.uri.toString();
+
+      final args = [
+        '--headless=new',
+        '--disable-gpu',
+        '--no-pdf-header-footer',
+        '--log-level=3',
+        '--silent-debugger-extension-api',
+        '--user-data-dir=${tempProfileDir.path}',
+        '--print-to-pdf=${targetFile.path}',
+        fileUri,
+      ];
+
+      debugPrint(
+          '[DirectExportService] Running $browserExe to print PDF: ${args.join(" ")}');
+
+      final processResult = await Process.run(browserExe, args);
+      stopwatch.stop();
+
+      final pdfCreated = await targetFile.exists();
+      final isSuccess = processResult.exitCode == 0 && pdfCreated;
+
+      // Filter mundane browser engine diagnostic noise from stderr
+      var cleanStderr = processResult.stderr.toString();
+      var cleanStdout = processResult.stdout.toString();
+
+      final stderrLines = cleanStderr.split('\n');
+      final filteredStderr = <String>[];
+      for (final line in stderrLines) {
+        final trimmed = line.trim();
+        if (trimmed.isEmpty) continue;
+        // Suppress benign Chromium task manager and crbug diagnostic noise
+        if (trimmed.contains('fallback_task_provider.cc') ||
+            trimmed.contains('crbug.com')) {
+          continue;
+        }
+        // If Chromium outputs written bytes info to stderr, route to stdout instead
+        if (trimmed.contains('bytes written to file')) {
+          if (cleanStdout.isNotEmpty) cleanStdout += '\n';
+          cleanStdout += trimmed;
+          continue;
+        }
+        filteredStderr.add(line);
+      }
+      cleanStderr = filteredStderr.join('\n').trim();
+
+      return PandocResult(
+        success: isSuccess,
+        exitCode: processResult.exitCode,
+        targetFile: targetPath,
+        stdout: cleanStdout,
+        stderr: cleanStderr,
+        duration: stopwatch.elapsed,
+        errorMessage: isSuccess
+            ? null
+            : 'PDF conversion failed with exit code ${processResult.exitCode}: $cleanStderr',
+      );
+    } catch (e) {
+      stopwatch.stop();
+      return PandocResult(
+        success: false,
+        exitCode: -1,
+        targetFile: targetPath,
+        stdout: '',
+        stderr: e.toString(),
+        duration: stopwatch.elapsed,
+        errorMessage: 'Direct PDF export failed: $e',
+      );
+    } finally {
+      // Clean up temporary files
+      if (tempHtmlFile != null && await tempHtmlFile.exists()) {
+        try {
+          await tempHtmlFile.delete();
+        } catch (_) {}
+      }
+      if (tempProfileDir != null && await tempProfileDir.exists()) {
+        try {
+          await tempProfileDir.delete(recursive: true);
+        } catch (_) {}
+      }
+    }
+  }
+}
