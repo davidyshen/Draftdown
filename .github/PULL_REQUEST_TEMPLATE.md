@@ -9,9 +9,9 @@
   1. I have read and agree with the CONTRIBUTING.md file and the Code of Conduct.
   2. I documented the code where applicable ("why" not "what").
   3. This PR targets the develop branch, *not* the master branch.
-  4. I have tested all changes by running `yarn start`, and added unit tests
+  4. I have tested all changes by running the Flutter application, and added unit tests
      where applicable. I have paid attention to cross-platform issues.
-  5. `yarn lint` and `yarn test` run successfully locally.
+  5. `flutter analyze` and `flutter test` run successfully locally.
   6. I followed the code-style of the repository.
   7. I agree that my code will be published under the GNU GPL v3 license.
   8. All new files have the correct license/description header (see existing

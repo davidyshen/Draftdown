@@ -1,0 +1,98 @@
+name: Build Windows
+
+on:
+  push:
+    branches: [ develop, main, master ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ develop, main, master ]
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    name: Build Windows (${{ matrix.arch }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            flutter_arch: x64
+            os: windows-latest
+          - arch: arm64
+            flutter_arch: arm64
+            os: windows-11-arm
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter (x86_64)
+        if: matrix.arch == 'x86_64'
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          architecture: x64
+          cache: true
+
+      - name: Set up Flutter (ARM64)
+        if: matrix.arch == 'arm64'
+        shell: pwsh
+        run: |
+          $flutterDir = Join-Path $env:RUNNER_TEMP "flutter"
+          if (-not (Test-Path $flutterDir)) {
+            git clone --branch stable --depth 1 https://github.com/flutter/flutter.git $flutterDir
+          }
+          Add-Content -Path $env:GITHUB_PATH -Value (Join-Path $flutterDir "bin")
+          & (Join-Path $flutterDir "bin\flutter.bat") config --enable-windows-desktop
+          & (Join-Path $flutterDir "bin\flutter.bat") --version
+
+      - name: Fetch Pandoc binary for bundling
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          New-Item -ItemType Directory -Force -Path "assets/bin" | Out-Null
+          $headers = @{ "Accept" = "application/vnd.github+json" }
+          if ($env:GH_TOKEN) {
+            $headers["Authorization"] = "Bearer $env:GH_TOKEN"
+          }
+          $release = Invoke-RestMethod -Uri "https://api.github.com/repos/jgm/pandoc/releases/latest" -Headers $headers
+          $asset = $release.assets | Where-Object { $_.name -match "windows-x86_64\.zip$" } | Select-Object -First 1
+          if (-not $asset) {
+            throw "Could not find Windows Pandoc archive in latest release."
+          }
+          $zipPath = Join-Path $env:RUNNER_TEMP "pandoc.zip"
+          $extractDir = Join-Path $env:RUNNER_TEMP "pandoc_extract"
+          Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $zipPath
+          Expand-Archive -Path $zipPath -DestinationPath $extractDir -Force
+          $pandocExe = Get-ChildItem -Path $extractDir -Recurse -Filter "pandoc.exe" | Select-Object -First 1
+          if (-not $pandocExe) {
+            throw "pandoc.exe not found inside downloaded archive."
+          }
+          Copy-Item -Path $pandocExe.FullName -Destination "assets/bin/pandoc.exe" -Force
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build Windows Release (${{ matrix.arch }})
+        run: flutter build windows --release
+
+      - name: Package release archive
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $releaseDir = "build/windows/${{ matrix.flutter_arch }}/runner/Release"
+          if (-not (Test-Path $releaseDir)) {
+            throw "Expected build output directory not found: $releaseDir"
+          }
+          $archiveName = "MDWriter-windows-${{ matrix.arch }}.zip"
+          Compress-Archive -Path "$releaseDir/*" -DestinationPath $archiveName -Force
+
+      - name: Upload Windows (${{ matrix.arch }}) Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MDWriter-windows-${{ matrix.arch }}
+          path: MDWriter-windows-${{ matrix.arch }}.zip
+          if-no-files-found: error
