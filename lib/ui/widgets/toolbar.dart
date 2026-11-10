@@ -114,6 +114,34 @@ class AppToolbar extends StatelessWidget {
 
                     const Spacer(),
 
+                    // Manual "Update Render" button shown when the file is modified
+                    if (controller.isModified) ...[
+                      if (isCompact)
+                        IconButton(
+                          key: const ValueKey('update-render-button'),
+                          icon: const Icon(Icons.refresh, size: 18),
+                          tooltip: 'Update Render',
+                          splashRadius: 18,
+                          onPressed: controller.updateRender,
+                        )
+                      else
+                        FilledButton.tonalIcon(
+                          key: const ValueKey('update-render-button'),
+                          icon: const Icon(Icons.refresh, size: 16),
+                          label: const Text(
+                            'Update Render',
+                            style: TextStyle(fontSize: 12),
+                          ),
+                          style: FilledButton.styleFrom(
+                            visualDensity: VisualDensity.compact,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 6),
+                          ),
+                          onPressed: controller.updateRender,
+                        ),
+                      const SizedBox(width: 8),
+                    ],
+
                     // View Mode Switcher: Edit, Split, Preview
                     _buildViewModeSegmented(isCompact),
 

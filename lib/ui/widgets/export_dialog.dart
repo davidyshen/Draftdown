@@ -191,8 +191,8 @@ class _ExportDialogState extends State<ExportDialog> {
                           color: isSelected
                               ? theme.colorScheme.primary.withValues(alpha: 0.12)
                               : (isDark
-                                  ? const Color(0xFF131D2E)
-                                  : const Color(0xFFF8FAFC)),
+                                  ? AppTheme.darkSidebar
+                                  : AppTheme.lightBg),
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(
                             color: isSelected
@@ -288,8 +288,8 @@ class _ExportDialogState extends State<ExportDialog> {
                   border: Border.all(color: borderColor),
                   borderRadius: BorderRadius.circular(8),
                   color: isDark
-                      ? const Color(0xFF131D2E)
-                      : const Color(0xFFF8FAFC),
+                      ? AppTheme.darkSidebar
+                      : AppTheme.lightBg,
                 ),
                 child: Wrap(
                   spacing: 16,
@@ -349,8 +349,8 @@ class _ExportDialogState extends State<ExportDialog> {
                               border: Border.all(color: borderColor),
                               borderRadius: BorderRadius.circular(4),
                               color: isDark
-                                  ? const Color(0xFF0F172A)
-                                  : Colors.white,
+                                  ? AppTheme.darkBg
+                                  : AppTheme.lightSurface,
                             ),
                             child: DropdownButtonHideUnderline(
                               child: DropdownButton<String>(
@@ -392,8 +392,8 @@ class _ExportDialogState extends State<ExportDialog> {
                               border: Border.all(color: borderColor),
                               borderRadius: BorderRadius.circular(4),
                               color: isDark
-                                  ? const Color(0xFF0F172A)
-                                  : Colors.white,
+                                  ? AppTheme.darkBg
+                                  : AppTheme.lightSurface,
                             ),
                             child: DropdownButtonHideUnderline(
                               child: DropdownButton<String>(
@@ -488,8 +488,8 @@ class _ExportDialogState extends State<ExportDialog> {
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
                     color: isDark
-                        ? const Color(0xFF0F172A)
-                        : const Color(0xFFF1F5F9),
+                        ? AppTheme.darkBg
+                        : AppTheme.lightSidebar,
                     borderRadius: BorderRadius.circular(6),
                     border: Border.all(color: borderColor),
                   ),

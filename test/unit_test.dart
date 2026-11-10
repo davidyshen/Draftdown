@@ -1,4 +1,6 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mdwriter/controllers/editor_controller.dart';
 import 'package:mdwriter/models/citation_item.dart';
@@ -11,6 +13,19 @@ import 'package:mdwriter/services/zotero_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+      .setMockMethodCallHandler(
+    const MethodChannel('plugins.flutter.io/path_provider'),
+    (MethodCall methodCall) async {
+      if (methodCall.method == 'getTemporaryDirectory') {
+        return Directory.systemTemp.path;
+      }
+      return null;
+    },
+  );
+
   group('CitationItem Model', () {
     test('formats Pandoc bracketed citation correctly', () {
       const item = CitationItem(
@@ -383,7 +398,7 @@ void main() {
       expect(detected!.rawText, equals('[@asdfsdf, @asdfasdf, @ghjghj]'));
       expect(detected.keys, equals(['asdfsdf', 'asdfasdf', 'ghjghj']));
       expect(detected.startOffset, equals(9));
-      expect(detected.endOffset, equals(40));
+      expect(detected.endOffset, equals(39));
     });
 
     test('detects semicolon-separated citations with locator and suppressAuthor', () {

@@ -11,6 +11,7 @@ import '../services/file_service.dart';
 import '../services/history_service.dart';
 import '../services/pandoc_service.dart';
 import '../services/zotero_service.dart';
+import '../ui/theme/app_theme.dart';
 import 'markdown_syntax_controller.dart';
 
 enum EditorViewMode {
@@ -62,16 +63,30 @@ class EditorController extends ChangeNotifier {
   bool _isPandocAvailable = false;
   String? _pandocVersion;
 
-  // Typography state
+  // Typography & Appearance state
   String _editorFontFamily = 'Consolas';
   bool _isDualRenderFont = false;
   String _renderBodyFont = 'Segoe UI';
   String _renderHeaderFont = 'Georgia';
+  String? _darkSchemeId;
+  String? _lightSchemeId;
+  bool? _isDarkMode;
+
+  // Preview state & Debouncing (1.5s idle window after typing stops)
+  static const Duration defaultRenderDebounce = Duration(milliseconds: 1500);
+  final Duration? _customRenderDebounce;
+  String _previewMarkdown = '';
+  Timer? _debounceTimer;
+  bool? _isProgrammaticUpdate;
+  String? _lastObservedText;
 
   // Getters
+  Duration get renderDebounceDuration =>
+      _customRenderDebounce ?? defaultRenderDebounce;
   String? get currentFilePath => _currentFilePath;
   String get currentFileName => _currentFileName;
   bool get isModified => _isModified;
+  bool get isRenderPending => _debounceTimer?.isActive ?? false;
   EditorViewMode get viewMode => _viewMode;
   bool get isSidebarOpen => _isSidebarOpen;
   int get wordCount => _wordCount;
@@ -95,7 +110,14 @@ class EditorController extends ChangeNotifier {
   String get renderHeaderFont => _renderHeaderFont;
   String get effectiveRenderHeaderFont =>
       _isDualRenderFont ? _renderHeaderFont : _renderBodyFont;
+  String get darkSchemeId => _darkSchemeId ?? AppTheme.slateDarkScheme.id;
+  String get lightSchemeId => _lightSchemeId ?? AppTheme.slateLightScheme.id;
+  bool get isDarkMode => _isDarkMode ?? false;
+  String get activeColorSchemeId => isDarkMode ? darkSchemeId : lightSchemeId;
+  AppColorScheme get activeColorScheme =>
+      AppTheme.schemeById(activeColorSchemeId);
   String get content => textController.text;
+  String get previewMarkdown => _previewMarkdown;
 
   EditorController({
     FileService? fileService,
@@ -104,12 +126,15 @@ class EditorController extends ChangeNotifier {
     PandocService? pandocService,
     ZoteroService? zoteroService,
     DirectExportService? directExportService,
+    Duration? renderDebounceDuration,
   })  : fileService = fileService ?? FileService(),
         historyService = historyService ?? HistoryService(),
         bibliographyService = bibliographyService ?? BibliographyService(),
         pandocService = pandocService ?? PandocService(),
         zoteroService = zoteroService ?? ZoteroService(),
-        directExportService = directExportService ?? DirectExportService() {
+        directExportService = directExportService ?? DirectExportService(),
+        _customRenderDebounce = renderDebounceDuration {
+    _lastObservedText = textController.text;
     textController.addListener(_onTextChanged);
   }
 
@@ -149,6 +174,15 @@ class EditorController extends ChangeNotifier {
           prefs.getString('mdwriter_render_body_font') ?? 'Segoe UI';
       _renderHeaderFont =
           prefs.getString('mdwriter_render_header_font') ?? 'Georgia';
+
+      _darkSchemeId =
+          prefs.getString('mdwriter_dark_scheme') ?? AppTheme.slateDarkScheme.id;
+      _lightSchemeId = prefs.getString('mdwriter_light_scheme') ??
+          AppTheme.slateLightScheme.id;
+      _isDarkMode = prefs.getBool('mdwriter_dark_mode') ?? false;
+
+      AppTheme.setActiveScheme(AppTheme.schemeById(darkSchemeId));
+      AppTheme.setActiveScheme(AppTheme.schemeById(lightSchemeId));
 
       final savedSource = prefs.getString('mdwriter_citation_source');
       if (savedSource == 'zotero') {
@@ -190,31 +224,138 @@ class EditorController extends ChangeNotifier {
     } catch (_) {}
   }
 
+  /// Synchronises initial dark mode state without firing redundant writes.
+  void syncDarkMode(bool isDark) {
+    _isDarkMode = isDark;
+    AppTheme.setActiveScheme(AppTheme.schemeById(darkSchemeId));
+    AppTheme.setActiveScheme(AppTheme.schemeById(lightSchemeId));
+  }
+
+  /// Toggles between the active Light and Dark colour schemes.
+  Future<void> toggleDarkMode() async {
+    _isDarkMode = !isDarkMode;
+    AppTheme.setActiveScheme(AppTheme.schemeById(darkSchemeId));
+    AppTheme.setActiveScheme(AppTheme.schemeById(lightSchemeId));
+    notifyListeners();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('mdwriter_dark_mode', isDarkMode);
+    } catch (_) {}
+  }
+
+  /// Selects a specific colour scheme (Dark or Light) and applies its palette immediately.
+  Future<void> setColorScheme(String schemeId) async {
+    final scheme = AppTheme.schemeById(schemeId);
+    AppTheme.setActiveScheme(scheme);
+    if (scheme.isDark) {
+      _darkSchemeId = scheme.id;
+      _isDarkMode = true;
+    } else {
+      _lightSchemeId = scheme.id;
+      _isDarkMode = false;
+    }
+
+    // Notify syntax controller and main app listeners so editor & preview update immediately
+    textController.refreshThemeHighlighting();
+    notifyListeners();
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('mdwriter_color_scheme', scheme.id);
+      await prefs.setString('mdwriter_dark_scheme', darkSchemeId);
+      await prefs.setString('mdwriter_light_scheme', lightSchemeId);
+      await prefs.setBool('mdwriter_dark_mode', isDarkMode);
+    } catch (_) {}
+  }
+
   void _onTextChanged() {
-    final text = textController.text;
-    _charCount = text.length;
+    if (_isProgrammaticUpdate == true) return;
 
-    // Word count calculation
-    final words = text.trim().split(RegExp(r'\s+'));
-    _wordCount = (text.trim().isEmpty) ? 0 : words.length;
+    final currentText = textController.text;
+    // Ignore selection-only, focus, or composing notifications where text did not change
+    if (currentText == _lastObservedText) return;
+    _lastObservedText = currentText;
 
-    // Line count
-    _lineCount = '\n'.allMatches(text).length + 1;
+    _charCount = currentText.length;
 
-    // Reading time: standard ~200 words per minute
-    _readingTimeMinutes = (_wordCount / 200).ceil().clamp(1, 9999);
+    // When text is set programmatically before the editor widget is mounted,
+    // synchronise metrics and preview immediately without leaving a pending timer.
+    if (focusNode.context == null) {
+      _isModified = true;
+      _computeMetrics();
+      _previewMarkdown = currentText;
+      return;
+    }
+
+    // Decouple Markdown entry from expensive rendering on large files:
+    // Wait until a 1.5-second period of typing inactivity before updating the render.
+    textController.isActivelyTyping = true;
+    _debounceTimer?.cancel();
+    _debounceTimer = Timer(renderDebounceDuration, flushPendingRenderUpdate);
 
     if (!_isModified) {
       _isModified = true;
+      notifyListeners();
     }
+  }
+
+  /// Manually or automatically flushes any pending debounced render and metrics update.
+  void updateRender() {
+    flushPendingRenderUpdate();
+  }
+
+  /// Flushes any pending debounced render and metrics update immediately.
+  void flushPendingRenderUpdate() {
+    _debounceTimer?.cancel();
+    _debounceTimer = null;
+    _lastObservedText = textController.text;
+    textController.reconcileFullHighlight();
+    _computeMetrics();
+    _previewMarkdown = textController.text;
     notifyListeners();
+  }
+
+  void _computeMetrics() {
+    final text = textController.text;
+    _charCount = text.length;
+
+    // Single-pass high-performance word and line counter without heap allocations
+    int words = 0;
+    int lines = 1;
+    bool inWord = false;
+    for (int i = 0; i < text.length; i++) {
+      final code = text.codeUnitAt(i);
+      if (code == 10) {
+        lines++;
+      }
+      final isSpace = code <= 32;
+      if (isSpace) {
+        inWord = false;
+      } else if (!inWord) {
+        inWord = true;
+        words++;
+      }
+    }
+    _wordCount = words;
+    _lineCount = lines;
+
+    // Reading time: standard ~200 words per minute
+    _readingTimeMinutes = (_wordCount / 200).ceil().clamp(1, 9999);
   }
 
   /// Create a new blank Markdown document
   void newFile() {
+    _debounceTimer?.cancel();
+    _debounceTimer = null;
     _currentFilePath = null;
     _currentFileName = 'Untitled.md';
+    _isProgrammaticUpdate = true;
+    textController.isActivelyTyping = false;
     textController.clear();
+    _isProgrammaticUpdate = false;
+    _lastObservedText = '';
+    _previewMarkdown = '';
+    _computeMetrics();
     _isModified = false;
     if (scrollController.hasClients) {
       scrollController.jumpTo(0.0);
@@ -230,9 +371,17 @@ class EditorController extends ChangeNotifier {
 
     try {
       final content = await fileService.readFile(path);
+      _debounceTimer?.cancel();
+      _debounceTimer = null;
       _currentFilePath = path;
       _currentFileName = File(path).uri.pathSegments.lastWhere((s) => s.isNotEmpty);
+      _isProgrammaticUpdate = true;
+      textController.isActivelyTyping = false;
       textController.text = content;
+      _isProgrammaticUpdate = false;
+      _lastObservedText = content;
+      _previewMarkdown = content;
+      _computeMetrics();
       _isModified = false;
 
       // Add to history
@@ -281,6 +430,11 @@ class EditorController extends ChangeNotifier {
     }
 
     try {
+      _debounceTimer?.cancel();
+      _debounceTimer = null;
+      textController.reconcileFullHighlight();
+      _computeMetrics();
+      _previewMarkdown = textController.text;
       await fileService.writeFile(_currentFilePath!, textController.text);
       _isModified = false;
       await historyService.recordFileOpen(_currentFilePath!);
@@ -301,6 +455,11 @@ class EditorController extends ChangeNotifier {
     if (destination == null) return false;
 
     try {
+      _debounceTimer?.cancel();
+      _debounceTimer = null;
+      textController.reconcileFullHighlight();
+      _computeMetrics();
+      _previewMarkdown = textController.text;
       await fileService.writeFile(destination, textController.text);
       _currentFilePath = destination;
       _currentFileName =
@@ -329,11 +488,18 @@ class EditorController extends ChangeNotifier {
   /// Switch editor view mode (edit, split, preview)
   void setViewMode(EditorViewMode mode) {
     _viewMode = mode;
+    if (mode != EditorViewMode.edit) {
+      _debounceTimer?.cancel();
+      _debounceTimer = null;
+      textController.reconcileFullHighlight();
+      _computeMetrics();
+      _previewMarkdown = textController.text;
+    }
     notifyListeners();
   }
 
   /// Insert text at current cursor position
-  void insertText(String textToInsert) {
+  void insertText(String textToInsert, {bool flushImmediately = false}) {
     final currentText = textController.text;
     final selection = textController.selection;
 
@@ -341,10 +507,18 @@ class EditorController extends ChangeNotifier {
     final end = selection.isValid ? selection.end : currentText.length;
 
     final newText = currentText.replaceRange(start, end, textToInsert);
+    if (flushImmediately) {
+      _isProgrammaticUpdate = true;
+    }
     textController.value = TextEditingValue(
       text: newText,
       selection: TextSelection.collapsed(offset: start + textToInsert.length),
     );
+    if (flushImmediately) {
+      _isProgrammaticUpdate = false;
+      _isModified = true;
+      flushPendingRenderUpdate();
+    }
   }
 
   /// Format currently selected text with markdown prefix and optional suffix
@@ -384,7 +558,7 @@ class EditorController extends ChangeNotifier {
       suppressAuthor: suppressAuthor,
       locator: locator,
     );
-    insertText(citationStr);
+    insertText(citationStr, flushImmediately: true);
   }
 
   /// Insert one or more citation items formatted for Pandoc
@@ -410,7 +584,7 @@ class EditorController extends ChangeNotifier {
       suppressAuthor: suppressAuthor,
       locator: locator,
     );
-    insertText(citationStr);
+    insertText(citationStr, flushImmediately: true);
   }
 
   /// Detect whether the editor cursor is currently situated within a citation string.
@@ -430,10 +604,14 @@ class EditorController extends ChangeNotifier {
     final end = existing.endOffset.clamp(start, currentText.length);
 
     final newText = currentText.replaceRange(start, end, newCitationText);
+    _isProgrammaticUpdate = true;
     textController.value = TextEditingValue(
       text: newText,
       selection: TextSelection.collapsed(offset: start + newCitationText.length),
     );
+    _isProgrammaticUpdate = false;
+    _isModified = true;
+    flushPendingRenderUpdate();
   }
 
   /// Load a chosen bibliography file (.bib / .json)
@@ -655,8 +833,12 @@ class EditorController extends ChangeNotifier {
 
   /// Welcome sample document shown on first run
   void _loadWelcomeDocument() {
+    _debounceTimer?.cancel();
+    _debounceTimer = null;
     _currentFilePath = null;
     _currentFileName = 'Welcome.md';
+    _isProgrammaticUpdate = true;
+    textController.isActivelyTyping = false;
     textController.text = '''# Welcome to MDWriter
 
 A minimalist, high-productivity Markdown editor with native academic citations and Pandoc document export.
@@ -693,12 +875,17 @@ Literate programming, as introduced by @knuth1984literate, suggests that code an
 
 Try writing your thoughts, inserting literature references, and exporting to Word or PDF!
 ''';
+    _isProgrammaticUpdate = false;
+    _lastObservedText = textController.text;
+    _previewMarkdown = textController.text;
+    _computeMetrics();
     _isModified = false;
     notifyListeners();
   }
 
   @override
   void dispose() {
+    _debounceTimer?.cancel();
     textController.removeListener(_onTextChanged);
     textController.dispose();
     focusNode.dispose();

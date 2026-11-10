@@ -84,10 +84,8 @@ class _CitationDialogState extends State<CitationDialog> {
     super.dispose();
   }
 
-  DateTime _lastEnterTime = DateTime.fromMillisecondsSinceEpoch(0);
-
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
-    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+    if (event is! KeyDownEvent) {
       return KeyEventResult.ignored;
     }
 
@@ -157,12 +155,6 @@ class _CitationDialogState extends State<CitationDialog> {
   }
 
   void _onEnterPressed() {
-    final now = DateTime.now();
-    if (now.difference(_lastEnterTime) < const Duration(milliseconds: 150)) {
-      return;
-    }
-    _lastEnterTime = now;
-
     final query = _searchController.text.trim();
     final item = _selectedItem;
 
@@ -400,7 +392,7 @@ class _CitationDialogState extends State<CitationDialog> {
               Container(
                 padding: const EdgeInsets.all(4),
                 decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF131D2E) : const Color(0xFFF1F5F9),
+                  color: isDark ? AppTheme.darkSidebar : AppTheme.lightSidebar,
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(color: borderColor),
                 ),
@@ -663,8 +655,8 @@ class _CitationDialogState extends State<CitationDialog> {
                       : null,
                   filled: true,
                   fillColor: isDark
-                      ? const Color(0xFF131D2E)
-                      : const Color(0xFFF1F5F9),
+                      ? AppTheme.darkSidebar
+                      : AppTheme.lightSidebar,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8),
                     borderSide: BorderSide(color: borderColor),
@@ -732,7 +724,6 @@ class _CitationDialogState extends State<CitationDialog> {
                                     onTap: () {
                                       setState(() => _highlightedIndex = index);
                                     },
-                                    onDoubleTap: () => _toggleCitation(item),
                                     child: Container(
                                       padding: const EdgeInsets.symmetric(
                                           horizontal: 12, vertical: 8),

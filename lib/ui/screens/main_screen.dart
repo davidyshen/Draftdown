@@ -190,8 +190,12 @@ class _MainScreenState extends State<MainScreen> {
       onNewFile: _handleNewFile,
     );
 
+    if (mode == EditorViewMode.edit) {
+      return editor;
+    }
+
     final preview = MarkdownPreviewView(
-      markdown: widget.controller.textController.text,
+      markdown: widget.controller.previewMarkdown,
       bodyFont: widget.controller.renderBodyFont,
       headerFont: widget.controller.effectiveRenderHeaderFont,
       codeFont: widget.controller.editorFontFamily,
@@ -199,20 +203,17 @@ class _MainScreenState extends State<MainScreen> {
       isFullView: mode == EditorViewMode.preview,
     );
 
-    switch (mode) {
-      case EditorViewMode.edit:
-        return editor;
-      case EditorViewMode.preview:
-        return preview;
-      case EditorViewMode.split:
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Expanded(flex: 5, child: editor),
-            Container(width: 1, color: borderColor),
-            Expanded(flex: 5, child: preview),
-          ],
-        );
+    if (mode == EditorViewMode.preview) {
+      return preview;
     }
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(flex: 5, child: editor),
+        Container(width: 1, color: borderColor),
+        Expanded(flex: 5, child: preview),
+      ],
+    );
   }
 }

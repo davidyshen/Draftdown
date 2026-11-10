@@ -275,7 +275,7 @@ class CitationElementBuilder extends MarkdownElementBuilder {
         .toList();
 
     final linkColor =
-        isDark ? const Color(0xFF60A5FA) : const Color(0xFF2563EB);
+        isDark ? AppTheme.darkAccent : AppTheme.lightAccent;
 
     if (isBracketed) {
       final combined = formattedSegments.map((s) => s.rendered).join('; ');
@@ -470,7 +470,7 @@ class MarkdownImageElementBuilder extends MarkdownElementBuilder {
             height: height ?? 120,
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
+              color: isDark ? AppTheme.darkSurface : AppTheme.lightSidebar,
               borderRadius: BorderRadius.circular(4),
             ),
             child: Icon(
@@ -660,8 +660,8 @@ class MarkdownImageElementBuilder extends MarkdownElementBuilder {
         ? alt.trim()
         : p.basename(src);
 
-    final bg = isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC);
-    final border = isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
+    final bg = isDark ? AppTheme.darkSurface : AppTheme.lightBg;
+    final border = isDark ? AppTheme.darkBorder : AppTheme.lightBorder;
 
     return Tooltip(
       message: '$reason\nPath: $src',
@@ -756,13 +756,74 @@ class MarkdownPreviewView extends StatelessWidget {
     return Directory.current.path;
   }
 
-  /// Generate augmented Markdown text with auto-generated references if cited
+  static String? _memoRawMarkdown;
+  static int? _memoCitationCount;
+  static String? _memoResult;
+
+  // Cached MarkdownBody widget to prevent re-parsing and rebuilding when inputs are unchanged
+  static String? _cachedBodyMarkdown;
+  static bool? _cachedBodyIsDark;
+  static String? _cachedBodySchemeId;
+  static String? _cachedBodyFont;
+  static String? _cachedHeaderFont;
+  static String? _cachedCodeFont;
+  static String? _cachedImageDir;
+  static int? _cachedBodyCitationCount;
+  static Widget? _cachedMarkdownBody;
+
+  /// Generate augmented Markdown text with auto-generated references if cited (memoized for performance)
   String _prepareMarkdownWithReferences(CitationHelper helper) {
     if (markdown.trim().isEmpty) return '_Document is empty._';
 
+    final citationCount = (helper.controller?.citations.length ?? 0) +
+        (helper.controller?.zoteroCitations.length ?? 0);
+    if (_memoRawMarkdown == markdown &&
+        _memoCitationCount == citationCount &&
+        _memoResult != null) {
+      return _memoResult!;
+    }
+
+    final result = _computeMarkdownWithReferences(helper);
+    _memoRawMarkdown = markdown;
+    _memoCitationCount = citationCount;
+    _memoResult = result;
+    return result;
+  }
+
+  String _computeMarkdownWithReferences(CitationHelper helper) {
+
+    // 0. Handle incomplete list markers (e.g. line with only "* " or "*   ")
+    // In standard CommonMark, an empty bullet "*   " is parsed as an empty <li></li>,
+    // which renders as a bullet with zero-width whitespace, hiding all spaces until text is entered.
+    // By escaping the marker on lines with no text and converting spaces to non-breaking spaces,
+    // spaces entered after "*" are always visibly rendered in the preview.
+    var processed = markdown.replaceAllMapped(
+      RegExp(r'^([ \t]*)([-*+])([ \t]+)$', multiLine: true),
+      (m) {
+        final indent = m[1] ?? '';
+        final marker = m[2] ?? '*';
+        final spaces = m[3] ?? '';
+        final visibleSpaces = '\u00A0' * spaces.length;
+        return '$indent\\$marker$visibleSpaces';
+      },
+    );
+
+    // Also preserve multiple spaces after list markers on lines with content (e.g. "*   text")
+    // so CommonMark does not collapse consecutive spaces into a single space
+    processed = processed.replaceAllMapped(
+      RegExp(r'^([ \t]*[-*+])[ \t]{2,}', multiLine: true),
+      (m) {
+        final marker = m[1]!;
+        final totalMatch = m.group(0)!;
+        final spaceCount = totalMatch.length - marker.length;
+        final extraSpaces = '\u00A0' * (spaceCount - 1);
+        return '$marker $extraSpaces';
+      },
+    );
+
     // 1. Convert HTML <img> tags outside fenced code blocks into Markdown image syntax
     final codeTokens = <String>[];
-    var processed = markdown.replaceAllMapped(
+    processed = processed.replaceAllMapped(
       RegExp(r'(```[\s\S]*?```|`[^`\n]+`)'),
       (m) {
         codeTokens.add(m.group(0)!);
@@ -880,12 +941,13 @@ class MarkdownPreviewView extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+    final activeScheme = AppTheme.activeSchemeForBrightness(isDark);
     final textColor =
         isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary;
     final mutedColor =
         isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary;
     final codeBg =
-        isDark ? const Color(0xFF131D2E) : const Color(0xFFF1F5F9);
+        isDark ? AppTheme.darkSidebar : AppTheme.lightSidebar;
     final blockquoteBorder =
         isDark ? AppTheme.darkAccent : AppTheme.lightAccent;
 
@@ -960,7 +1022,7 @@ class MarkdownPreviewView extends StatelessWidget {
         fontFamilyFallback: AppTheme.editorFontFamilyFallback,
         fontSize: 12.5,
         backgroundColor: codeBg,
-        color: isDark ? const Color(0xFF93C5FD) : const Color(0xFF1E40AF),
+        color: activeScheme.inlineCodeColor,
       ),
       codeblockDecoration: BoxDecoration(
         color: codeBg,
@@ -1004,98 +1066,128 @@ class MarkdownPreviewView extends StatelessWidget {
     final double innerVerticalPadding = effectiveIsFullView ? 40.0 : 28.0;
     const double maxPageWidth = 850.0;
 
-    return Container(
-      color: canvasBg,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final double minPageHeight =
-              (constraints.maxHeight - (deskVerticalPadding * 2))
-                  .clamp(120.0, double.infinity);
+    final imgDir = effectiveImageDirectory;
+    final citationCount = (controller?.citations.length ?? 0) +
+        (controller?.zoteroCitations.length ?? 0);
 
-          return SingleChildScrollView(
-            padding: EdgeInsets.symmetric(
-              horizontal: deskHorizontalPadding,
-              vertical: deskVerticalPadding,
-            ),
-            child: Center(
-              child: ConstrainedBox(
-                constraints: BoxConstraints(
-                  maxWidth: maxPageWidth,
-                  minHeight: minPageHeight,
-                ),
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: pageBg,
-                    borderRadius: BorderRadius.circular(2),
-                    border: Border.all(color: pageBorder, width: 1.0),
-                    boxShadow: [
-                      BoxShadow(
-                        color: isDark
-                            ? Colors.black.withValues(alpha: 0.40)
-                            : const Color(0xFF0F172A).withValues(alpha: 0.08),
-                        blurRadius: 16,
-                        spreadRadius: 1,
-                        offset: const Offset(0, 4),
-                      ),
-                      BoxShadow(
-                        color: isDark
-                            ? Colors.black.withValues(alpha: 0.20)
-                            : const Color(0xFF0F172A).withValues(alpha: 0.04),
-                        blurRadius: 4,
-                        spreadRadius: 0,
-                        offset: const Offset(0, 1),
-                      ),
-                    ],
+    Widget markdownBody;
+    if (_cachedMarkdownBody != null &&
+        _cachedBodyMarkdown == effectiveMarkdown &&
+        _cachedBodyIsDark == isDark &&
+        _cachedBodySchemeId == activeScheme.id &&
+        _cachedBodyFont == bodyFont &&
+        _cachedHeaderFont == headerFont &&
+        _cachedCodeFont == codeFont &&
+        _cachedImageDir == imgDir &&
+        _cachedBodyCitationCount == citationCount) {
+      markdownBody = _cachedMarkdownBody!;
+    } else {
+      markdownBody = MarkdownBody(
+        data: effectiveMarkdown,
+        selectable: true,
+        imageDirectory: imgDir,
+        styleSheet: customStyle,
+        inlineSyntaxes: [
+          DisplayMathSyntax(),
+          InlineMathSyntax(),
+          BracketedCitationSyntax(),
+          InTextCitationSyntax(),
+        ],
+        builders: {
+          'displaymath': MathElementBuilder(
+            isDisplay: true,
+            textColor: textColor,
+            codeFont: codeFont,
+          ),
+          'inlinemath': MathElementBuilder(
+            isDisplay: false,
+            textColor: textColor,
+            codeFont: codeFont,
+          ),
+          'academiccitation': CitationElementBuilder(
+            helper: helper,
+            isDark: isDark,
+          ),
+          'code': MathCodeBlockBuilder(
+            textColor: textColor,
+            codeFont: codeFont,
+          ),
+          'img': MarkdownImageElementBuilder(
+            controller: controller,
+            imageDirectory: imgDir,
+            isDark: isDark,
+            codeFont: codeFont,
+            textColor: textColor,
+            mutedColor: mutedColor,
+          ),
+        },
+      );
+      _cachedBodyMarkdown = effectiveMarkdown;
+      _cachedBodyIsDark = isDark;
+      _cachedBodySchemeId = activeScheme.id;
+      _cachedBodyFont = bodyFont;
+      _cachedHeaderFont = headerFont;
+      _cachedCodeFont = codeFont;
+      _cachedImageDir = imgDir;
+      _cachedBodyCitationCount = citationCount;
+      _cachedMarkdownBody = markdownBody;
+    }
+
+    return RepaintBoundary(
+      child: Container(
+        color: canvasBg,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final double minPageHeight =
+                (constraints.maxHeight - (deskVerticalPadding * 2))
+                    .clamp(120.0, double.infinity);
+
+            return SingleChildScrollView(
+              padding: EdgeInsets.symmetric(
+                horizontal: deskHorizontalPadding,
+                vertical: deskVerticalPadding,
+              ),
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxWidth: maxPageWidth,
+                    minHeight: minPageHeight,
                   ),
-                  padding: EdgeInsets.symmetric(
-                    horizontal: innerHorizontalPadding,
-                    vertical: innerVerticalPadding,
-                  ),
-                  child: MarkdownBody(
-                    data: effectiveMarkdown,
-                    selectable: true,
-                    imageDirectory: effectiveImageDirectory,
-                    styleSheet: customStyle,
-                    inlineSyntaxes: [
-                      DisplayMathSyntax(),
-                      InlineMathSyntax(),
-                      BracketedCitationSyntax(),
-                      InTextCitationSyntax(),
-                    ],
-                    builders: {
-                      'displaymath': MathElementBuilder(
-                        isDisplay: true,
-                        textColor: textColor,
-                        codeFont: codeFont,
-                      ),
-                      'inlinemath': MathElementBuilder(
-                        isDisplay: false,
-                        textColor: textColor,
-                        codeFont: codeFont,
-                      ),
-                      'academiccitation': CitationElementBuilder(
-                        helper: helper,
-                        isDark: isDark,
-                      ),
-                      'code': MathCodeBlockBuilder(
-                        textColor: textColor,
-                        codeFont: codeFont,
-                      ),
-                      'img': MarkdownImageElementBuilder(
-                        controller: controller,
-                        imageDirectory: effectiveImageDirectory,
-                        isDark: isDark,
-                        codeFont: codeFont,
-                        textColor: textColor,
-                        mutedColor: mutedColor,
-                      ),
-                    },
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: pageBg,
+                      borderRadius: BorderRadius.circular(2),
+                      border: Border.all(color: pageBorder, width: 1.0),
+                      boxShadow: [
+                        BoxShadow(
+                          color: isDark
+                              ? Colors.black.withValues(alpha: 0.40)
+                              : const Color(0xFF0F172A).withValues(alpha: 0.08),
+                          blurRadius: 16,
+                          spreadRadius: 1,
+                          offset: const Offset(0, 4),
+                        ),
+                        BoxShadow(
+                          color: isDark
+                              ? Colors.black.withValues(alpha: 0.20)
+                              : const Color(0xFF0F172A).withValues(alpha: 0.04),
+                          blurRadius: 4,
+                          spreadRadius: 0,
+                          offset: const Offset(0, 1),
+                        ),
+                      ],
+                    ),
+                    padding: EdgeInsets.symmetric(
+                      horizontal: innerHorizontalPadding,
+                      vertical: innerVerticalPadding,
+                    ),
+                    child: markdownBody,
                   ),
                 ),
               ),
-            ),
-          );
-        },
+            );
+          },
+        ),
       ),
     );
   }

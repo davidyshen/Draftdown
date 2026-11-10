@@ -320,5 +320,100 @@ void main() {
 
       controller.dispose();
     });
+
+    testWidgets('re-uses cached tokens on theme switch for instantaneous switching', (tester) async {
+      final controller = MarkdownSyntaxEditingController(
+        text: r'# Title' '\n' r'Some **bold text** with `code` and $x=1$',
+      );
+
+      bool isDark = false;
+      await tester.pumpWidget(
+        StatefulBuilder(
+          builder: (context, setState) {
+            return MaterialApp(
+              themeAnimationDuration: Duration.zero,
+              theme: ThemeData.light(),
+              darkTheme: ThemeData.dark(),
+              themeMode: isDark ? ThemeMode.dark : ThemeMode.light,
+              home: Scaffold(
+                body: TextField(controller: controller),
+                floatingActionButton: FloatingActionButton(
+                  onPressed: () => setState(() => isDark = !isDark),
+                ),
+              ),
+            );
+          },
+        ),
+      );
+
+      final spanLight = controller.buildTextSpan(
+        context: tester.element(find.byType(TextField)),
+        style: const TextStyle(),
+        withComposing: false,
+      );
+
+      // Toggle theme mode
+      await tester.tap(find.byType(FloatingActionButton));
+      await tester.pump();
+
+      final spanDark = controller.buildTextSpan(
+        context: tester.element(find.byType(TextField)),
+        style: const TextStyle(),
+        withComposing: false,
+      );
+
+      // Both spans should have exact same text content
+      expect(spanLight.toPlainText(), equals(spanDark.toPlainText()));
+      expect(spanLight.children?.length, equals(spanDark.children?.length));
+
+      controller.dispose();
+    });
+
+    test('high throughput parsing on large markdown document', () {
+      final buffer = StringBuffer();
+      for (int i = 0; i < 2000; i++) {
+        buffer.writeln('## Section $i');
+        buffer.writeln('This is paragraph $i with **bold statement** and `inline_code()`.');
+        buffer.writeln('Reference to [@key$i] and formula \$x_{$i} = y^2\$.');
+        buffer.writeln();
+      }
+      final largeText = buffer.toString();
+      expect(largeText.length, greaterThan(150000));
+
+      final stopwatch = Stopwatch()..start();
+      final tokens = MarkdownSyntaxHighlighter.parseTokens(largeText);
+      stopwatch.stop();
+
+      expect(tokens.isNotEmpty, isTrue);
+      // Parsing 2,000 sections (150KB+) should complete comfortably under 100ms
+      expect(stopwatch.elapsedMilliseconds, lessThan(250));
+
+      // Incremental single-line edit in the middle of the 150KB document
+      final insertPos = largeText.indexOf('This is paragraph 1000');
+      final editedText = largeText.replaceRange(
+        insertPos,
+        insertPos + 'This is paragraph 1000'.length,
+        'This is **updated** paragraph 1000',
+      );
+
+      final incStopwatch = Stopwatch()..start();
+      final incResult = MarkdownSyntaxHighlighter.updateTokensIncrementally(
+        oldText: largeText,
+        newText: editedText,
+        oldTokens: tokens,
+      );
+      incStopwatch.stop();
+
+      expect(incResult, isNotNull);
+      expect(incStopwatch.elapsedMilliseconds, lessThan(15));
+
+      final fullExpected = MarkdownSyntaxHighlighter.parseTokens(editedText);
+      expect(incResult!.$1.length, equals(fullExpected.length));
+      for (int i = 0; i < fullExpected.length; i++) {
+        expect(incResult.$1[i].start, equals(fullExpected[i].start));
+        expect(incResult.$1[i].end, equals(fullExpected[i].end));
+        expect(incResult.$1[i].type, equals(fullExpected[i].type));
+      }
+    });
   });
 }

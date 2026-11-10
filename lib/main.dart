@@ -35,33 +35,36 @@ class MDWriterApp extends StatefulWidget {
 }
 
 class _MDWriterAppState extends State<MDWriterApp> {
-  late bool _isDarkMode;
-
   @override
   void initState() {
     super.initState();
-    _isDarkMode = widget.initialDarkMode;
+    widget.controller.syncDarkMode(widget.initialDarkMode);
   }
 
-  void _toggleTheme() async {
-    setState(() => _isDarkMode = !_isDarkMode);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('mdwriter_dark_mode', _isDarkMode);
+  void _toggleTheme() {
+    widget.controller.toggleDarkMode();
   }
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'MDWriter',
-      debugShowCheckedModeBanner: false,
-      theme: AppTheme.lightTheme(),
-      darkTheme: AppTheme.darkTheme(),
-      themeMode: _isDarkMode ? ThemeMode.dark : ThemeMode.light,
-      home: MainScreen(
-        controller: widget.controller,
-        onToggleTheme: _toggleTheme,
-        isDarkMode: _isDarkMode,
-      ),
+    return ListenableBuilder(
+      listenable: widget.controller,
+      builder: (context, _) {
+        final isDarkMode = widget.controller.isDarkMode;
+        return MaterialApp(
+          title: 'MDWriter',
+          debugShowCheckedModeBanner: false,
+          themeAnimationDuration: Duration.zero,
+          theme: AppTheme.lightTheme(),
+          darkTheme: AppTheme.darkTheme(),
+          themeMode: isDarkMode ? ThemeMode.dark : ThemeMode.light,
+          home: MainScreen(
+            controller: widget.controller,
+            onToggleTheme: _toggleTheme,
+            isDarkMode: isDarkMode,
+          ),
+        );
+      },
     );
   }
 }

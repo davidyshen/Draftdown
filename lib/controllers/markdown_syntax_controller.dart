@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../ui/theme/app_theme.dart';
 
 /// Semantic token types recognised by the Markdown syntax highlighter.
 enum MarkdownTokenType {
@@ -36,11 +37,54 @@ enum MarkdownTokenType {
 
 /// Colour scheme definitions for Markdown syntax highlighting.
 class MarkdownSyntaxTheme {
+  final String schemeId;
   final Brightness brightness;
 
   // Delimiters & markers
   final Color delimiterColor;
   final Color headerMarkerColor;
+
+  // Cached pre-resolved styles keyed by schemeId and baseStyle
+  static String? _cachedSchemeIdDark;
+  static TextStyle? _cachedBaseStyleDark;
+  static List<TextStyle>? _resolvedStylesDark;
+  static String? _cachedSchemeIdLight;
+  static TextStyle? _cachedBaseStyleLight;
+  static List<TextStyle>? _resolvedStylesLight;
+
+  List<TextStyle> getResolvedStyles(TextStyle baseStyle) {
+    if (brightness == Brightness.dark) {
+      if (_cachedSchemeIdDark == schemeId &&
+          _cachedBaseStyleDark == baseStyle &&
+          _resolvedStylesDark != null) {
+        return _resolvedStylesDark!;
+      }
+      _cachedSchemeIdDark = schemeId;
+      _cachedBaseStyleDark = baseStyle;
+      final styles = List<TextStyle>.generate(
+        MarkdownTokenType.values.length,
+        (i) => getStyle(MarkdownTokenType.values[i], baseStyle),
+        growable: false,
+      );
+      _resolvedStylesDark = styles;
+      return styles;
+    } else {
+      if (_cachedSchemeIdLight == schemeId &&
+          _cachedBaseStyleLight == baseStyle &&
+          _resolvedStylesLight != null) {
+        return _resolvedStylesLight!;
+      }
+      _cachedSchemeIdLight = schemeId;
+      _cachedBaseStyleLight = baseStyle;
+      final styles = List<TextStyle>.generate(
+        MarkdownTokenType.values.length,
+        (i) => getStyle(MarkdownTokenType.values[i], baseStyle),
+        growable: false,
+      );
+      _resolvedStylesLight = styles;
+      return styles;
+    }
+  }
 
   // Headers
   final Color header1Color;
@@ -86,6 +130,7 @@ class MarkdownSyntaxTheme {
   final Color horizontalRuleColor;
 
   const MarkdownSyntaxTheme({
+    this.schemeId = 'default',
     required this.brightness,
     required this.delimiterColor,
     required this.headerMarkerColor,
@@ -120,80 +165,54 @@ class MarkdownSyntaxTheme {
     required this.horizontalRuleColor,
   });
 
-  /// Sophisticated dark theme palette tailored to slate/navy background.
-  factory MarkdownSyntaxTheme.dark() {
-    return const MarkdownSyntaxTheme(
-      brightness: Brightness.dark,
-      delimiterColor: Color(0xFF64748B), // Slate 500
-      headerMarkerColor: Color(0xFF60A5FA), // Blue 400
-      header1Color: Color(0xFF38BDF8), // Sky 400
-      header2Color: Color(0xFF60A5FA), // Blue 400
-      header3Color: Color(0xFF818CF8), // Indigo 400
-      header4to6Color: Color(0xFFA5B4FC), // Indigo 300
-      boldColor: Color(0xFFF8FAFC), // Slate 50 crisp
-      italicColor: Color(0xFFE2E8F0), // Slate 200
-      boldItalicColor: Color(0xFFFDE68A), // Amber 200
-      strikethroughColor: Color(0xFF64748B),
-      inlineCodeColor: Color(0xFFF472B6), // Pink 400
-      inlineCodeBg: Color(0x33475569),
-      codeBlockColor: Color(0xFFE2E8F0),
-      codeBlockBg: Color(0x221E293B),
-      codeFenceColor: Color(0xFF94A3B8),
-      linkTextColor: Color(0xFF60A5FA), // Blue 400
-      linkUrlColor: Color(0xFF94A3B8), // Slate 400
-      imageMarkerColor: Color(0xFFF59E0B), // Amber 500
-      citationKeyColor: Color(0xFFC084FC), // Purple 400
-      citationLocatorColor: Color(0xFFCBD5E1),
-      citationBracketColor: Color(0xFF818CF8),
-      footnoteKeyColor: Color(0xFFFBBF24), // Amber 400
-      footnoteBracketColor: Color(0xFFF59E0B),
-      latexInlineColor: Color(0xFF34D399), // Emerald 400
-      latexDisplayColor: Color(0xFF34D399),
-      latexDisplayBg: Color(0x1F10B981), // Emerald tint
-      latexDelimiterColor: Color(0xFF10B981), // Emerald 500
-      blockquoteTextColor: Color(0xFF94A3B8),
-      blockquoteMarkerColor: Color(0xFF64748B),
-      listMarkerColor: Color(0xFF38BDF8),
-      horizontalRuleColor: Color(0xFF475569),
+  /// Constructs a MarkdownSyntaxTheme adapted to the given [AppColorScheme].
+  factory MarkdownSyntaxTheme.fromScheme(AppColorScheme scheme) {
+    final isDark = scheme.isDark;
+    return MarkdownSyntaxTheme(
+      schemeId: scheme.id,
+      brightness: scheme.brightness,
+      delimiterColor: scheme.textMuted,
+      headerMarkerColor: scheme.header2Color,
+      header1Color: scheme.header1Color,
+      header2Color: scheme.header2Color,
+      header3Color: scheme.header3Color,
+      header4to6Color: scheme.header4to6Color,
+      boldColor: scheme.textPrimary,
+      italicColor: scheme.textSecondary,
+      boldItalicColor: isDark ? scheme.warningOrImageColor : scheme.textPrimary,
+      strikethroughColor: scheme.textMuted,
+      inlineCodeColor: scheme.inlineCodeColor,
+      inlineCodeBg: scheme.border.withValues(alpha: isDark ? 0.35 : 0.45),
+      codeBlockColor: scheme.textSecondary,
+      codeBlockBg: scheme.sidebar.withValues(alpha: isDark ? 0.5 : 0.6),
+      codeFenceColor: scheme.textMuted,
+      linkTextColor: scheme.accent,
+      linkUrlColor: scheme.textSecondary,
+      imageMarkerColor: scheme.warningOrImageColor,
+      citationKeyColor: scheme.citationColor,
+      citationLocatorColor: scheme.textSecondary,
+      citationBracketColor: scheme.header3Color,
+      footnoteKeyColor: scheme.warningOrImageColor,
+      footnoteBracketColor: scheme.warningOrImageColor,
+      latexInlineColor: scheme.mathColor,
+      latexDisplayColor: scheme.mathColor,
+      latexDisplayBg: scheme.mathColor.withValues(alpha: 0.12),
+      latexDelimiterColor: scheme.mathColor,
+      blockquoteTextColor: scheme.textSecondary,
+      blockquoteMarkerColor: scheme.textMuted,
+      listMarkerColor: scheme.header1Color,
+      horizontalRuleColor: scheme.border,
     );
   }
 
-  /// Clean, readable light theme palette tailored to white/slate paper background.
+  /// Active dark theme palette tailored to the selected dark colour scheme.
+  factory MarkdownSyntaxTheme.dark() {
+    return MarkdownSyntaxTheme.fromScheme(AppTheme.activeDarkScheme);
+  }
+
+  /// Active light theme palette tailored to the selected light colour scheme.
   factory MarkdownSyntaxTheme.light() {
-    return const MarkdownSyntaxTheme(
-      brightness: Brightness.light,
-      delimiterColor: Color(0xFF94A3B8), // Slate 400
-      headerMarkerColor: Color(0xFF2563EB), // Blue 600
-      header1Color: Color(0xFF1D4ED8), // Blue 700
-      header2Color: Color(0xFF2563EB), // Blue 600
-      header3Color: Color(0xFF4338CA), // Indigo 700
-      header4to6Color: Color(0xFF475569), // Slate 600
-      boldColor: Color(0xFF0F172A), // Slate 900
-      italicColor: Color(0xFF334155), // Slate 700
-      boldItalicColor: Color(0xFF0F172A),
-      strikethroughColor: Color(0xFF94A3B8),
-      inlineCodeColor: Color(0xFFBE185D), // Pink 700
-      inlineCodeBg: Color(0x140F172A),
-      codeBlockColor: Color(0xFF334155),
-      codeBlockBg: Color(0x0F0F172A),
-      codeFenceColor: Color(0xFF64748B),
-      linkTextColor: Color(0xFF2563EB), // Blue 600
-      linkUrlColor: Color(0xFF64748B), // Slate 500
-      imageMarkerColor: Color(0xFFD97706), // Amber 600
-      citationKeyColor: Color(0xFF7C3AED), // Violet 600
-      citationLocatorColor: Color(0xFF64748B),
-      citationBracketColor: Color(0xFF6366F1),
-      footnoteKeyColor: Color(0xFFD97706), // Amber 600
-      footnoteBracketColor: Color(0xFFB45309),
-      latexInlineColor: Color(0xFF047857), // Emerald 700
-      latexDisplayColor: Color(0xFF047857),
-      latexDisplayBg: Color(0x14059669), // Emerald tint
-      latexDelimiterColor: Color(0xFF059669), // Emerald 600
-      blockquoteTextColor: Color(0xFF64748B),
-      blockquoteMarkerColor: Color(0xFF94A3B8),
-      listMarkerColor: Color(0xFF2563EB),
-      horizontalRuleColor: Color(0xFFCBD5E1),
-    );
+    return MarkdownSyntaxTheme.fromScheme(AppTheme.activeLightScheme);
   }
 
   /// Create a style appropriate for the given token type, modifying baseStyle.
@@ -358,6 +377,107 @@ class HighlightSpan {
   });
 }
 
+/// Represents an unstyled syntactic token parsed from Markdown.
+class ParsedToken {
+  final int start;
+  final int end;
+  final MarkdownTokenType type;
+
+  const ParsedToken({
+    required this.start,
+    required this.end,
+    required this.type,
+  });
+}
+
+/// Efficient disjoint interval set using binary search to replace large boolean arrays.
+class _RangeSet {
+  final List<int> _starts = [];
+  final List<int> _ends = [];
+
+  bool isRangeFree(int start, int end) {
+    if (start < 0 || end <= start) return false;
+    int low = 0;
+    int high = _starts.length - 1;
+
+    while (low <= high) {
+      final mid = (low + high) >> 1;
+      final oStart = _starts[mid];
+      final oEnd = _ends[mid];
+
+      if (start < oEnd && end > oStart) {
+        return false;
+      }
+      if (end <= oStart) {
+        high = mid - 1;
+      } else {
+        low = mid + 1;
+      }
+    }
+    return true;
+  }
+
+  void markOccupied(int start, int end) {
+    if (start < 0 || end <= start) return;
+    int low = 0;
+    int high = _starts.length - 1;
+    int insertIdx = _starts.length;
+
+    while (low <= high) {
+      final mid = (low + high) >> 1;
+      if (_starts[mid] >= start) {
+        insertIdx = mid;
+        high = mid - 1;
+      } else {
+        low = mid + 1;
+      }
+    }
+
+    _starts.insert(insertIdx, start);
+    _ends.insert(insertIdx, end);
+
+    // Merge overlapping or adjacent intervals
+    int i = insertIdx > 0 ? insertIdx - 1 : 0;
+    while (i < _starts.length - 1) {
+      if (_starts[i + 1] <= _ends[i]) {
+        if (_ends[i + 1] > _ends[i]) {
+          _ends[i] = _ends[i + 1];
+        }
+        _starts.removeAt(i + 1);
+        _ends.removeAt(i + 1);
+      } else {
+        i++;
+      }
+    }
+  }
+
+  /// Returns the unoccupied slices within [start, end)
+  List<(int, int)> getFreeSlices(int start, int end) {
+    if (start >= end) return const [];
+    final slices = <(int, int)>[];
+    int cursor = start;
+
+    for (int i = 0; i < _starts.length; i++) {
+      final oStart = _starts[i];
+      final oEnd = _ends[i];
+
+      if (oEnd <= cursor) continue;
+      if (oStart >= end) break;
+
+      if (oStart > cursor) {
+        slices.add((cursor, oStart < end ? oStart : end));
+      }
+      cursor = oEnd > cursor ? oEnd : cursor;
+      if (cursor >= end) break;
+    }
+
+    if (cursor < end) {
+      slices.add((cursor, end));
+    }
+    return slices;
+  }
+}
+
 /// High-performance Markdown syntax parser producing non-overlapping styled spans.
 class MarkdownSyntaxHighlighter {
   /// Regular expressions compiled once for optimal real-time keystroke responsiveness.
@@ -390,7 +510,7 @@ class MarkdownSyntaxHighlighter {
 
   // In-text citation: @key or @key [p. 12]
   static final RegExp _inTextCitationRegex = RegExp(
-    r'(?<![\w@])@([a-zA-Z0-9_\-:#\/]+)(?:\[([^\]]+)\])?',
+    r'(?<![\w@])@([a-zA-Z0-9_\-:#\/]+)(?:[ \t]*\[([^\]]+)\])?',
   );
 
   // Footnote definition: [^1]: Footnote body
@@ -453,76 +573,57 @@ class MarkdownSyntaxHighlighter {
     r'(~~)(?!\s)([^\n~]+?)(?<!\s)(~~)',
   );
 
-  /// Parse the given raw text and return a non-overlapping, sorted list of HighlightSpan.
-  static List<HighlightSpan> parseSpans({
-    required String text,
-    required MarkdownSyntaxTheme theme,
-    required TextStyle baseStyle,
-  }) {
+  /// Parse text into semantic tokens with non-overlapping boundaries.
+  static List<ParsedToken> parseTokens(String text) {
     if (text.isEmpty) return const [];
 
-    final spans = <HighlightSpan>[];
-    final occupied = List<bool>.filled(text.length, false);
+    final tokens = <ParsedToken>[];
+    final rangeSet = _RangeSet();
 
-    bool isRangeFree(int start, int end) {
-      if (start < 0 || end > text.length || start >= end) return false;
-      for (int i = start; i < end; i++) {
-        if (occupied[i]) return false;
-      }
-      return true;
-    }
-
-    void markOccupied(int start, int end) {
-      final safeEnd = end.clamp(0, text.length);
-      final safeStart = start.clamp(0, safeEnd);
-      for (int i = safeStart; i < safeEnd; i++) {
-        occupied[i] = true;
-      }
-    }
-
-    void addSpan(int start, int end, MarkdownTokenType type) {
+    void addToken(int start, int end, MarkdownTokenType type) {
       if (start < 0 || end > text.length || start >= end) return;
-      spans.add(HighlightSpan(
+      tokens.add(ParsedToken(
         start: start,
         end: end,
         type: type,
-        style: theme.getStyle(type, baseStyle),
       ));
     }
 
     // -------------------------------------------------------------------------
     // Priority 1: Fenced Code Blocks (Closed and unclosed)
     // -------------------------------------------------------------------------
-    for (final match in _fencedCodeBlockRegex.allMatches(text)) {
-      if (isRangeFree(match.start, match.end)) {
-        markOccupied(match.start, match.end);
-        final fullMatch = match.group(0)!;
-        final firstNewline = fullMatch.indexOf('\n');
-        final lastNewline = fullMatch.lastIndexOf('\n');
+    if (text.contains('```') || text.contains('~~~')) {
+      for (final match in _fencedCodeBlockRegex.allMatches(text)) {
+        if (rangeSet.isRangeFree(match.start, match.end)) {
+          rangeSet.markOccupied(match.start, match.end);
+          final fullMatch = match.group(0)!;
+          final firstNewline = fullMatch.indexOf('\n');
+          final lastNewline = fullMatch.lastIndexOf('\n');
 
-        if (firstNewline != -1 && lastNewline > firstNewline) {
-          // Opening fence line
-          addSpan(match.start, match.start + firstNewline, MarkdownTokenType.codeFence);
-          // Body lines
-          addSpan(match.start + firstNewline, match.start + lastNewline, MarkdownTokenType.codeBlock);
-          // Closing fence line
-          addSpan(match.start + lastNewline, match.end, MarkdownTokenType.codeFence);
-        } else {
-          addSpan(match.start, match.end, MarkdownTokenType.codeBlock);
+          if (firstNewline != -1 && lastNewline > firstNewline) {
+            // Opening fence line
+            addToken(match.start, match.start + firstNewline, MarkdownTokenType.codeFence);
+            // Body lines
+            addToken(match.start + firstNewline, match.start + lastNewline, MarkdownTokenType.codeBlock);
+            // Closing fence line
+            addToken(match.start + lastNewline, match.end, MarkdownTokenType.codeFence);
+          } else {
+            addToken(match.start, match.end, MarkdownTokenType.codeBlock);
+          }
         }
       }
-    }
 
-    for (final match in _unclosedFencedBlockRegex.allMatches(text)) {
-      if (isRangeFree(match.start, match.end)) {
-        markOccupied(match.start, match.end);
-        final fullMatch = match.group(0)!;
-        final firstNewline = fullMatch.indexOf('\n');
-        if (firstNewline != -1) {
-          addSpan(match.start, match.start + firstNewline, MarkdownTokenType.codeFence);
-          addSpan(match.start + firstNewline, match.end, MarkdownTokenType.codeBlock);
-        } else {
-          addSpan(match.start, match.end, MarkdownTokenType.codeFence);
+      for (final match in _unclosedFencedBlockRegex.allMatches(text)) {
+        if (rangeSet.isRangeFree(match.start, match.end)) {
+          rangeSet.markOccupied(match.start, match.end);
+          final fullMatch = match.group(0)!;
+          final firstNewline = fullMatch.indexOf('\n');
+          if (firstNewline != -1) {
+            addToken(match.start, match.start + firstNewline, MarkdownTokenType.codeFence);
+            addToken(match.start + firstNewline, match.end, MarkdownTokenType.codeBlock);
+          } else {
+            addToken(match.start, match.end, MarkdownTokenType.codeFence);
+          }
         }
       }
     }
@@ -530,110 +631,114 @@ class MarkdownSyntaxHighlighter {
     // -------------------------------------------------------------------------
     // Priority 2: LaTeX Display Math Blocks ($$...$$ and \[...\])
     // -------------------------------------------------------------------------
-    for (final match in _displayMathRegex.allMatches(text)) {
-      if (isRangeFree(match.start, match.end)) {
-        markOccupied(match.start, match.end);
-        final full = match.group(0)!;
-        final isDollar = full.startsWith(r'$$');
-        final delimLen = isDollar ? 2 : 2;
+    if (text.contains(r'$$') || text.contains(r'\[')) {
+      for (final match in _displayMathRegex.allMatches(text)) {
+        if (rangeSet.isRangeFree(match.start, match.end)) {
+          rangeSet.markOccupied(match.start, match.end);
+          final full = match.group(0)!;
+          final isDollar = full.startsWith(r'$$');
+          final delimLen = isDollar ? 2 : 2;
 
-        addSpan(match.start, match.start + delimLen, MarkdownTokenType.latexDelimiter);
-        if (match.end - delimLen > match.start + delimLen) {
-          addSpan(match.start + delimLen, match.end - delimLen, MarkdownTokenType.latexDisplay);
+          addToken(match.start, match.start + delimLen, MarkdownTokenType.latexDelimiter);
+          if (match.end - delimLen > match.start + delimLen) {
+            addToken(match.start + delimLen, match.end - delimLen, MarkdownTokenType.latexDisplay);
+          }
+          addToken(match.end - delimLen, match.end, MarkdownTokenType.latexDelimiter);
         }
-        addSpan(match.end - delimLen, match.end, MarkdownTokenType.latexDelimiter);
       }
     }
 
     // -------------------------------------------------------------------------
     // Priority 3: Inline Code (`...`)
     // -------------------------------------------------------------------------
-    for (final match in _inlineCodeRegex.allMatches(text)) {
-      if (isRangeFree(match.start, match.end)) {
-        markOccupied(match.start, match.end);
-        final ticks = match.group(1)!;
-        final tickLen = ticks.length;
+    if (text.contains('`')) {
+      for (final match in _inlineCodeRegex.allMatches(text)) {
+        if (rangeSet.isRangeFree(match.start, match.end)) {
+          rangeSet.markOccupied(match.start, match.end);
+          final ticks = match.group(1)!;
+          final tickLen = ticks.length;
 
-        addSpan(match.start, match.start + tickLen, MarkdownTokenType.delimiter);
-        if (match.end - tickLen > match.start + tickLen) {
-          addSpan(match.start + tickLen, match.end - tickLen, MarkdownTokenType.inlineCode);
+          addToken(match.start, match.start + tickLen, MarkdownTokenType.delimiter);
+          if (match.end - tickLen > match.start + tickLen) {
+            addToken(match.start + tickLen, match.end - tickLen, MarkdownTokenType.inlineCode);
+          }
+          addToken(match.end - tickLen, match.end, MarkdownTokenType.delimiter);
         }
-        addSpan(match.end - tickLen, match.end, MarkdownTokenType.delimiter);
       }
     }
 
     // -------------------------------------------------------------------------
     // Priority 4: LaTeX Inline Math ($...$ and \(...\))
     // -------------------------------------------------------------------------
-    for (final match in _inlineMathRegex.allMatches(text)) {
-      if (isRangeFree(match.start, match.end)) {
-        markOccupied(match.start, match.end);
-        final full = match.group(0)!;
-        final isDollar = full.startsWith(r'$');
-        final delimLen = isDollar ? 1 : 2;
+    if (text.contains(r'$') || text.contains(r'\(')) {
+      for (final match in _inlineMathRegex.allMatches(text)) {
+        if (rangeSet.isRangeFree(match.start, match.end)) {
+          rangeSet.markOccupied(match.start, match.end);
+          final full = match.group(0)!;
+          final isDollar = full.startsWith(r'$');
+          final delimLen = isDollar ? 1 : 2;
 
-        addSpan(match.start, match.start + delimLen, MarkdownTokenType.latexDelimiter);
-        if (match.end - delimLen > match.start + delimLen) {
-          addSpan(match.start + delimLen, match.end - delimLen, MarkdownTokenType.latexInline);
+          addToken(match.start, match.start + delimLen, MarkdownTokenType.latexDelimiter);
+          if (match.end - delimLen > match.start + delimLen) {
+            addToken(match.start + delimLen, match.end - delimLen, MarkdownTokenType.latexInline);
+          }
+          addToken(match.end - delimLen, match.end, MarkdownTokenType.latexDelimiter);
         }
-        addSpan(match.end - delimLen, match.end, MarkdownTokenType.latexDelimiter);
       }
     }
 
     // -------------------------------------------------------------------------
     // Priority 5: Academic Citations (Pandoc Bracketed & In-Text)
     // -------------------------------------------------------------------------
-    for (final match in _bracketedCitationRegex.allMatches(text)) {
-      if (isRangeFree(match.start, match.end)) {
-        markOccupied(match.start, match.end);
-        // Bracket '['
-        addSpan(match.start, match.start + 1, MarkdownTokenType.citationBracket);
+    if (text.contains('@')) {
+      for (final match in _bracketedCitationRegex.allMatches(text)) {
+        if (rangeSet.isRangeFree(match.start, match.end)) {
+          rangeSet.markOccupied(match.start, match.end);
+          addToken(match.start, match.start + 1, MarkdownTokenType.citationBracket);
 
-        final innerContent = match.group(1)!;
-        final innerStart = match.start + 1;
+          final innerContent = match.group(1)!;
+          final innerStart = match.start + 1;
+          final citeKeyRegex = RegExp(r'-?@[a-zA-Z0-9_\-:#\/]+');
+          int cursor = innerStart;
 
-        // Highlight citekeys (@key or -@key) and locators inside the bracket
-        final citeKeyRegex = RegExp(r'-?@[a-zA-Z0-9_\-:#\/]+');
-        int cursor = innerStart;
+          for (final kMatch in citeKeyRegex.allMatches(innerContent)) {
+            final kStart = innerStart + kMatch.start;
+            final kEnd = innerStart + kMatch.end;
 
-        for (final kMatch in citeKeyRegex.allMatches(innerContent)) {
-          final kStart = innerStart + kMatch.start;
-          final kEnd = innerStart + kMatch.end;
-
-          if (kStart > cursor) {
-            addSpan(cursor, kStart, MarkdownTokenType.citationLocator);
-          }
-          addSpan(kStart, kEnd, MarkdownTokenType.citationKey);
-          cursor = kEnd;
-        }
-
-        if (cursor < match.end - 1) {
-          addSpan(cursor, match.end - 1, MarkdownTokenType.citationLocator);
-        }
-
-        // Bracket ']'
-        addSpan(match.end - 1, match.end, MarkdownTokenType.citationBracket);
-      }
-    }
-
-    for (final match in _inTextCitationRegex.allMatches(text)) {
-      if (isRangeFree(match.start, match.end)) {
-        markOccupied(match.start, match.end);
-        final keyWithAt = '@${match.group(1)!}';
-        final keyEnd = match.start + keyWithAt.length;
-
-        addSpan(match.start, keyEnd, MarkdownTokenType.citationKey);
-
-        final locator = match.group(2);
-        if (locator != null) {
-          final bracketStart = text.indexOf('[', keyEnd);
-          if (bracketStart != -1 && bracketStart < match.end) {
-            if (bracketStart > keyEnd) {
-              addSpan(keyEnd, bracketStart, MarkdownTokenType.delimiter);
+            if (kStart > cursor) {
+              addToken(cursor, kStart, MarkdownTokenType.citationLocator);
             }
-            addSpan(bracketStart, bracketStart + 1, MarkdownTokenType.citationBracket);
-            addSpan(bracketStart + 1, match.end - 1, MarkdownTokenType.citationLocator);
-            addSpan(match.end - 1, match.end, MarkdownTokenType.citationBracket);
+            addToken(kStart, kEnd, MarkdownTokenType.citationKey);
+            cursor = kEnd;
+          }
+
+          if (cursor < match.end - 1) {
+            addToken(cursor, match.end - 1, MarkdownTokenType.citationLocator);
+          }
+
+          addToken(match.end - 1, match.end, MarkdownTokenType.citationBracket);
+        }
+      }
+
+      for (final match in _inTextCitationRegex.allMatches(text)) {
+        if (rangeSet.isRangeFree(match.start, match.end)) {
+          rangeSet.markOccupied(match.start, match.end);
+          final keyWithAt = '@${match.group(1)!}';
+          final keyEnd = match.start + keyWithAt.length;
+
+          addToken(match.start, keyEnd, MarkdownTokenType.citationKey);
+
+          final locator = match.group(2);
+          if (locator != null) {
+            final bracketStart = text.indexOf('[', keyEnd);
+            if (bracketStart != -1 && bracketStart < match.end) {
+              if (bracketStart > keyEnd) {
+                addToken(keyEnd, bracketStart, MarkdownTokenType.delimiter);
+              }
+              addToken(bracketStart, bracketStart + 1, MarkdownTokenType.citationBracket);
+              addToken(bracketStart + 1, match.end - 1, MarkdownTokenType.citationLocator);
+              addToken(match.end - 1, match.end, MarkdownTokenType.citationBracket);
+            }
           }
         }
       }
@@ -642,269 +747,421 @@ class MarkdownSyntaxHighlighter {
     // -------------------------------------------------------------------------
     // Priority 6: Footnotes (Definitions & In-text references)
     // -------------------------------------------------------------------------
-    for (final match in _footnoteDefRegex.allMatches(text)) {
-      if (isRangeFree(match.start, match.end)) {
-        markOccupied(match.start, match.end);
-        final labelPrefix = match.group(1)!; // [^1]:
-        addSpan(match.start, match.start + labelPrefix.length, MarkdownTokenType.footnoteKey);
-        if (match.end > match.start + labelPrefix.length) {
-          addSpan(match.start + labelPrefix.length, match.end, MarkdownTokenType.delimiter);
+    if (text.contains('[^')) {
+      for (final match in _footnoteDefRegex.allMatches(text)) {
+        if (rangeSet.isRangeFree(match.start, match.end)) {
+          rangeSet.markOccupied(match.start, match.end);
+          final labelPrefix = match.group(1)!; // [^1]:
+          addToken(match.start, match.start + labelPrefix.length, MarkdownTokenType.footnoteKey);
+          if (match.end > match.start + labelPrefix.length) {
+            addToken(match.start + labelPrefix.length, match.end, MarkdownTokenType.delimiter);
+          }
         }
       }
-    }
 
-    for (final match in _footnoteRefRegex.allMatches(text)) {
-      if (isRangeFree(match.start, match.end)) {
-        markOccupied(match.start, match.end);
-        addSpan(match.start, match.start + 2, MarkdownTokenType.footnoteBracket); // [^
-        addSpan(match.start + 2, match.end - 1, MarkdownTokenType.footnoteKey);
-        addSpan(match.end - 1, match.end, MarkdownTokenType.footnoteBracket); // ]
+      for (final match in _footnoteRefRegex.allMatches(text)) {
+        if (rangeSet.isRangeFree(match.start, match.end)) {
+          rangeSet.markOccupied(match.start, match.end);
+          addToken(match.start, match.start + 2, MarkdownTokenType.footnoteBracket); // [^
+          addToken(match.start + 2, match.end - 1, MarkdownTokenType.footnoteKey);
+          addToken(match.end - 1, match.end, MarkdownTokenType.footnoteBracket); // ]
+        }
       }
     }
 
     // -------------------------------------------------------------------------
     // Priority 7: Images and Markdown Links
     // -------------------------------------------------------------------------
-    for (final match in _imageRegex.allMatches(text)) {
-      if (isRangeFree(match.start, match.end)) {
-        markOccupied(match.start, match.end);
-        // ![
-        addSpan(match.start, match.start + 1, MarkdownTokenType.imageMarker);
-        addSpan(match.start + 1, match.start + 2, MarkdownTokenType.delimiter);
+    if (text.contains('![')) {
+      for (final match in _imageRegex.allMatches(text)) {
+        if (rangeSet.isRangeFree(match.start, match.end)) {
+          rangeSet.markOccupied(match.start, match.end);
+          addToken(match.start, match.start + 1, MarkdownTokenType.imageMarker);
+          addToken(match.start + 1, match.start + 2, MarkdownTokenType.delimiter);
 
-        final alt = match.group(2) ?? '';
-        final altStart = match.start + 2;
-        final altEnd = altStart + alt.length;
-        if (alt.isNotEmpty) {
-          addSpan(altStart, altEnd, MarkdownTokenType.linkText);
-        }
+          final alt = match.group(2) ?? '';
+          final altStart = match.start + 2;
+          final altEnd = altStart + alt.length;
+          if (alt.isNotEmpty) {
+            addToken(altStart, altEnd, MarkdownTokenType.linkText);
+          }
 
-        // ](
-        addSpan(altEnd, altEnd + 2, MarkdownTokenType.delimiter);
+          addToken(altEnd, altEnd + 2, MarkdownTokenType.delimiter);
 
-        final url = match.group(4) ?? '';
-        final urlStart = altEnd + 2;
-        final urlEnd = urlStart + url.length;
-        if (url.isNotEmpty) {
-          addSpan(urlStart, urlEnd, MarkdownTokenType.linkUrl);
-        }
+          final url = match.group(4) ?? '';
+          final urlStart = altEnd + 2;
+          final urlEnd = urlStart + url.length;
+          if (url.isNotEmpty) {
+            addToken(urlStart, urlEnd, MarkdownTokenType.linkUrl);
+          }
 
-        // Remainder including optional title and ')'
-        if (match.end > urlEnd) {
-          addSpan(urlEnd, match.end, MarkdownTokenType.delimiter);
-        }
-      }
-    }
-
-    for (final match in _linkRegex.allMatches(text)) {
-      if (isRangeFree(match.start, match.end)) {
-        markOccupied(match.start, match.end);
-        // [
-        addSpan(match.start, match.start + 1, MarkdownTokenType.delimiter);
-
-        final anchor = match.group(2) ?? '';
-        final anchorStart = match.start + 1;
-        final anchorEnd = anchorStart + anchor.length;
-        if (anchor.isNotEmpty) {
-          addSpan(anchorStart, anchorEnd, MarkdownTokenType.linkText);
-        }
-
-        // ](
-        addSpan(anchorEnd, anchorEnd + 2, MarkdownTokenType.delimiter);
-
-        final url = match.group(4) ?? '';
-        final urlStart = anchorEnd + 2;
-        final urlEnd = urlStart + url.length;
-        if (url.isNotEmpty) {
-          addSpan(urlStart, urlEnd, MarkdownTokenType.linkUrl);
-        }
-
-        // Remainder including optional title and ')'
-        if (match.end > urlEnd) {
-          addSpan(urlEnd, match.end, MarkdownTokenType.delimiter);
+          if (match.end > urlEnd) {
+            addToken(urlEnd, match.end, MarkdownTokenType.delimiter);
+          }
         }
       }
     }
 
-    for (final match in _autolinkRegex.allMatches(text)) {
-      if (isRangeFree(match.start, match.end)) {
-        markOccupied(match.start, match.end);
-        addSpan(match.start, match.start + 1, MarkdownTokenType.delimiter); // <
-        addSpan(match.start + 1, match.end - 1, MarkdownTokenType.linkText);
-        addSpan(match.end - 1, match.end, MarkdownTokenType.delimiter); // >
+    if (text.contains('](')) {
+      for (final match in _linkRegex.allMatches(text)) {
+        if (rangeSet.isRangeFree(match.start, match.end)) {
+          rangeSet.markOccupied(match.start, match.end);
+          addToken(match.start, match.start + 1, MarkdownTokenType.delimiter);
+
+          final anchor = match.group(2) ?? '';
+          final anchorStart = match.start + 1;
+          final anchorEnd = anchorStart + anchor.length;
+          if (anchor.isNotEmpty) {
+            addToken(anchorStart, anchorEnd, MarkdownTokenType.linkText);
+          }
+
+          addToken(anchorEnd, anchorEnd + 2, MarkdownTokenType.delimiter);
+
+          final url = match.group(4) ?? '';
+          final urlStart = anchorEnd + 2;
+          final urlEnd = urlStart + url.length;
+          if (url.isNotEmpty) {
+            addToken(urlStart, urlEnd, MarkdownTokenType.linkUrl);
+          }
+
+          if (match.end > urlEnd) {
+            addToken(urlEnd, match.end, MarkdownTokenType.delimiter);
+          }
+        }
+      }
+    }
+
+    if (text.contains('<')) {
+      for (final match in _autolinkRegex.allMatches(text)) {
+        if (rangeSet.isRangeFree(match.start, match.end)) {
+          rangeSet.markOccupied(match.start, match.end);
+          addToken(match.start, match.start + 1, MarkdownTokenType.delimiter);
+          addToken(match.start + 1, match.end - 1, MarkdownTokenType.linkText);
+          addToken(match.end - 1, match.end, MarkdownTokenType.delimiter);
+        }
       }
     }
 
     // -------------------------------------------------------------------------
     // Priority 8: Horizontal Rules
     // -------------------------------------------------------------------------
-    for (final match in _horizontalRuleRegex.allMatches(text)) {
-      if (isRangeFree(match.start, match.end)) {
-        markOccupied(match.start, match.end);
-        addSpan(match.start, match.end, MarkdownTokenType.horizontalRule);
+    if (text.contains('---') || text.contains('***') || text.contains('___')) {
+      for (final match in _horizontalRuleRegex.allMatches(text)) {
+        if (rangeSet.isRangeFree(match.start, match.end)) {
+          rangeSet.markOccupied(match.start, match.end);
+          addToken(match.start, match.end, MarkdownTokenType.horizontalRule);
+        }
       }
     }
 
     // -------------------------------------------------------------------------
     // Priority 9: Headers (#, ##, ###, etc.)
     // -------------------------------------------------------------------------
-    for (final match in _headerRegex.allMatches(text)) {
-      final hashes = match.group(1)!;
-      final level = hashes.length.clamp(1, 6);
-      final markerStart = match.start;
-      final markerEnd = match.start + hashes.length;
+    if (text.contains('#')) {
+      for (final match in _headerRegex.allMatches(text)) {
+        final hashes = match.group(1)!;
+        final level = hashes.length.clamp(1, 6);
+        final markerStart = match.start;
+        final markerEnd = match.start + hashes.length;
 
-      // Header marker hashes
-      if (isRangeFree(markerStart, markerEnd)) {
-        markOccupied(markerStart, markerEnd);
-        addSpan(markerStart, markerEnd, MarkdownTokenType.headerMarker);
-      }
+        if (rangeSet.isRangeFree(markerStart, markerEnd)) {
+          rangeSet.markOccupied(markerStart, markerEnd);
+          addToken(markerStart, markerEnd, MarkdownTokenType.headerMarker);
+        }
 
-      final headerTokenType = switch (level) {
-        1 => MarkdownTokenType.header1,
-        2 => MarkdownTokenType.header2,
-        3 => MarkdownTokenType.header3,
-        4 => MarkdownTokenType.header4,
-        5 => MarkdownTokenType.header5,
-        _ => MarkdownTokenType.header6,
-      };
+        final headerTokenType = switch (level) {
+          1 => MarkdownTokenType.header1,
+          2 => MarkdownTokenType.header2,
+          3 => MarkdownTokenType.header3,
+          4 => MarkdownTokenType.header4,
+          5 => MarkdownTokenType.header5,
+          _ => MarkdownTokenType.header6,
+        };
 
-      // Header line content
-      int segStart = markerEnd;
-      while (segStart < match.end) {
-        if (occupied[segStart]) {
-          segStart++;
-          continue;
+        final freeSlices = rangeSet.getFreeSlices(markerEnd, match.end);
+        for (final slice in freeSlices) {
+          rangeSet.markOccupied(slice.$1, slice.$2);
+          addToken(slice.$1, slice.$2, headerTokenType);
         }
-        int segEnd = segStart;
-        while (segEnd < match.end && !occupied[segEnd]) {
-          segEnd++;
-        }
-        if (segEnd > segStart) {
-          markOccupied(segStart, segEnd);
-          addSpan(segStart, segEnd, headerTokenType);
-        }
-        segStart = segEnd;
       }
     }
 
     // -------------------------------------------------------------------------
     // Priority 10: Blockquotes (> quote)
     // -------------------------------------------------------------------------
-    for (final match in _blockquoteRegex.allMatches(text)) {
-      final marker = match.group(1)!;
-      final markerStart = match.start;
-      final markerEnd = match.start + marker.length;
+    if (text.contains('>')) {
+      for (final match in _blockquoteRegex.allMatches(text)) {
+        final marker = match.group(1)!;
+        final markerStart = match.start;
+        final markerEnd = match.start + marker.length;
 
-      if (isRangeFree(markerStart, markerEnd)) {
-        markOccupied(markerStart, markerEnd);
-        addSpan(markerStart, markerEnd, MarkdownTokenType.blockquoteMarker);
-      }
+        if (rangeSet.isRangeFree(markerStart, markerEnd)) {
+          rangeSet.markOccupied(markerStart, markerEnd);
+          addToken(markerStart, markerEnd, MarkdownTokenType.blockquoteMarker);
+        }
 
-      int segStart = markerEnd;
-      while (segStart < match.end) {
-        if (occupied[segStart]) {
-          segStart++;
-          continue;
+        final freeSlices = rangeSet.getFreeSlices(markerEnd, match.end);
+        for (final slice in freeSlices) {
+          rangeSet.markOccupied(slice.$1, slice.$2);
+          addToken(slice.$1, slice.$2, MarkdownTokenType.blockquoteText);
         }
-        int segEnd = segStart;
-        while (segEnd < match.end && !occupied[segEnd]) {
-          segEnd++;
-        }
-        if (segEnd > segStart) {
-          markOccupied(segStart, segEnd);
-          addSpan(segStart, segEnd, MarkdownTokenType.blockquoteText);
-        }
-        segStart = segEnd;
       }
     }
 
     // -------------------------------------------------------------------------
     // Priority 11: List Markers (-, *, +, 1.)
     // -------------------------------------------------------------------------
-    for (final match in _listMarkerRegex.allMatches(text)) {
-      if (isRangeFree(match.start, match.end)) {
-        markOccupied(match.start, match.end);
-        addSpan(match.start, match.end, MarkdownTokenType.listMarker);
+    if (text.contains('-') || text.contains('*') || text.contains('+') || text.contains('.')) {
+      for (final match in _listMarkerRegex.allMatches(text)) {
+        final marker = match.group(1);
+        if (marker != null) {
+          final fullMatch = match.group(0)!;
+          final markerOffset = fullMatch.indexOf(marker);
+          final markerStart = match.start + markerOffset;
+          final markerEnd = markerStart + marker.length;
+          if (rangeSet.isRangeFree(markerStart, markerEnd)) {
+            rangeSet.markOccupied(markerStart, markerEnd);
+            addToken(markerStart, markerEnd, MarkdownTokenType.listMarker);
+          }
+        }
       }
     }
 
     // -------------------------------------------------------------------------
     // Priority 12: Text Formatting (Bold-Italics, Bold, Italics, Strikethrough)
     // -------------------------------------------------------------------------
-    for (final match in _boldItalicRegex.allMatches(text)) {
-      if (isRangeFree(match.start, match.end)) {
-        markOccupied(match.start, match.end);
-        final delimLen = match.group(1)!.length; // 3
-        addSpan(match.start, match.start + delimLen, MarkdownTokenType.delimiter);
-        if (match.end - delimLen > match.start + delimLen) {
-          addSpan(match.start + delimLen, match.end - delimLen, MarkdownTokenType.boldItalic);
+    if (text.contains('***') || text.contains('___')) {
+      for (final match in _boldItalicRegex.allMatches(text)) {
+        if (rangeSet.isRangeFree(match.start, match.end)) {
+          rangeSet.markOccupied(match.start, match.end);
+          final delimLen = match.group(1)!.length; // 3
+          addToken(match.start, match.start + delimLen, MarkdownTokenType.delimiter);
+          if (match.end - delimLen > match.start + delimLen) {
+            addToken(match.start + delimLen, match.end - delimLen, MarkdownTokenType.boldItalic);
+          }
+          addToken(match.end - delimLen, match.end, MarkdownTokenType.delimiter);
         }
-        addSpan(match.end - delimLen, match.end, MarkdownTokenType.delimiter);
       }
     }
 
-    for (final match in _boldRegex.allMatches(text)) {
-      if (isRangeFree(match.start, match.end)) {
-        markOccupied(match.start, match.end);
-        final delimLen = match.group(1)!.length; // 2
-        addSpan(match.start, match.start + delimLen, MarkdownTokenType.delimiter);
-        if (match.end - delimLen > match.start + delimLen) {
-          addSpan(match.start + delimLen, match.end - delimLen, MarkdownTokenType.bold);
+    if (text.contains('**') || text.contains('__')) {
+      for (final match in _boldRegex.allMatches(text)) {
+        if (rangeSet.isRangeFree(match.start, match.end)) {
+          rangeSet.markOccupied(match.start, match.end);
+          final delimLen = match.group(1)!.length; // 2
+          addToken(match.start, match.start + delimLen, MarkdownTokenType.delimiter);
+          if (match.end - delimLen > match.start + delimLen) {
+            addToken(match.start + delimLen, match.end - delimLen, MarkdownTokenType.bold);
+          }
+          addToken(match.end - delimLen, match.end, MarkdownTokenType.delimiter);
         }
-        addSpan(match.end - delimLen, match.end, MarkdownTokenType.delimiter);
       }
     }
 
-    for (final match in _italicRegex.allMatches(text)) {
-      if (isRangeFree(match.start, match.end)) {
-        markOccupied(match.start, match.end);
-        final delimLen = match.group(1)!.length; // 1
-        addSpan(match.start, match.start + delimLen, MarkdownTokenType.delimiter);
-        if (match.end - delimLen > match.start + delimLen) {
-          addSpan(match.start + delimLen, match.end - delimLen, MarkdownTokenType.italic);
+    if (text.contains('*') || text.contains('_')) {
+      for (final match in _italicRegex.allMatches(text)) {
+        if (rangeSet.isRangeFree(match.start, match.end)) {
+          rangeSet.markOccupied(match.start, match.end);
+          final delimLen = match.group(1)!.length; // 1
+          addToken(match.start, match.start + delimLen, MarkdownTokenType.delimiter);
+          if (match.end - delimLen > match.start + delimLen) {
+            addToken(match.start + delimLen, match.end - delimLen, MarkdownTokenType.italic);
+          }
+          addToken(match.end - delimLen, match.end, MarkdownTokenType.delimiter);
         }
-        addSpan(match.end - delimLen, match.end, MarkdownTokenType.delimiter);
       }
     }
 
-    for (final match in _strikethroughRegex.allMatches(text)) {
-      if (isRangeFree(match.start, match.end)) {
-        markOccupied(match.start, match.end);
-        final delimLen = 2; // ~~
-        addSpan(match.start, match.start + delimLen, MarkdownTokenType.delimiter);
-        if (match.end - delimLen > match.start + delimLen) {
-          addSpan(match.start + delimLen, match.end - delimLen, MarkdownTokenType.strikethrough);
+    if (text.contains('~~')) {
+      for (final match in _strikethroughRegex.allMatches(text)) {
+        if (rangeSet.isRangeFree(match.start, match.end)) {
+          rangeSet.markOccupied(match.start, match.end);
+          final delimLen = 2; // ~~
+          addToken(match.start, match.start + delimLen, MarkdownTokenType.delimiter);
+          if (match.end - delimLen > match.start + delimLen) {
+            addToken(match.start + delimLen, match.end - delimLen, MarkdownTokenType.strikethrough);
+          }
+          addToken(match.end - delimLen, match.end, MarkdownTokenType.delimiter);
         }
-        addSpan(match.end - delimLen, match.end, MarkdownTokenType.delimiter);
       }
     }
 
-    // Sort all spans strictly by start position
-    spans.sort((a, b) => a.start.compareTo(b.start));
+    // Sort all tokens strictly by start position
+    tokens.sort((a, b) => a.start.compareTo(b.start));
+    return tokens;
+  }
+
+  /// Incrementally updates syntax tokens for single-line / local edits in O(line length)
+  /// instead of scanning the entire document with 20 regular expressions on every keystroke.
+  ///
+  /// Returns a record `(tokens, needsFullReconcile)`, or `null` if a full pass should run immediately.
+  static (List<ParsedToken>, bool)? updateTokensIncrementally({
+    required String oldText,
+    required String newText,
+    required List<ParsedToken> oldTokens,
+    bool allowDeferredMultiLine = false,
+  }) {
+    if (oldText == newText) return (oldTokens, false);
+    if (oldText.isEmpty || newText.isEmpty) return null;
+
+    final oldLen = oldText.length;
+    final newLen = newText.length;
+    final minLen = oldLen < newLen ? oldLen : newLen;
+
+    // 1. Find first differing character from the start
+    int diffStart = 0;
+    while (diffStart < minLen &&
+        oldText.codeUnitAt(diffStart) == newText.codeUnitAt(diffStart)) {
+      diffStart++;
+    }
+
+    // 2. Find last differing character from the end
+    int oldDiffEnd = oldLen;
+    int newDiffEnd = newLen;
+    while (oldDiffEnd > diffStart &&
+        newDiffEnd > diffStart &&
+        oldText.codeUnitAt(oldDiffEnd - 1) ==
+            newText.codeUnitAt(newDiffEnd - 1)) {
+      oldDiffEnd--;
+      newDiffEnd--;
+    }
+
+    // 3. Expand to enclosing line boundaries
+    final int lineStart =
+        diffStart > 0 ? oldText.lastIndexOf('\n', diffStart - 1) + 1 : 0;
+    int oldLineEnd = oldText.indexOf('\n', oldDiffEnd);
+    if (oldLineEnd == -1) oldLineEnd = oldLen;
+    int newLineEnd = newText.indexOf('\n', newDiffEnd);
+    if (newLineEnd == -1) newLineEnd = newLen;
+
+    // If the edit spans a massive chunk (e.g. pasting a huge file), fall back unless deferred
+    if (newLineEnd - lineStart > 4000 || oldLineEnd - lineStart > 4000) {
+      if (!allowDeferredMultiLine) return null;
+    }
+
+    final oldSlice = oldText.substring(lineStart, oldLineEnd);
+    final newSlice = newText.substring(lineStart, newLineEnd);
+
+    bool hasMultiLineConstruct(String s) {
+      return s.contains('```') ||
+          s.contains('~~~') ||
+          s.contains(r'$$') ||
+          s.contains(r'\[') ||
+          s.contains(r'\]');
+    }
+
+    bool touchesMultiLine =
+        hasMultiLineConstruct(oldSlice) || hasMultiLineConstruct(newSlice);
+
+    if (!touchesMultiLine) {
+      for (final t in oldTokens) {
+        if (t.end <= lineStart) continue;
+        if (t.start >= oldLineEnd) break;
+        if (t.type == MarkdownTokenType.codeBlock ||
+            t.type == MarkdownTokenType.codeFence ||
+            t.type == MarkdownTokenType.latexDisplay) {
+          touchesMultiLine = true;
+          break;
+        }
+      }
+    }
+
+    if (touchesMultiLine && !allowDeferredMultiLine) {
+      return null;
+    }
+
+    // 4. Parse tokens only on the modified line slice
+    final sliceTokens = (newLineEnd - lineStart <= 4000)
+        ? parseTokens(newSlice)
+        : const <ParsedToken>[];
+    final delta = newLen - oldLen;
+
+    final updated = <ParsedToken>[];
+    bool insertedSlice = false;
+
+    for (final t in oldTokens) {
+      if (t.end <= lineStart) {
+        updated.add(t);
+      } else if (t.start >= oldLineEnd) {
+        if (!insertedSlice) {
+          for (final st in sliceTokens) {
+            updated.add(ParsedToken(
+              start: st.start + lineStart,
+              end: st.end + lineStart,
+              type: st.type,
+            ));
+          }
+          insertedSlice = true;
+        }
+        updated.add(ParsedToken(
+          start: t.start + delta,
+          end: t.end + delta,
+          type: t.type,
+        ));
+      }
+    }
+
+    if (!insertedSlice) {
+      for (final st in sliceTokens) {
+        updated.add(ParsedToken(
+          start: st.start + lineStart,
+          end: st.end + lineStart,
+          type: st.type,
+        ));
+      }
+    }
+
+    return (updated, touchesMultiLine);
+  }
+
+  /// Parse the given raw text and return a non-overlapping, sorted list of HighlightSpan.
+  static List<HighlightSpan> parseSpans({
+    required String text,
+    required MarkdownSyntaxTheme theme,
+    required TextStyle baseStyle,
+  }) {
+    if (text.isEmpty) return const [];
+    final tokens = parseTokens(text);
+    final styles = theme.getResolvedStyles(baseStyle);
+    final spans = List<HighlightSpan>.generate(
+      tokens.length,
+      (i) {
+        final t = tokens[i];
+        return HighlightSpan(
+          start: t.start,
+          end: t.end,
+          type: t.type,
+          style: styles[t.type.index],
+        );
+      },
+      growable: false,
+    );
     return spans;
   }
 
-  /// Builds a complete TextSpan hierarchy for rendering in an editable TextField.
-  static TextSpan buildTextSpan({
+  /// Builds a complete TextSpan hierarchy for rendering in an editable TextField from tokens.
+  /// When [windowStart] and [windowEnd] are provided (e.g. during active typing on large files),
+  /// only tokens within `[windowStart, windowEnd)` are expanded into styled spans, drastically
+  /// reducing native text-shaping overhead while keeping the visible viewport fully highlighted.
+  static TextSpan buildSpanFromTokens({
     required String text,
+    required List<ParsedToken> tokens,
     required TextStyle baseStyle,
-    required bool isDark,
+    required MarkdownSyntaxTheme theme,
     TextRange? composingRange,
+    int? windowStart,
+    int? windowEnd,
   }) {
     if (text.isEmpty) {
       return TextSpan(text: '', style: baseStyle);
     }
 
-    final theme = isDark ? MarkdownSyntaxTheme.dark() : MarkdownSyntaxTheme.light();
-    final spans = parseSpans(
-      text: text,
-      theme: theme,
-      baseStyle: baseStyle,
-    );
-
+    final styles = theme.getResolvedStyles(baseStyle);
     final children = <TextSpan>[];
     int cursor = 0;
+
+    final int effWindowStart = windowStart ?? 0;
+    final int effWindowEnd = windowEnd ?? text.length;
 
     void appendPiece(int start, int end, TextStyle style) {
       if (start >= end) return;
@@ -944,12 +1201,19 @@ class MarkdownSyntaxHighlighter {
       children.add(TextSpan(text: piece, style: style));
     }
 
-    for (final span in spans) {
-      if (span.start > cursor) {
-        appendPiece(cursor, span.start, baseStyle);
+    for (final token in tokens) {
+      if (token.end <= effWindowStart) continue;
+      if (token.start >= effWindowEnd) break;
+
+      final tStart = token.start < effWindowStart ? effWindowStart : token.start;
+      final tEnd = token.end > effWindowEnd ? effWindowEnd : token.end;
+      if (tStart >= tEnd) continue;
+
+      if (tStart > cursor) {
+        appendPiece(cursor, tStart, baseStyle);
       }
-      appendPiece(span.start, span.end, span.style);
-      cursor = span.end;
+      appendPiece(tStart, tEnd, styles[token.type.index]);
+      cursor = tEnd;
     }
 
     if (cursor < text.length) {
@@ -958,12 +1222,71 @@ class MarkdownSyntaxHighlighter {
 
     return TextSpan(style: baseStyle, children: children);
   }
+
+  /// Builds a complete TextSpan hierarchy for rendering in an editable TextField.
+  static TextSpan buildTextSpan({
+    required String text,
+    required TextStyle baseStyle,
+    required bool isDark,
+    TextRange? composingRange,
+  }) {
+    if (text.isEmpty) {
+      return TextSpan(text: '', style: baseStyle);
+    }
+
+    final theme = isDark ? MarkdownSyntaxTheme.dark() : MarkdownSyntaxTheme.light();
+    final tokens = parseTokens(text);
+    return buildSpanFromTokens(
+      text: text,
+      tokens: tokens,
+      baseStyle: baseStyle,
+      theme: theme,
+      composingRange: composingRange,
+    );
+  }
 }
 
-/// A specialized TextEditingController that renders real-time syntax highlighting
-/// for Markdown formatting (bold, italics, headers, links, citations, and LaTeX math).
+/// A specialised TextEditingController that renders real-time syntax highlighting
+/// for Markdown formatting with cached AST tokens for instantaneous dark/light theme switching
+/// and O(1) incremental line-scoped token updates during typing on large documents.
 class MarkdownSyntaxEditingController extends TextEditingController {
   MarkdownSyntaxEditingController({super.text});
+
+  static const int _largeDocumentThreshold = 30000;
+  static const int _activeTypingWindowRadius = 10000;
+
+  String? _lastText;
+  List<ParsedToken>? _cachedTokens;
+  bool? _lastIsDark;
+  String? _lastSchemeId;
+  TextStyle? _lastStyle;
+  TextSpan? _cachedSpan;
+  bool? _needsFullReconcile;
+  bool? _wasWindowed;
+  bool? _isActivelyTyping;
+
+  /// Indicates whether the user is currently in an active typing session
+  /// (before the 1.5-second idle render timer has elapsed).
+  bool get isActivelyTyping => _isActivelyTyping == true;
+  set isActivelyTyping(bool val) => _isActivelyTyping = val;
+
+  /// Performs a full syntax token reconciliation once typing has paused for the idle period.
+  void reconcileFullHighlight() {
+    _isActivelyTyping = false;
+    if (_needsFullReconcile == true || _wasWindowed == true) {
+      _needsFullReconcile = false;
+      _wasWindowed = false;
+      _cachedTokens = MarkdownSyntaxHighlighter.parseTokens(value.text);
+      _cachedSpan = null;
+      notifyListeners();
+    }
+  }
+
+  /// Invalidates the cached styled span and notifies listeners when the active colour scheme changes.
+  void refreshThemeHighlighting() {
+    _cachedSpan = null;
+    notifyListeners();
+  }
 
   @override
   TextSpan buildTextSpan({
@@ -973,17 +1296,87 @@ class MarkdownSyntaxEditingController extends TextEditingController {
   }) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+    final activeSchemeId = AppTheme.activeSchemeForBrightness(isDark).id;
     final baseStyle = style ?? const TextStyle();
+    final currentText = value.text;
 
     final composingRange = (withComposing && value.isComposingRangeValid)
         ? value.composing
         : null;
 
-    return MarkdownSyntaxHighlighter.buildTextSpan(
-      text: value.text,
+    if (composingRange == null &&
+        currentText == _lastText &&
+        isDark == _lastIsDark &&
+        activeSchemeId == _lastSchemeId &&
+        baseStyle == _lastStyle &&
+        _cachedSpan != null) {
+      return _cachedSpan!;
+    }
+
+    final syntaxTheme = isDark
+        ? MarkdownSyntaxTheme.dark()
+        : MarkdownSyntaxTheme.light();
+
+    // Instantaneous theme switching or incremental typing update:
+    List<ParsedToken> tokens;
+    if (_cachedTokens != null && currentText == _lastText) {
+      tokens = _cachedTokens!;
+    } else if (_cachedTokens != null && _lastText != null) {
+      final isLarge = currentText.length >= _largeDocumentThreshold;
+      final incremental = MarkdownSyntaxHighlighter.updateTokensIncrementally(
+        oldText: _lastText!,
+        newText: currentText,
+        oldTokens: _cachedTokens!,
+        allowDeferredMultiLine: isActivelyTyping && isLarge,
+      );
+      if (incremental != null) {
+        tokens = incremental.$1;
+        if (incremental.$2) {
+          _needsFullReconcile = true;
+        }
+        _cachedTokens = tokens;
+      } else {
+        tokens = MarkdownSyntaxHighlighter.parseTokens(currentText);
+        _cachedTokens = tokens;
+        _needsFullReconcile = false;
+      }
+    } else {
+      tokens = MarkdownSyntaxHighlighter.parseTokens(currentText);
+      _cachedTokens = tokens;
+      _needsFullReconcile = false;
+    }
+
+    int? windowStart;
+    int? windowEnd;
+    if (isActivelyTyping &&
+        currentText.length >= _largeDocumentThreshold &&
+        value.selection.isValid) {
+      final cursor = value.selection.baseOffset.clamp(0, currentText.length);
+      windowStart = (cursor - _activeTypingWindowRadius).clamp(0, currentText.length);
+      windowEnd = (cursor + _activeTypingWindowRadius).clamp(0, currentText.length);
+      _wasWindowed = true;
+    } else {
+      _wasWindowed = false;
+    }
+
+    final span = MarkdownSyntaxHighlighter.buildSpanFromTokens(
+      text: currentText,
+      tokens: tokens,
       baseStyle: baseStyle,
-      isDark: isDark,
+      theme: syntaxTheme,
       composingRange: composingRange,
+      windowStart: windowStart,
+      windowEnd: windowEnd,
     );
+
+    if (composingRange == null) {
+      _lastText = currentText;
+      _lastIsDark = isDark;
+      _lastSchemeId = activeSchemeId;
+      _lastStyle = baseStyle;
+      _cachedSpan = span;
+    }
+
+    return span;
   }
 }

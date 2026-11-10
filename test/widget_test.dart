@@ -8,6 +8,7 @@ import 'package:mdwriter/ui/theme/app_theme.dart';
 import 'package:mdwriter/ui/widgets/citation_dialog.dart';
 import 'package:mdwriter/ui/widgets/editor_view.dart';
 import 'package:mdwriter/ui/widgets/export_dialog.dart';
+import 'package:mdwriter/ui/widgets/settings_dialog.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -61,6 +62,7 @@ void main() {
 
     SharedPreferences.setMockInitialValues({});
     final controller = EditorController();
+    addTearDown(controller.dispose);
 
     // Populate with 200 lines to ensure a long scrollable document
     controller.textController.text =
@@ -76,7 +78,7 @@ void main() {
 
     // Scroll down by 500 pixels
     controller.scrollController.jumpTo(500.0);
-    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
 
     // Verify offset is maintained and gutter custom paint reflects the offset
     expect(controller.scrollController.offset, equals(500.0));
@@ -95,6 +97,7 @@ void main() {
 
     SharedPreferences.setMockInitialValues({});
     final controller = EditorController();
+    addTearDown(controller.dispose);
 
     await tester.pumpWidget(MaterialApp(
       theme: AppTheme.lightTheme(),
@@ -136,6 +139,7 @@ void main() {
 
     SharedPreferences.setMockInitialValues({});
     final controller = EditorController();
+    addTearDown(controller.dispose);
     await controller.historyService.recordFileOpen('test.md');
 
     await tester.pumpWidget(MDWriterApp(
@@ -158,6 +162,7 @@ void main() {
 
     SharedPreferences.setMockInitialValues({});
     final controller = EditorController();
+    addTearDown(controller.dispose);
 
     await tester.pumpWidget(MaterialApp(
       theme: AppTheme.lightTheme(),
@@ -227,6 +232,7 @@ void main() {
 
     SharedPreferences.setMockInitialValues({});
     final controller = EditorController();
+    addTearDown(controller.dispose);
 
     bool dialogClosed = false;
     await tester.pumpWidget(MaterialApp(
@@ -292,6 +298,7 @@ void main() {
 
     SharedPreferences.setMockInitialValues({});
     final controller = EditorController();
+    addTearDown(controller.dispose);
 
     bool dialogClosed = false;
     await tester.pumpWidget(MaterialApp(
@@ -333,6 +340,7 @@ void main() {
 
     SharedPreferences.setMockInitialValues({});
     final controller = EditorController();
+    addTearDown(controller.dispose);
 
     // Add a citation with an exceptionally long citekey
     controller.bibliographyService.setItems([
@@ -368,6 +376,7 @@ void main() {
 
     SharedPreferences.setMockInitialValues({});
     final controller = EditorController();
+    addTearDown(controller.dispose);
     controller.textController.text =
         'Study [@asdfsdf, @asdfasdf, @ghjghj] carefully.';
     // Set cursor at index 20 (middle of citation)
@@ -408,6 +417,7 @@ void main() {
 
     SharedPreferences.setMockInitialValues({});
     final controller = EditorController();
+    addTearDown(controller.dispose);
 
     await tester.pumpWidget(MaterialApp(
       theme: AppTheme.lightTheme(),
@@ -485,5 +495,131 @@ void main() {
 
     expect(find.text('Page Size:'), findsOneWidget);
     expect(find.text('Margins:'), findsOneWidget);
+  });
+
+  testWidgets(
+      'Editor waits 1.5 seconds of typing inactivity and shows Update Render button when modified',
+      (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(1400, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+
+    SharedPreferences.setMockInitialValues({});
+    final controller = EditorController();
+    addTearDown(controller.dispose);
+    controller.newFile();
+
+    await tester.pumpWidget(MDWriterApp(
+      controller: controller,
+      initialDarkMode: false,
+    ));
+    await tester.pump();
+
+    // Initially unmodified: Update Render button is not shown
+    expect(controller.isModified, isFalse);
+    expect(find.byKey(const ValueKey('update-render-button')), findsNothing);
+
+    final editorTextFieldFinder = find.descendant(
+      of: find.byType(EditorView),
+      matching: find.byType(TextField),
+    );
+
+    // First typing entry
+    await tester.enterText(editorTextFieldFinder, '# Initial Heading\n\nFirst typed line.');
+    await tester.pump();
+
+    // File is now modified: Update Render button appears immediately
+    expect(controller.isModified, isTrue);
+    expect(find.byKey(const ValueKey('update-render-button')), findsOneWidget);
+
+    await tester.pump(const Duration(milliseconds: 1000));
+
+    // Editor content has updated immediately, but render has not yet updated after 1.0s
+    expect(controller.content, equals('# Initial Heading\n\nFirst typed line.'));
+    expect(controller.previewMarkdown, isEmpty);
+    expect(controller.isRenderPending, isTrue);
+
+    // Type again at 1.0s (before the 1.5s window completes) to verify timer resets
+    await tester.enterText(
+      editorTextFieldFinder,
+      '# Initial Heading\n\nFirst typed line. Second typed sentence.',
+    );
+
+    // 1.0 second after the second entry (2.0s total elapsed, but only 1.0s idle): still waiting
+    await tester.pump(const Duration(milliseconds: 1000));
+    expect(controller.previewMarkdown, isEmpty);
+    expect(controller.isRenderPending, isTrue);
+
+    // Complete the remaining 0.5s of the 1.5s inactivity period
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(controller.isRenderPending, isFalse);
+    expect(
+      controller.previewMarkdown,
+      equals('# Initial Heading\n\nFirst typed line. Second typed sentence.'),
+    );
+
+    // Type a third time and click "Update Render" manually before 1.5s elapses
+    await tester.enterText(
+      editorTextFieldFinder,
+      '# Initial Heading\n\nManually updated paragraph.',
+    );
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(controller.isRenderPending, isTrue);
+
+    await tester.tap(find.byKey(const ValueKey('update-render-button')));
+    await tester.pump();
+
+    expect(controller.isRenderPending, isFalse);
+    expect(
+      controller.previewMarkdown,
+      equals('# Initial Heading\n\nManually updated paragraph.'),
+    );
+  });
+
+  testWidgets(
+      'Settings dialog displays colour scheme dropdown and switches dark mode palettes',
+      (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(1400, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+
+    SharedPreferences.setMockInitialValues({});
+    final controller = EditorController();
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(MDWriterApp(
+      controller: controller,
+      initialDarkMode: true,
+    ));
+    await tester.pump();
+
+    // Open Settings dialog via SettingsDialog widget
+    await tester.pumpWidget(MaterialApp(
+      theme: AppTheme.darkTheme(),
+      home: Scaffold(
+        body: SettingsDialog(controller: controller),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    final schemeDropdown = find.byKey(const ValueKey('colour-scheme-dropdown'));
+    expect(schemeDropdown, findsOneWidget);
+    expect(find.text('Slate Navy (Default Dark)'), findsOneWidget);
+
+    // Open dropdown and select Dracula (Dark)
+    await tester.tap(schemeDropdown);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Dracula (Dark)').last, findsOneWidget);
+    expect(find.text('Tokyo Night (Dark)').last, findsOneWidget);
+    expect(find.text('Catppuccin Mocha (Dark)').last, findsOneWidget);
+    expect(find.text('Nord Polar Night (Dark)').last, findsOneWidget);
+
+    await tester.tap(find.text('Dracula (Dark)').last);
+    await tester.pumpAndSettle();
+
+    expect(controller.darkSchemeId, equals('dracula'));
+    expect(controller.isDarkMode, isTrue);
+    expect(AppTheme.activeDarkScheme.id, equals('dracula'));
   });
 }

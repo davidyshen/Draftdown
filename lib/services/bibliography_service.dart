@@ -428,5 +428,16 @@ class BibliographyService {
       abstractText:
           'The definitive reference for Pandoc document conversion, readers, writers, and markdown extensions.',
     ),
+    CitationItem(
+      key: 'moreno-mateosLongtermRestorationEcosystem2020',
+      title: 'The long-term restoration of ecosystem complexity',
+      authors: ['David Moreno-Mateos', 'et al.'],
+      year: '2020',
+      venue: 'Nature Ecology & Evolution, 4(5), 676-685',
+      itemType: 'article',
+      doi: '10.1038/s41559-020-1154-1',
+      abstractText:
+          'Ecosystem restoration often fails to recover pre-disturbance complexity, highlighting the need for long-term monitoring and ecological stewardship.',
+    ),
   ];
 }

@@ -38,3 +38,4 @@ macos/Flutter/ephemeral/
 
 # Pandoc binary
 assets/bin/pandoc.exe
+*.exe

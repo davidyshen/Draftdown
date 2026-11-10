@@ -22,7 +22,8 @@ class _SettingsDialogState extends State<SettingsDialog>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
 
-  // Typography state
+  // Typography & Colour Scheme state
+  late String _selectedColorSchemeId;
   late String _selectedEditorFont;
   late bool _isDualRender;
   late String _selectedBodyFont;
@@ -43,6 +44,7 @@ class _SettingsDialogState extends State<SettingsDialog>
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
 
+    _selectedColorSchemeId = widget.controller.activeColorSchemeId;
     _selectedEditorFont = widget.controller.editorFontFamily;
     _isDualRender = widget.controller.isDualRenderFont;
     _selectedBodyFont = widget.controller.renderBodyFont;
@@ -64,6 +66,11 @@ class _SettingsDialogState extends State<SettingsDialog>
     _pandocPathController.dispose();
     _bibPathController.dispose();
     super.dispose();
+  }
+
+  void _onColorSchemeChanged(String newSchemeId) {
+    setState(() => _selectedColorSchemeId = newSchemeId);
+    widget.controller.setColorScheme(newSchemeId);
   }
 
   void _onEditorFontChanged(String newFont) {
@@ -262,7 +269,7 @@ class _SettingsDialogState extends State<SettingsDialog>
     );
   }
 
-  /// Typography Tab: Monospace Editor font & Unified vs Dual Render fonts
+  /// Typography & Appearance Tab: Colour Scheme, Monospace Editor font & Unified vs Dual Render fonts
   Widget _buildTypographyTab(
     ThemeData theme,
     bool isDark,
@@ -270,12 +277,126 @@ class _SettingsDialogState extends State<SettingsDialog>
     Color mutedColor,
   ) {
     final previewBg =
-        isDark ? const Color(0xFF131D2E) : const Color(0xFFF1F5F9);
+        isDark ? AppTheme.darkSidebar : AppTheme.lightSidebar;
+    final activeScheme = AppTheme.schemeById(_selectedColorSchemeId);
 
     return SingleChildScrollView(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Section 0: Colour Scheme Dropdown
+          Row(
+            children: [
+              const Icon(Icons.palette_outlined, size: 18),
+              const SizedBox(width: 8),
+              const Text(
+                'Colour Scheme',
+                style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Select a dark mode palette or light theme for the workspace, Markdown syntax highlighting, and live preview.',
+            style: TextStyle(fontSize: 11.5, color: mutedColor),
+          ),
+          const SizedBox(height: 10),
+
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(
+              border: Border.all(color: borderColor),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                key: const ValueKey('colour-scheme-dropdown'),
+                focusColor: Colors.transparent,
+                dropdownColor: isDark ? AppTheme.darkSurface : AppTheme.lightSurface,
+                value: AppTheme.availableColorSchemes
+                        .any((s) => s.id == _selectedColorSchemeId)
+                    ? _selectedColorSchemeId
+                    : AppTheme.availableColorSchemes.first.id,
+                isExpanded: true,
+                icon: const Icon(Icons.keyboard_arrow_down, size: 20),
+                items: AppTheme.availableColorSchemes.map((scheme) {
+                  return DropdownMenuItem<String>(
+                    value: scheme.id,
+                    child: Row(
+                      children: [
+                        _buildSchemeSwatchPreview(scheme),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            scheme.name,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: scheme.isDark
+                                ? scheme.accent.withValues(alpha: 0.16)
+                                : Colors.amber.withValues(alpha: 0.18),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            scheme.isDark ? 'Dark' : 'Light',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                              color: scheme.isDark
+                                  ? scheme.accent
+                                  : Colors.amber[800],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList(),
+                onChanged: (val) {
+                  if (val != null) _onColorSchemeChanged(val);
+                },
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 8),
+
+          // Active Palette Description & Swatch Strip
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: previewBg,
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: borderColor),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    activeScheme.description,
+                    style: TextStyle(fontSize: 11.5, color: mutedColor),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                _buildSchemeSwatchPreview(activeScheme, size: 14),
+              ],
+            ),
+          ),
+
+          const Divider(height: 28),
+
           // Section 1: Monospace Editor Font
           Row(
             children: [
@@ -510,6 +631,35 @@ class _SettingsDialogState extends State<SettingsDialog>
     );
   }
 
+  Widget _buildSchemeSwatchPreview(AppColorScheme scheme, {double size = 12}) {
+    final colors = [
+      scheme.bg,
+      scheme.surface,
+      scheme.accent,
+      scheme.header1Color,
+      scheme.citationColor,
+      scheme.mathColor,
+    ];
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: colors.map((c) {
+        return Container(
+          width: size,
+          height: size,
+          margin: const EdgeInsets.only(right: 3),
+          decoration: BoxDecoration(
+            color: c,
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: scheme.border.withValues(alpha: 0.8),
+              width: 1,
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
   Widget _buildFontDropdown({
     required String value,
     required ValueChanged<String> onChanged,
@@ -560,7 +710,7 @@ class _SettingsDialogState extends State<SettingsDialog>
     final isAvailable = widget.controller.isPandocAvailable;
     final versionStr = widget.controller.pandocVersion ?? 'Pandoc 3.6.3 (Bundled)';
     final resolvedPath = widget.controller.resolvedPandocPath ?? 'Bundled with application';
-    final cardBg = isDark ? const Color(0xFF131D2E) : const Color(0xFFF1F5F9);
+    final cardBg = isDark ? AppTheme.darkSidebar : AppTheme.lightSidebar;
 
     return SingleChildScrollView(
       child: Column(

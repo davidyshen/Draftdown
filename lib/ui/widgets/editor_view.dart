@@ -1,21 +1,9 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import '../../controllers/editor_controller.dart';
 import '../theme/app_theme.dart';
-
-/// Information describing the layout position of a single logical line
-class _LineInfo {
-  final int lineNumber;
-  final double top;
-  final double height;
-
-  const _LineInfo({
-    required this.lineNumber,
-    required this.top,
-    required this.height,
-  });
-}
 
 /// The core Markdown text editor widget with precision-synchronised
 /// monospace line-number gutter and desktop keyboard shortcuts.
@@ -42,11 +30,53 @@ class EditorView extends StatefulWidget {
 class _EditorViewState extends State<EditorView> {
   static const double _fontSize = 13.5;
   static const double _lineHeightMultiplier = 1.5;
-  static const double _lineBoxHeight = _fontSize * _lineHeightMultiplier; // 20.25
+  static const double _lineBoxHeight = 20.0; // Exact strut-rounded line height in SkParagraph
   static const double _contentPaddingTop = 16.0;
   static const double _contentPaddingBottom = 40.0;
   static const double _contentPaddingHorizontal = 16.0;
   static const double _gutterWidth = 52.0;
+
+  GlobalKey? __textFieldKey;
+  GlobalKey get _textFieldKey => __textFieldKey ??= GlobalKey();
+
+  GlobalKey? __gutterPaintKey;
+  GlobalKey get _gutterPaintKey => __gutterPaintKey ??= GlobalKey();
+
+  String? _lastOffsetText;
+  List<int>? _cachedLineStartOffsets;
+
+  RenderEditable? _findRenderEditable() {
+    final ctx = _textFieldKey.currentContext;
+    if (ctx == null) return null;
+    RenderEditable? result;
+    void visitor(Element element) {
+      if (result != null) return;
+      final renderObject = element.renderObject;
+      if (renderObject is RenderEditable) {
+        result = renderObject;
+        return;
+      }
+      element.visitChildren(visitor);
+    }
+
+    ctx.visitChildElements(visitor);
+    return result;
+  }
+
+  List<int> _getLineStartOffsets(String text) {
+    if (_cachedLineStartOffsets != null && _lastOffsetText == text) {
+      return _cachedLineStartOffsets!;
+    }
+    final offsets = <int>[0];
+    int idx = text.indexOf('\n');
+    while (idx != -1) {
+      offsets.add(idx + 1);
+      idx = text.indexOf('\n', idx + 1);
+    }
+    _lastOffsetText = text;
+    _cachedLineStartOffsets = offsets;
+    return offsets;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -57,7 +87,7 @@ class _EditorViewState extends State<EditorView> {
     final borderColor =
         isDark ? AppTheme.darkBorder : AppTheme.lightBorder;
     final gutterColor =
-        isDark ? const Color(0xFF162032) : const Color(0xFFF1F5F9);
+        isDark ? AppTheme.darkGutter : AppTheme.lightGutter;
     final gutterTextColor =
         isDark ? AppTheme.darkTextMuted : AppTheme.lightTextMuted;
 
@@ -122,14 +152,6 @@ class _EditorViewState extends State<EditorView> {
                       (_contentPaddingHorizontal * 2))
                   .clamp(100.0, 99999.0);
 
-              // Calculate positions of all lines taking soft-wrapping into account
-              final lines = _computeLinePositions(
-                text: widget.controller.textController.text,
-                editorWidth: editorWidth,
-                style: editorTextStyle,
-                strutStyle: editorStrutStyle,
-              );
-
               return Row(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -157,25 +179,41 @@ class _EditorViewState extends State<EditorView> {
                         border: Border(right: BorderSide(color: borderColor)),
                       ),
                       child: AnimatedBuilder(
-                        animation: widget.controller.scrollController,
+                        animation: Listenable.merge([
+                          widget.controller.scrollController,
+                          widget.controller.textController,
+                        ]),
                         builder: (context, _) {
                           final scrollOffset = widget
                                   .controller.scrollController.hasClients
                               ? widget.controller.scrollController.offset
                               : 0.0;
+                          final currentText =
+                              widget.controller.textController.text;
+                          final lineStartOffsets =
+                              _getLineStartOffsets(currentText);
 
-                          return ClipRect(
-                            child: CustomPaint(
-                              size: Size(_gutterWidth, viewportHeight),
-                              painter: _LineNumberPainter(
-                                lines: lines,
-                                scrollOffset: scrollOffset,
-                                viewportHeight: viewportHeight,
-                                lineBoxHeight: _lineBoxHeight,
-                                gutterTextColor: gutterTextColor,
-                                fontFamily: widget.controller.editorFontFamily,
-                                fontFamilyFallback:
-                                    AppTheme.editorFontFamilyFallback,
+                          return RepaintBoundary(
+                            child: ClipRect(
+                              child: CustomPaint(
+                                key: _gutterPaintKey,
+                                size: Size(_gutterWidth, viewportHeight),
+                                painter: _LineNumberPainter(
+                                  lineStartOffsets: lineStartOffsets,
+                                  text: currentText,
+                                  editorWidth: editorWidth,
+                                  scrollOffset: scrollOffset,
+                                  viewportHeight: viewportHeight,
+                                  lineBoxHeight: _lineBoxHeight,
+                                  contentPaddingTop: _contentPaddingTop,
+                                  gutterTextColor: gutterTextColor,
+                                  fontFamily: widget.controller.editorFontFamily,
+                                  fontFamilyFallback:
+                                      AppTheme.editorFontFamilyFallback,
+                                  editorStrutStyle: editorStrutStyle,
+                                  findRenderEditable: _findRenderEditable,
+                                  gutterPaintKey: _gutterPaintKey,
+                                ),
                               ),
                             ),
                           );
@@ -186,24 +224,27 @@ class _EditorViewState extends State<EditorView> {
 
                   // Markdown Text Editing Area
                   Expanded(
-                    child: TextField(
-                      controller: widget.controller.textController,
-                      focusNode: widget.controller.focusNode,
-                      scrollController: widget.controller.scrollController,
-                      maxLines: null,
-                      expands: true,
-                      keyboardType: TextInputType.multiline,
-                      style: editorTextStyle,
-                      strutStyle: editorStrutStyle,
-                      decoration: const InputDecoration(
-                        border: InputBorder.none,
-                        contentPadding: EdgeInsets.fromLTRB(
-                          _contentPaddingHorizontal,
-                          _contentPaddingTop,
-                          _contentPaddingHorizontal,
-                          _contentPaddingBottom,
+                    child: RepaintBoundary(
+                      child: TextField(
+                        key: _textFieldKey,
+                        controller: widget.controller.textController,
+                        focusNode: widget.controller.focusNode,
+                        scrollController: widget.controller.scrollController,
+                        maxLines: null,
+                        expands: true,
+                        keyboardType: TextInputType.multiline,
+                        style: editorTextStyle,
+                        strutStyle: editorStrutStyle,
+                        decoration: const InputDecoration(
+                          border: InputBorder.none,
+                          contentPadding: EdgeInsets.fromLTRB(
+                            _contentPaddingHorizontal,
+                            _contentPaddingTop,
+                            _contentPaddingHorizontal,
+                            _contentPaddingBottom,
+                          ),
+                          isDense: true,
                         ),
-                        isDense: true,
                       ),
                     ),
                   ),
@@ -215,70 +256,46 @@ class _EditorViewState extends State<EditorView> {
       ),
     );
   }
-
-  /// Compute vertical start positions of every logical paragraph
-  List<_LineInfo> _computeLinePositions({
-    required String text,
-    required double editorWidth,
-    required TextStyle style,
-    required StrutStyle strutStyle,
-  }) {
-    final paragraphs = text.split('\n');
-    final List<_LineInfo> result = [];
-
-    double currentY = _contentPaddingTop;
-
-    for (int i = 0; i < paragraphs.length; i++) {
-      final p = paragraphs[i];
-      int visualLines = 1;
-
-      if (p.isNotEmpty && editorWidth > 50) {
-        final painter = TextPainter(
-          text: TextSpan(text: p, style: style),
-          textDirection: TextDirection.ltr,
-          strutStyle: strutStyle,
-        )..layout(maxWidth: editorWidth);
-
-        visualLines =
-            (painter.height / _lineBoxHeight).round().clamp(1, 9999);
-      }
-
-      final double pHeight = visualLines * _lineBoxHeight;
-      result.add(_LineInfo(
-        lineNumber: i + 1,
-        top: currentY,
-        height: pHeight,
-      ));
-
-      currentY += pHeight;
-    }
-
-    return result;
-  }
 }
 
-/// Custom painter rendering visible line numbers at their exact vertical positions
+/// Custom painter rendering visible line numbers at the exact vertical position
+/// of the first visual line of each logical line by querying TextField's [RenderEditable] directly.
+/// Uses binary search in O(log N) to only process and paint lines currently visible on screen.
 class _LineNumberPainter extends CustomPainter {
-  final List<_LineInfo> lines;
+  final List<int> lineStartOffsets;
+  final String text;
+  final double editorWidth;
   final double scrollOffset;
   final double viewportHeight;
   final double lineBoxHeight;
+  final double contentPaddingTop;
   final Color gutterTextColor;
   final String fontFamily;
   final List<String> fontFamilyFallback;
+  final StrutStyle editorStrutStyle;
+  final RenderEditable? Function() findRenderEditable;
+  final GlobalKey gutterPaintKey;
 
   _LineNumberPainter({
-    required this.lines,
+    required this.lineStartOffsets,
+    required this.text,
+    required this.editorWidth,
     required this.scrollOffset,
     required this.viewportHeight,
     required this.lineBoxHeight,
+    required this.contentPaddingTop,
     required this.gutterTextColor,
     required this.fontFamily,
     required this.fontFamilyFallback,
+    required this.editorStrutStyle,
+    required this.findRenderEditable,
+    required this.gutterPaintKey,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
+    if (lineStartOffsets.isEmpty) return;
+
     final textStyle = TextStyle(
       fontFamily: fontFamily,
       fontFamilyFallback: fontFamilyFallback,
@@ -287,16 +304,63 @@ class _LineNumberPainter extends CustomPainter {
       height: 1.5,
     );
 
-    for (final line in lines) {
-      // Calculate screen Y position for the first visual line of this paragraph
-      final y = line.top - scrollOffset;
+    final renderEditable = findRenderEditable();
+    final bool hasEditable = renderEditable != null && renderEditable.hasSize;
+    final double singleLineHeight =
+        hasEditable ? renderEditable.preferredLineHeight : lineBoxHeight;
 
-      // Skip lines outside visible screen bounds
-      if (y + line.height < 0) continue;
+    double editableTopOffset = contentPaddingTop;
+    if (hasEditable && renderEditable.attached) {
+      final gutterBox =
+          gutterPaintKey.currentContext?.findRenderObject() as RenderBox?;
+      if (gutterBox != null && gutterBox.hasSize && gutterBox.attached) {
+        editableTopOffset =
+            renderEditable.localToGlobal(Offset.zero, ancestor: gutterBox).dy;
+      }
+    }
+
+    // Returns the exact Y coordinate in gutter coordinates of the first visual line of logical line [lineIndex]
+    double getLineTopY(int lineIndex) {
+      if (hasEditable) {
+        final charOffset = lineStartOffsets[lineIndex].clamp(0, text.length);
+        final endpoints = renderEditable.getEndpointsForSelection(
+          TextSelection.collapsed(offset: charOffset),
+        );
+        if (endpoints.isNotEmpty) {
+          return editableTopOffset +
+              (endpoints.first.point.dy - singleLineHeight);
+        }
+      }
+      return contentPaddingTop + (lineIndex * singleLineHeight) - scrollOffset;
+    }
+
+    // Binary search in O(log N) to find the first logical line intersecting the viewport
+    int low = 0;
+    int high = lineStartOffsets.length - 1;
+    int firstVisibleIndex = 0;
+
+    while (low <= high) {
+      final mid = (low + high) >> 1;
+      final y = getLineTopY(mid);
+      if (y + singleLineHeight >= 0) {
+        firstVisibleIndex = mid;
+        high = mid - 1;
+      } else {
+        low = mid + 1;
+      }
+    }
+
+    final int startIdx = firstVisibleIndex > 0 ? firstVisibleIndex - 1 : 0;
+
+    for (int i = startIdx; i < lineStartOffsets.length; i++) {
+      final y = getLineTopY(i);
+
+      // Stop immediately once we pass below the visible viewport bounds
       if (y > viewportHeight) break;
+      if (y + singleLineHeight < 0) continue;
 
       final textSpan = TextSpan(
-        text: '${line.lineNumber}',
+        text: '${i + 1}',
         style: textStyle,
       );
 
@@ -304,22 +368,24 @@ class _LineNumberPainter extends CustomPainter {
         text: textSpan,
         textAlign: TextAlign.right,
         textDirection: TextDirection.ltr,
+        strutStyle: editorStrutStyle,
       )..layout(maxWidth: size.width - 12);
 
-      // Vertically center with first visual line & align right with 12px margin
-      final double verticalAdjustment =
-          (lineBoxHeight - textPainter.height) / 2.0;
       final double x = size.width - textPainter.width - 12.0;
 
-      textPainter.paint(canvas, Offset(x, y + verticalAdjustment));
+      // Because textPainter uses the exact same editorStrutStyle (with forceStrutHeight: true),
+      // painting at y aligns the line number's strut box and baseline with the first visual line.
+      textPainter.paint(canvas, Offset(x, y));
     }
   }
 
   @override
   bool shouldRepaint(covariant _LineNumberPainter oldDelegate) {
     return oldDelegate.scrollOffset != scrollOffset ||
-        oldDelegate.lines != lines ||
+        oldDelegate.text != text ||
+        oldDelegate.editorWidth != editorWidth ||
         oldDelegate.gutterTextColor != gutterTextColor ||
+        oldDelegate.fontFamily != fontFamily ||
         oldDelegate.viewportHeight != viewportHeight;
   }
 }
