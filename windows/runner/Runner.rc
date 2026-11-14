@@ -89,13 +89,13 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "com.mdwriter" "\0"
-            VALUE "FileDescription", "mdwriter" "\0"
+            VALUE "CompanyName", "com.draftdown" "\0"
+            VALUE "FileDescription", "draftdown" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "mdwriter" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2026 com.mdwriter. All rights reserved." "\0"
-            VALUE "OriginalFilename", "mdwriter.exe" "\0"
-            VALUE "ProductName", "mdwriter" "\0"
+            VALUE "InternalName", "draftdown" "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 com.draftdown. All rights reserved." "\0"
+            VALUE "OriginalFilename", "draftdown.exe" "\0"
+            VALUE "ProductName", "draftdown" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

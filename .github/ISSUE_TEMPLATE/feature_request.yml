@@ -25,8 +25,8 @@ body:
         Please make sure you can tick all of these checkboxes before proceeding
         to fill out this form.
       options:
-        - label: MDWriter does not possess this feature (if it does, but the feature doesn't work out for you, propose an enhancement instead.)
-        - label: MDWriter's current features cannot be used to approximate this behaviour (otherwise, propose an enhancement instead.)
+        - label: Draftdown does not possess this feature (if it does, but the feature doesn't work out for you, propose an enhancement instead.)
+        - label: Draftdown's current features cannot be used to approximate this behaviour (otherwise, propose an enhancement instead.)
         - label: I have searched the documentation to make sure I did not overlook it.
         - label: I have searched both open and closed issues to see if someone has already proposed this.
   # First let's ask the user about their proposal
@@ -36,7 +36,7 @@ body:
       label: Feature Proposal
       description: |
         Please describe what feature you would like to see implemented, and motivate why.
-      placeholder: Here, try to focus on different aspects in which this feature increases the usefulness of MDWriter.
+      placeholder: Here, try to focus on different aspects in which this feature increases the usefulness of Draftdown.
     validations:
       required: true
   # Now let's ask for the specific enhancement itself.
@@ -71,7 +71,7 @@ body:
     attributes:
       label: Do you wish to attempt implementing this yourself?
       description: |
-        MDWriter is an open-source project and welcomes contributions. Here you
+        Draftdown is an open-source project and welcomes contributions. Here you
         can indicate if you would like to try implementing this feature yourself.
       options:
         - "Yes"

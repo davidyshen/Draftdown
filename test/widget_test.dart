@@ -1,19 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mdwriter/controllers/editor_controller.dart';
-import 'package:mdwriter/models/citation_item.dart';
-import 'package:mdwriter/main.dart';
-import 'package:mdwriter/ui/theme/app_theme.dart';
-import 'package:mdwriter/ui/widgets/citation_dialog.dart';
-import 'package:mdwriter/ui/widgets/editor_view.dart';
-import 'package:mdwriter/ui/widgets/export_dialog.dart';
-import 'package:mdwriter/ui/widgets/settings_dialog.dart';
-import 'package:mdwriter/ui/widgets/toolbar.dart';
+import 'package:draftdown/controllers/editor_controller.dart';
+import 'package:draftdown/models/citation_item.dart';
+import 'package:draftdown/main.dart';
+import 'package:draftdown/ui/theme/app_theme.dart';
+import 'package:draftdown/ui/widgets/citation_dialog.dart';
+import 'package:draftdown/ui/widgets/editor_view.dart';
+import 'package:draftdown/ui/widgets/export_dialog.dart';
+import 'package:draftdown/ui/widgets/settings_dialog.dart';
+import 'package:draftdown/ui/widgets/toolbar.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
-  testWidgets('MDWriterApp smoke test', (WidgetTester tester) async {
+  testWidgets('DraftdownApp smoke test', (WidgetTester tester) async {
     tester.view.physicalSize = const Size(1400, 900);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
@@ -21,12 +21,12 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     final controller = EditorController();
 
-    await tester.pumpWidget(MDWriterApp(
+    await tester.pumpWidget(DraftdownApp(
       controller: controller,
       initialDarkMode: false,
     ));
 
-    expect(find.text('MDWriter'), findsWidgets);
+    expect(find.text('Draftdown'), findsWidgets);
   });
 
   testWidgets('Markdown editor text field uses monospace font',
@@ -38,7 +38,7 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     final controller = EditorController();
 
-    await tester.pumpWidget(MDWriterApp(
+    await tester.pumpWidget(DraftdownApp(
       controller: controller,
       initialDarkMode: false,
     ));
@@ -65,7 +65,7 @@ void main() {
     final controller = EditorController();
     addTearDown(controller.dispose);
 
-    await tester.pumpWidget(MDWriterApp(
+    await tester.pumpWidget(DraftdownApp(
       controller: controller,
       initialDarkMode: false,
     ));
@@ -102,7 +102,7 @@ void main() {
     controller.textController.text =
         List.generate(200, (i) => 'Line ${i + 1}: Paragraph content here').join('\n');
 
-    await tester.pumpWidget(MDWriterApp(
+    await tester.pumpWidget(DraftdownApp(
       controller: controller,
       initialDarkMode: false,
     ));
@@ -176,7 +176,7 @@ void main() {
     addTearDown(controller.dispose);
     await controller.historyService.recordFileOpen('test.md');
 
-    await tester.pumpWidget(MDWriterApp(
+    await tester.pumpWidget(DraftdownApp(
       controller: controller,
       initialDarkMode: false,
     ));
@@ -543,7 +543,7 @@ void main() {
     addTearDown(controller.dispose);
     controller.newFile();
 
-    await tester.pumpWidget(MDWriterApp(
+    await tester.pumpWidget(DraftdownApp(
       controller: controller,
       initialDarkMode: false,
     ));
@@ -643,7 +643,7 @@ void main() {
     final controller = EditorController();
     addTearDown(controller.dispose);
 
-    await tester.pumpWidget(MDWriterApp(
+    await tester.pumpWidget(DraftdownApp(
       controller: controller,
       initialDarkMode: true,
     ));
@@ -691,7 +691,7 @@ void main() {
     addTearDown(controller.dispose);
     controller.newFile();
 
-    await tester.pumpWidget(MDWriterApp(
+    await tester.pumpWidget(DraftdownApp(
       controller: controller,
       initialDarkMode: false,
     ));

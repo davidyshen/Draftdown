@@ -1,6 +1,6 @@
-# Contributing to MDWriter
+# Contributing to Draftdown
 
-MDWriter welcomes contributions from the community. You do not have to be an experienced developer to help out—reporting bugs, suggesting enhancements, improving documentation, and submitting pull requests are all valuable ways to contribute.
+Draftdown welcomes contributions from the community. You do not have to be an experienced developer to help out—reporting bugs, suggesting enhancements, improving documentation, and submitting pull requests are all valuable ways to contribute.
 
 > [!TIP]
 > Please view our [Code of Conduct](./CODE_OF_CONDUCT.md) to understand how we expect contributors and maintainers to interact.
@@ -24,7 +24,7 @@ Before opening a pull request:
 
 ## AI Usage Policy
 
-MDWriter does not prohibit the use of generative AI / LLMs as coding aids, provided you:
+Draftdown does not prohibit the use of generative AI / LLMs as coding aids, provided you:
 * Disclose AI usage in the pull request description.
 * Review, understand, and take full responsibility for all code and text you submit.
 * Never list AI tools or chatbots as commit co-authors.

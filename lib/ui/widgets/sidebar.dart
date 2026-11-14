@@ -89,7 +89,7 @@ class _AppSidebarState extends State<AppSidebar> {
           Icon(Icons.edit_note, color: theme.colorScheme.primary, size: 22),
           const SizedBox(width: 8),
           const Text(
-            'MDWriter',
+            'Draftdown',
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.w700,

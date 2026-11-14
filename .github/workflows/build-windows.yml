@@ -87,12 +87,12 @@ jobs:
           if (-not (Test-Path $releaseDir)) {
             throw "Expected build output directory not found: $releaseDir"
           }
-          $archiveName = "MDWriter-windows-${{ matrix.arch }}.zip"
+          $archiveName = "Draftdown-windows-${{ matrix.arch }}.zip"
           Compress-Archive -Path "$releaseDir/*" -DestinationPath $archiveName -Force
 
       - name: Upload Windows (${{ matrix.arch }}) Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: MDWriter-windows-${{ matrix.arch }}
-          path: MDWriter-windows-${{ matrix.arch }}.zip
+          name: Draftdown-windows-${{ matrix.arch }}
+          path: Draftdown-windows-${{ matrix.arch }}.zip
           if-no-files-found: error

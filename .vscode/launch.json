@@ -2,18 +2,18 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "MDWriter",
+      "name": "Draftdown",
       "request": "launch",
       "type": "dart"
     },
     {
-      "name": "MDWriter (Profile)",
+      "name": "Draftdown (Profile)",
       "request": "launch",
       "type": "dart",
       "flutterMode": "profile"
     },
     {
-      "name": "MDWriter (Release)",
+      "name": "Draftdown (Release)",
       "request": "launch",
       "type": "dart",
       "flutterMode": "release"

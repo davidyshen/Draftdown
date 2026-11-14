@@ -1,6 +1,6 @@
 {
-    "name": "mdwriter",
-    "short_name": "mdwriter",
+    "name": "draftdown",
+    "short_name": "draftdown",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

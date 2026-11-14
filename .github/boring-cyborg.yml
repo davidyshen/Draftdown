@@ -43,7 +43,7 @@ firstPRWelcomeComment: >
 
 # Comment to be posted to congratulate user on their first merged PR
 firstPRMergeComment: >
-  Your first PR just got merged. Thank you for making MDWriter a better app.
+  Your first PR just got merged. Thank you for making Draftdown a better app.
 
 # Comment to be posted to on first time issues
 firstIssueWelcomeComment: |
@@ -52,7 +52,7 @@ firstIssueWelcomeComment: |
   notifications turned on so that you can answer any additional questions we may
   have.
 
-  We want to make MDWriter better for everyone, but we cannot guarantee to
+  We want to make Draftdown better for everyone, but we cannot guarantee to
   implement a feature request, and cannot provide any ETA on when we are able to
   get to your issue.
 

@@ -38,7 +38,7 @@ class MarkdownCheckboxInfo {
   });
 }
 
-/// Main application state controller for MDWriter.
+/// Main application state controller for Draftdown.
 class EditorController extends ChangeNotifier {
   static final RegExp _bibEntryKeyRegex = RegExp(
     r'@([a-zA-Z]+)\s*\{\s*([a-zA-Z0-9_:.+-]+)\s*,',
@@ -196,8 +196,8 @@ class EditorController extends ChangeNotifier {
   Future<void> _loadPreferences() async {
     try {
       final prefs = await _getPrefs();
-      _bibliographyPath = prefs.getString('mdwriter_bibliography_path');
-      final customPandoc = prefs.getString('mdwriter_custom_pandoc_path');
+      _bibliographyPath = prefs.getString('draftdown_bibliography_path');
+      final customPandoc = prefs.getString('draftdown_custom_pandoc_path');
       if (customPandoc != null && customPandoc.isNotEmpty) {
         pandocService.setCustomPath(customPandoc);
       }
@@ -207,28 +207,28 @@ class EditorController extends ChangeNotifier {
       }
 
       _editorFontFamily =
-          prefs.getString('mdwriter_editor_font') ?? 'Consolas';
+          prefs.getString('draftdown_editor_font') ?? 'Consolas';
       _isDualRenderFont =
-          prefs.getBool('mdwriter_is_dual_render_font') ?? false;
+          prefs.getBool('draftdown_is_dual_render_font') ?? false;
       _renderBodyFont =
-          prefs.getString('mdwriter_render_body_font') ?? 'Segoe UI';
+          prefs.getString('draftdown_render_body_font') ?? 'Segoe UI';
       _renderHeaderFont =
-          prefs.getString('mdwriter_render_header_font') ?? 'Georgia';
+          prefs.getString('draftdown_render_header_font') ?? 'Georgia';
 
       _darkSchemeId =
-          prefs.getString('mdwriter_dark_scheme') ?? AppTheme.slateDarkScheme.id;
-      _lightSchemeId = prefs.getString('mdwriter_light_scheme') ??
+          prefs.getString('draftdown_dark_scheme') ?? AppTheme.slateDarkScheme.id;
+      _lightSchemeId = prefs.getString('draftdown_light_scheme') ??
           AppTheme.slateLightScheme.id;
-      _isDarkMode = prefs.getBool('mdwriter_dark_mode') ?? false;
+      _isDarkMode = prefs.getBool('draftdown_dark_mode') ?? false;
 
       AppTheme.setActiveScheme(AppTheme.schemeById(darkSchemeId));
       AppTheme.setActiveScheme(AppTheme.schemeById(lightSchemeId));
 
-      final savedSource = prefs.getString('mdwriter_citation_source');
+      final savedSource = prefs.getString('draftdown_citation_source');
       if (savedSource == 'zotero') {
         _citationSource = CitationSource.zotero;
       }
-      final savedStyle = prefs.getString('mdwriter_citation_style');
+      final savedStyle = prefs.getString('draftdown_citation_style');
       if (savedStyle == 'numeric') {
         _citationStyle = CitationStyle.numeric;
       } else if (savedStyle == 'authorYear') {
@@ -243,7 +243,7 @@ class EditorController extends ChangeNotifier {
     notifyListeners();
     try {
       final prefs = await _getPrefs();
-      await prefs.setString('mdwriter_citation_source', source.name);
+      await prefs.setString('draftdown_citation_source', source.name);
     } catch (_) {}
   }
 
@@ -254,7 +254,7 @@ class EditorController extends ChangeNotifier {
     notifyListeners();
     try {
       final prefs = await _getPrefs();
-      await prefs.setString('mdwriter_citation_style', style.name);
+      await prefs.setString('draftdown_citation_style', style.name);
     } catch (_) {}
   }
 
@@ -274,10 +274,10 @@ class EditorController extends ChangeNotifier {
 
     try {
       final prefs = await _getPrefs();
-      await prefs.setString('mdwriter_editor_font', _editorFontFamily);
-      await prefs.setBool('mdwriter_is_dual_render_font', _isDualRenderFont);
-      await prefs.setString('mdwriter_render_body_font', _renderBodyFont);
-      await prefs.setString('mdwriter_render_header_font', _renderHeaderFont);
+      await prefs.setString('draftdown_editor_font', _editorFontFamily);
+      await prefs.setBool('draftdown_is_dual_render_font', _isDualRenderFont);
+      await prefs.setString('draftdown_render_body_font', _renderBodyFont);
+      await prefs.setString('draftdown_render_header_font', _renderHeaderFont);
     } catch (_) {}
   }
 
@@ -296,7 +296,7 @@ class EditorController extends ChangeNotifier {
     notifyListeners();
     try {
       final prefs = await _getPrefs();
-      await prefs.setBool('mdwriter_dark_mode', isDarkMode);
+      await prefs.setBool('draftdown_dark_mode', isDarkMode);
     } catch (_) {}
   }
 
@@ -318,10 +318,10 @@ class EditorController extends ChangeNotifier {
 
     try {
       final prefs = await _getPrefs();
-      await prefs.setString('mdwriter_color_scheme', scheme.id);
-      await prefs.setString('mdwriter_dark_scheme', darkSchemeId);
-      await prefs.setString('mdwriter_light_scheme', lightSchemeId);
-      await prefs.setBool('mdwriter_dark_mode', isDarkMode);
+      await prefs.setString('draftdown_color_scheme', scheme.id);
+      await prefs.setString('draftdown_dark_scheme', darkSchemeId);
+      await prefs.setString('draftdown_light_scheme', lightSchemeId);
+      await prefs.setBool('draftdown_dark_mode', isDarkMode);
     } catch (_) {}
   }
 
@@ -880,7 +880,7 @@ class EditorController extends ChangeNotifier {
           'Loaded ${items.length} references from ${File(filePath).uri.pathSegments.last}';
 
       final prefs = await _getPrefs();
-      await prefs.setString('mdwriter_bibliography_path', filePath);
+      await prefs.setString('draftdown_bibliography_path', filePath);
 
       notifyListeners();
       return true;
@@ -994,7 +994,7 @@ class EditorController extends ChangeNotifier {
 
     return await fileService.createTemporaryFile(
       bibString,
-      prefix: 'mdwriter_bib_',
+      prefix: 'draftdown_bib_',
       extension: 'bib',
     );
   }
@@ -1094,7 +1094,7 @@ class EditorController extends ChangeNotifier {
     _currentFileName = 'Welcome.md';
     _isProgrammaticUpdate = true;
     textController.isActivelyTyping = false;
-    textController.text = '''# Welcome to MDWriter
+    textController.text = '''# Welcome to Draftdown
 
 A minimalist, high-productivity Markdown editor with native academic citations and Pandoc document export.
 

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// Represents a complete UI, preview, and syntax colour scheme for MDWriter.
+/// Represents a complete UI, preview, and syntax colour scheme for Draftdown.
 class AppColorScheme {
   final String id;
   final String name;
@@ -63,7 +63,7 @@ class AppColorScheme {
   bool get isDark => brightness == Brightness.dark;
 }
 
-/// Clean, modern theme and colour scheme definitions for MDWriter.
+/// Clean, modern theme and colour scheme definitions for Draftdown.
 class AppTheme {
   // ===========================================================================
   // Dark Mode Palettes

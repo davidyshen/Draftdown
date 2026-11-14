@@ -82,7 +82,7 @@ class _SettingsDialogState extends State<SettingsDialog>
 
   Future<void> _loadCustomPandocPath() async {
     final prefs = await SharedPreferences.getInstance();
-    final custom = prefs.getString('mdwriter_custom_pandoc_path') ?? '';
+    final custom = prefs.getString('draftdown_custom_pandoc_path') ?? '';
     _pandocPathController.text = custom;
   }
 
@@ -138,7 +138,7 @@ class _SettingsDialogState extends State<SettingsDialog>
     });
 
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('mdwriter_custom_pandoc_path', path);
+    await prefs.setString('draftdown_custom_pandoc_path', path);
   }
 
   Future<void> _resetPandocToBundled() async {
@@ -146,7 +146,7 @@ class _SettingsDialogState extends State<SettingsDialog>
     widget.controller.pandocService.setCustomPath(null);
     await widget.controller.checkPandocAvailability();
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('mdwriter_custom_pandoc_path');
+    await prefs.remove('draftdown_custom_pandoc_path');
     setState(() {
       _pandocTestStatus = widget.controller.isPandocAvailable
           ? 'Reverted to ${widget.controller.pandocVersion ?? "bundled Pandoc"}'
@@ -833,7 +833,7 @@ class _SettingsDialogState extends State<SettingsDialog>
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'MDWriter bundles a complete standalone Pandoc distribution so you never need to install, configure, or manage external dependencies separately. All document export formats (PDF, Word DOCX, HTML5, EPUB, LaTeX, ODT, RTF) and academic citation processing work immediately.',
+                  'Draftdown bundles a complete standalone Pandoc distribution so you never need to install, configure, or manage external dependencies separately. All document export formats (PDF, Word DOCX, HTML5, EPUB, LaTeX, ODT, RTF) and academic citation processing work immediately.',
                   style: TextStyle(fontSize: 11.5, color: mutedColor, height: 1.45),
                 ),
                 const SizedBox(height: 8),
@@ -1030,7 +1030,7 @@ class _SettingsDialogState extends State<SettingsDialog>
           ),
           const SizedBox(height: 4),
           Text(
-            'When Zotero is running with the Better BibTeX plugin enabled, MDWriter can connect to http://127.0.0.1:23119/better-bibtex/ for live bibliography sync.',
+            'When Zotero is running with the Better BibTeX plugin enabled, Draftdown can connect to http://127.0.0.1:23119/better-bibtex/ for live bibliography sync.',
             style: TextStyle(fontSize: 11.5, color: mutedColor),
           ),
           const SizedBox(height: 10),

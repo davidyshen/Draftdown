@@ -1,4 +1,4 @@
-# MDWriter
+# Draftdown
 
 <p align="center">
   <strong>Modern Academic Markdown Editor & Publication Workbench</strong>
@@ -20,9 +20,9 @@
 
 ## Overview
 
-**MDWriter** is a high-performance, distraction-free desktop Markdown editor designed specifically for researchers, academics, authors, and journalists. Originally forked from and based on [Zettlr](https://github.com/Zettlr/Zettlr), MDWriter has since been completely reimplemented in **Flutter** to deliver native desktop performance, instant startup times, lightweight memory utilisation, and seamless cross-platform support across Windows, macOS, and Linux.
+**Draftdown** is a high-performance, distraction-free desktop Markdown editor designed specifically for researchers, academics, authors, and journalists. Originally forked from and based on [Zettlr](https://github.com/Zettlr/Zettlr), Draftdown has since been completely reimplemented in **Flutter** to deliver native desktop performance, instant startup times, lightweight memory utilisation, and seamless cross-platform support across Windows, macOS, and Linux.
 
-MDWriter pairs real-time Markdown syntax highlighting with a paper-styled live preview, complete KaTeX mathematics, in-place academic citation formatting, robust image rendering, and a publication export pipeline powered by bundled Pandoc.
+Draftdown pairs real-time Markdown syntax highlighting with a paper-styled live preview, complete KaTeX mathematics, in-place academic citation formatting, robust image rendering, and a publication export pipeline powered by bundled Pandoc.
 
 ---
 
@@ -69,7 +69,7 @@ MDWriter pairs real-time Markdown syntax highlighting with a paper-styled live p
 
 ## Architecture
 
-MDWriter follows a clean, reactive architecture with clear separation between state management, domain services, and presentation widgets:
+Draftdown follows a clean, reactive architecture with clear separation between state management, domain services, and presentation widgets:
 
 ```
 lib/
@@ -201,10 +201,10 @@ Contributions, bug reports, and suggestions are welcome! Please ensure:
 
 ## Acknowledgements
 
-MDWriter was originally forked from [Zettlr](https://github.com/Zettlr/Zettlr) and draws heavily on its design philosophy and academic writing workflows. While the codebase has since been completely reimplemented in Flutter and Dart, we gratefully acknowledge the Zettlr project and its contributors for laying the foundation.
+Draftdown was originally forked from [Zettlr](https://github.com/Zettlr/Zettlr) and draws heavily on its design philosophy and academic writing workflows. While the codebase has since been completely reimplemented in Flutter and Dart, we gratefully acknowledge the Zettlr project and its contributors for laying the foundation.
 
 ---
 
 ## License
 
-MDWriter is free and open-source software licensed under the [GNU General Public License v3.0](LICENSE).
+Draftdown is free and open-source software licensed under the [GNU General Public License v3.0](LICENSE).

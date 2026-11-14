@@ -668,11 +668,11 @@ class DirectExportService {
       final tempDir = await getTemporaryDirectory();
       final tempTimestamp = DateTime.now().millisecondsSinceEpoch;
       tempHtmlFile = File(
-          '${tempDir.path}${Platform.pathSeparator}mdwriter_pdf_$tempTimestamp.html');
+          '${tempDir.path}${Platform.pathSeparator}draftdown_pdf_$tempTimestamp.html');
       await tempHtmlFile.writeAsString(html);
 
       tempProfileDir = Directory(
-          '${tempDir.path}${Platform.pathSeparator}mdwriter_pdf_profile_$tempTimestamp');
+          '${tempDir.path}${Platform.pathSeparator}draftdown_pdf_profile_$tempTimestamp');
       if (!await tempProfileDir.exists()) {
         await tempProfileDir.create(recursive: true);
       }

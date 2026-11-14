@@ -3,10 +3,10 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_math_fork/flutter_math.dart';
-import 'package:mdwriter/controllers/editor_controller.dart';
-import 'package:mdwriter/models/citation_item.dart';
-import 'package:mdwriter/ui/theme/app_theme.dart';
-import 'package:mdwriter/ui/widgets/markdown_preview.dart';
+import 'package:draftdown/controllers/editor_controller.dart';
+import 'package:draftdown/models/citation_item.dart';
+import 'package:draftdown/ui/theme/app_theme.dart';
+import 'package:draftdown/ui/widgets/markdown_preview.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {

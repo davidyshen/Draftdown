@@ -2,14 +2,14 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mdwriter/controllers/editor_controller.dart';
-import 'package:mdwriter/models/citation_item.dart';
-import 'package:mdwriter/models/export_format.dart';
-import 'package:mdwriter/models/history_entry.dart';
-import 'package:mdwriter/services/bibliography_service.dart';
-import 'package:mdwriter/services/direct_export_service.dart';
-import 'package:mdwriter/services/pandoc_service.dart';
-import 'package:mdwriter/services/zotero_service.dart';
+import 'package:draftdown/controllers/editor_controller.dart';
+import 'package:draftdown/models/citation_item.dart';
+import 'package:draftdown/models/export_format.dart';
+import 'package:draftdown/models/history_entry.dart';
+import 'package:draftdown/services/bibliography_service.dart';
+import 'package:draftdown/services/direct_export_service.dart';
+import 'package:draftdown/services/pandoc_service.dart';
+import 'package:draftdown/services/zotero_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {

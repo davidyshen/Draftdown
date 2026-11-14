@@ -1,4 +1,4 @@
-# Code of Conduct for the MDWriter Project
+# Code of Conduct for the Draftdown Project
 
 ## Our Pledge
 
@@ -28,8 +28,8 @@ efficient conduct within the community spaces.
   permanent bans. Note that this does not include translating a text you wrote
   into English, or using an LLM to improve upon your contribution. See more in
   our [AI Policy](#usage-of-ai-in-communication) below.
-* The MDWriter project is hosted on GitHub and may include related community
-  spaces. By participating in the MDWriter community here or in any associated
+* The Draftdown project is hosted on GitHub and may include related community
+  spaces. By participating in the Draftdown community here or in any associated
   space, you recognise that serious transgressions in one space may also lead to
   your exclusion from participating in others.
 

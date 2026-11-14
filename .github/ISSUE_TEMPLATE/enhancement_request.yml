@@ -58,7 +58,7 @@ body:
     attributes:
       label: Do you Wish to Attempt Implementing this Yourself?
       description: |
-        MDWriter is an open-source project and welcomes contributions. Here you
+        Draftdown is an open-source project and welcomes contributions. Here you
         can indicate if you would like to try implementing this feature yourself.
       options:
         - "Yes"
@@ -69,9 +69,9 @@ body:
   - type: dropdown
     id: version
     attributes:
-      label: MDWriter Version
+      label: Draftdown Version
       description: |
-        What version of MDWriter are you running? Choose **Stable** if you are using a release build.
+        What version of Draftdown are you running? Choose **Stable** if you are using a release build.
       options:
         - Stable (most recent version)
         - Stable (but an older version)

@@ -34,9 +34,9 @@ body:
   - type: input
     id: version
     attributes:
-      label: MDWriter version
+      label: Draftdown version
       description: |
-        What version of MDWriter are you running? Specify the exact version.
+        What version of Draftdown are you running? Specify the exact version.
       placeholder: e.g. 1.0.0
     validations:
       required: true

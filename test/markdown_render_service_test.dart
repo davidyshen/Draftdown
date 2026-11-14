@@ -1,10 +1,10 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mdwriter/controllers/editor_controller.dart';
-import 'package:mdwriter/models/citation_item.dart';
-import 'package:mdwriter/services/markdown_render_service.dart';
-import 'package:mdwriter/ui/widgets/markdown_preview.dart';
+import 'package:draftdown/controllers/editor_controller.dart';
+import 'package:draftdown/models/citation_item.dart';
+import 'package:draftdown/services/markdown_render_service.dart';
+import 'package:draftdown/ui/widgets/markdown_preview.dart';
 
 void main() {
   group('MarkdownRenderService', () {

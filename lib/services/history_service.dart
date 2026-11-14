@@ -7,7 +7,7 @@ import '../models/history_entry.dart';
 /// Service managing the persistence and retrieval of previously opened
 /// Markdown files.
 class HistoryService {
-  static const String _storageKey = 'mdwriter_file_history';
+  static const String _storageKey = 'draftdown_file_history';
   static const int _maxHistoryCount = 30;
 
   List<HistoryEntry> _history = [];

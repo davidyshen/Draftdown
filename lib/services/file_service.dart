@@ -100,7 +100,7 @@ class FileService {
   /// Create a temporary file with contents for export
   Future<File> createTemporaryFile(
     String content, {
-    String prefix = 'mdwriter_export_',
+    String prefix = 'draftdown_export_',
     String extension = 'md',
   }) async {
     final tempDir = await getTemporaryDirectory();

@@ -9,27 +9,27 @@ void main() async {
   final editorController = EditorController();
   await editorController.initialise();
 
-  runApp(MDWriterApp(
+  runApp(DraftdownApp(
     controller: editorController,
     initialDarkMode: editorController.isDarkMode,
   ));
 }
 
-class MDWriterApp extends StatefulWidget {
+class DraftdownApp extends StatefulWidget {
   final EditorController controller;
   final bool initialDarkMode;
 
-  const MDWriterApp({
+  const DraftdownApp({
     super.key,
     required this.controller,
     required this.initialDarkMode,
   });
 
   @override
-  State<MDWriterApp> createState() => _MDWriterAppState();
+  State<DraftdownApp> createState() => _DraftdownAppState();
 }
 
-class _MDWriterAppState extends State<MDWriterApp> {
+class _DraftdownAppState extends State<DraftdownApp> {
   Widget? _cachedMaterialApp;
   bool? _lastIsDarkMode;
   String? _lastDarkSchemeId;
@@ -65,7 +65,7 @@ class _MDWriterAppState extends State<MDWriterApp> {
         _lastDarkSchemeId = darkId;
         _lastLightSchemeId = lightId;
         _cachedMaterialApp = MaterialApp(
-          title: 'MDWriter',
+          title: 'Draftdown',
           debugShowCheckedModeBanner: false,
           themeAnimationDuration: Duration.zero,
           theme: AppTheme.lightTheme(),
