@@ -91,7 +91,7 @@ jobs:
           Compress-Archive -Path "$releaseDir/*" -DestinationPath $archiveName -Force
 
       - name: Upload Windows (${{ matrix.arch }}) Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: Draftdown-windows-${{ matrix.arch }}
           path: Draftdown-windows-${{ matrix.arch }}.zip
