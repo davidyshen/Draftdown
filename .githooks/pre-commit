@@ -1,0 +1,21 @@
+#!/bin/sh
+set -e
+
+STAGED_DART_FILES=$(git diff --cached --name-only --diff-filter=ACMR -- '*.dart')
+
+if [ -z "$STAGED_DART_FILES" ]; then
+  exit 0
+fi
+
+if ! command -v dart >/dev/null 2>&1; then
+  echo "Error: dart executable not found in PATH. Unable to run dart format." >&2
+  exit 1
+fi
+
+echo "Running dart format on staged Dart files..."
+printf '%s\n' "$STAGED_DART_FILES" | while IFS= read -r file; do
+  if [ -f "$file" ]; then
+    dart format "$file"
+    git add "$file"
+  fi
+done
