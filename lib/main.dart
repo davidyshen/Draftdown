@@ -1,4 +1,9 @@
+// ignore_for_file: deprecated_member_use
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:window_manager/legacy.dart';
+
 import 'controllers/editor_controller.dart';
 import 'ui/screens/main_screen.dart';
 import 'ui/theme/app_theme.dart';
@@ -6,13 +11,27 @@ import 'ui/theme/app_theme.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+    await windowManager.ensureInitialized();
+    const windowOptions = WindowOptions(
+      titleBarStyle: TitleBarStyle.hidden,
+      windowButtonVisibility: false,
+    );
+    windowManager.waitUntilReadyToShow(windowOptions, () async {
+      await windowManager.show();
+      await windowManager.focus();
+    });
+  }
+
   final editorController = EditorController();
   await editorController.initialise();
 
-  runApp(DraftdownApp(
-    controller: editorController,
-    initialDarkMode: editorController.isDarkMode,
-  ));
+  runApp(
+    DraftdownApp(
+      controller: editorController,
+      initialDarkMode: editorController.isDarkMode,
+    ),
+  );
 }
 
 class DraftdownApp extends StatefulWidget {

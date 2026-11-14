@@ -1,7 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+
 import '../../controllers/editor_controller.dart';
 import '../theme/app_theme.dart';
 import '../widgets/citation_dialog.dart';
+import '../widgets/custom_title_bar.dart';
 import '../widgets/editor_view.dart';
 import '../widgets/export_dialog.dart';
 import '../widgets/markdown_preview.dart';
@@ -28,6 +32,68 @@ class MainScreen extends StatefulWidget {
 }
 
 class _MainScreenState extends State<MainScreen> {
+  bool _showFloatingSidebar = false;
+  bool _isHoveringHamburger = false;
+  bool _isHoveringFloatingSidebar = false;
+  Timer? _startupPeekTimer;
+  Timer? _floatingCloseTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    if (!widget.controller.isSidebarOpen) {
+      _showFloatingSidebar = true;
+      _startupPeekTimer = Timer(const Duration(seconds: 1), () {
+        if (!mounted) return;
+        if (!_isHoveringHamburger && !_isHoveringFloatingSidebar) {
+          setState(() => _showFloatingSidebar = false);
+        }
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _startupPeekTimer?.cancel();
+    _floatingCloseTimer?.cancel();
+    super.dispose();
+  }
+
+  void _onHamburgerHoverChanged(bool isHovering) {
+    _isHoveringHamburger = isHovering;
+    if (widget.controller.isSidebarOpen) return;
+
+    if (isHovering) {
+      _floatingCloseTimer?.cancel();
+      _floatingCloseTimer = null;
+      if (!_showFloatingSidebar) {
+        setState(() => _showFloatingSidebar = true);
+      }
+    } else {
+      _scheduleFloatingSidebarClose();
+    }
+  }
+
+  void _onFloatingSidebarHoverChanged(bool isHovering) {
+    _isHoveringFloatingSidebar = isHovering;
+    if (isHovering) {
+      _floatingCloseTimer?.cancel();
+      _floatingCloseTimer = null;
+    } else {
+      _scheduleFloatingSidebarClose();
+    }
+  }
+
+  void _scheduleFloatingSidebarClose() {
+    _floatingCloseTimer?.cancel();
+    _floatingCloseTimer = Timer(const Duration(milliseconds: 220), () {
+      if (!mounted) return;
+      if (!_isHoveringHamburger && !_isHoveringFloatingSidebar) {
+        setState(() => _showFloatingSidebar = false);
+      }
+    });
+  }
+
   void _openCitationDialog() {
     showDialog(
       context: context,
@@ -53,72 +119,10 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   Future<void> _handleNewFile() async {
-    if (widget.controller.isModified) {
-      final shouldSave = await showDialog<String>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Unsaved Changes'),
-          content: Text(
-            'Save changes to ${widget.controller.currentFileName} before creating a new document?',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, 'discard'),
-              child: const Text('Discard'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, 'cancel'),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(ctx, 'save'),
-              child: const Text('Save & New'),
-            ),
-          ],
-        ),
-      );
-
-      if (shouldSave == 'cancel' || shouldSave == null) return;
-      if (shouldSave == 'save') {
-        await widget.controller.saveFile();
-      }
-    }
-
     widget.controller.newFile();
   }
 
   Future<void> _handleOpenFile() async {
-    if (widget.controller.isModified) {
-      final shouldSave = await showDialog<String>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Unsaved Changes'),
-          content: Text(
-            'Save changes to ${widget.controller.currentFileName} before opening another document?',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, 'discard'),
-              child: const Text('Discard'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, 'cancel'),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(ctx, 'save'),
-              child: const Text('Save & Open'),
-            ),
-          ],
-        ),
-      );
-
-      if (shouldSave == 'cancel' || shouldSave == null) return;
-      if (shouldSave == 'save') {
-        await widget.controller.saveFile();
-      }
-    }
-
     await widget.controller.openFile();
   }
 
@@ -126,55 +130,108 @@ class _MainScreenState extends State<MainScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final borderColor =
-        isDark ? AppTheme.darkBorder : AppTheme.lightBorder;
+    final borderColor = isDark ? AppTheme.darkBorder : AppTheme.lightBorder;
 
     return ListenableBuilder(
       listenable: widget.controller,
       builder: (context, _) {
         final viewMode = widget.controller.viewMode;
         final isSidebarOpen = widget.controller.isSidebarOpen;
+        final showFloating = !isSidebarOpen && _showFloatingSidebar;
 
         return Scaffold(
-          body: Row(
+          body: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Collapsible Sidebar
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                curve: Curves.easeInOut,
-                width: isSidebarOpen ? 290 : 0,
-                child: isSidebarOpen
-                    ? RepaintBoundary(
-                        child: AppSidebar(
-                          controller: widget.controller,
-                          onOpenFile: _handleOpenFile,
-                          onNewFile: _handleNewFile,
-                        ),
-                      )
-                    : const SizedBox.shrink(),
+              CustomTitleBar(
+                controller: widget.controller,
+                onHamburgerHoverChanged: _onHamburgerHoverChanged,
+                isDarkMode: widget.isDarkMode,
               ),
-
-              // Main Editor Area
               Expanded(
-                child: Column(
+                child: Stack(
                   children: [
-                    // Top App Toolbar
-                    RepaintBoundary(
-                      child: AppToolbar(
-                        controller: widget.controller,
-                        onOpenCitationDialog: _openCitationDialog,
-                        onOpenExportDialog: _openExportDialog,
-                        onOpenSettingsDialog: _openSettingsDialog,
-                        onToggleTheme: widget.onToggleTheme,
-                        isDarkMode: widget.isDarkMode,
-                      ),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        // Collapsible Docked Sidebar
+                        AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          curve: Curves.easeInOut,
+                          width: isSidebarOpen ? 290 : 0,
+                          child: ClipRect(
+                            child: OverflowBox(
+                              alignment: Alignment.topLeft,
+                              minWidth: 290,
+                              maxWidth: 290,
+                              child: isSidebarOpen
+                                  ? RepaintBoundary(
+                                      child: AppSidebar(
+                                        controller: widget.controller,
+                                        onOpenFile: _handleOpenFile,
+                                        onNewFile: _handleNewFile,
+                                        onOpenSettingsDialog:
+                                            _openSettingsDialog,
+                                        onToggleTheme: widget.onToggleTheme,
+                                      ),
+                                    )
+                                  : const SizedBox.shrink(),
+                            ),
+                          ),
+                        ),
+
+                        // Main Editor Area
+                        Expanded(
+                          child: Column(
+                            children: [
+                              // Top App Toolbar
+                              RepaintBoundary(
+                                child: AppToolbar(
+                                  controller: widget.controller,
+                                  onOpenCitationDialog: _openCitationDialog,
+                                  onOpenExportDialog: _openExportDialog,
+                                  isDarkMode: widget.isDarkMode,
+                                ),
+                              ),
+
+                              // Editor / Preview Split or Single View
+                              Expanded(
+                                child: _buildEditorWorkspace(
+                                  viewMode,
+                                  borderColor,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
 
-                    // Editor / Preview Split or Single View
-                    Expanded(
-                      child: _buildEditorWorkspace(viewMode, borderColor),
-                    ),
+                    // Floating Hover Sidebar (also peeks for 1s on startup)
+                    if (!isSidebarOpen)
+                      AnimatedPositioned(
+                        duration: const Duration(milliseconds: 220),
+                        curve: Curves.easeOutCubic,
+                        left: showFloating ? 10 : -310,
+                        top: 10,
+                        bottom: 10,
+                        width: 290,
+                        child: MouseRegion(
+                          onEnter: (_) => _onFloatingSidebarHoverChanged(true),
+                          onExit: (_) => _onFloatingSidebarHoverChanged(false),
+                          child: RepaintBoundary(
+                            child: AppSidebar(
+                              key: const ValueKey('floating-sidebar'),
+                              controller: widget.controller,
+                              onOpenFile: _handleOpenFile,
+                              onNewFile: _handleNewFile,
+                              onOpenSettingsDialog: _openSettingsDialog,
+                              onToggleTheme: widget.onToggleTheme,
+                              isFloating: true,
+                            ),
+                          ),
+                        ),
+                      ),
                   ],
                 ),
               ),

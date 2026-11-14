@@ -1,8 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
+
 import '../../controllers/editor_controller.dart';
+import '../../services/spell_check_service.dart';
 import '../theme/app_theme.dart';
 
 /// The core Markdown text editor widget with precision-synchronised
@@ -30,7 +34,8 @@ class EditorView extends StatefulWidget {
 class _EditorViewState extends State<EditorView> {
   static const double _fontSize = 13.5;
   static const double _lineHeightMultiplier = 1.5;
-  static const double _lineBoxHeight = 20.0; // Exact strut-rounded line height in SkParagraph
+  static const double _lineBoxHeight =
+      20.0; // Exact strut-rounded line height in SkParagraph
   static const double _contentPaddingTop = 16.0;
   static const double _contentPaddingBottom = 40.0;
   static const double _contentPaddingHorizontal = 16.0;
@@ -45,6 +50,16 @@ class _EditorViewState extends State<EditorView> {
   String? _lastOffsetText;
   List<int>? _cachedLineStartOffsets;
   RenderEditable? _cachedRenderEditable;
+  Offset? _lastSecondaryClickGlobalPos;
+
+  // Hover spellcheck menu state
+  OverlayEntry? _spellHoverOverlay;
+  Timer? _spellHoverOpenTimer;
+  Timer? _spellHoverCloseTimer;
+  SpellErrorRange? _pendingHoverError;
+  SpellErrorRange? _activeHoverError;
+  bool _isPointerInsideHoverMenu = false;
+  String? _lastHoverTextSnapshot;
 
   // Cached gutter subtree to avoid rebuilding CustomPaint on cursor-only / selection-only notifications
   Widget? _cachedGutterSubtree;
@@ -60,7 +75,10 @@ class _EditorViewState extends State<EditorView> {
   void initState() {
     super.initState();
     _lastEditorFontFamily = widget.controller.editorFontFamily;
+    _lastHoverTextSnapshot = widget.controller.textController.text;
     widget.controller.addListener(_handleControllerChanged);
+    widget.controller.textController.addListener(_handleTextChangedForHover);
+    widget.controller.scrollController.addListener(_dismissSpellHoverMenu);
   }
 
   @override
@@ -68,15 +86,36 @@ class _EditorViewState extends State<EditorView> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.controller != widget.controller) {
       oldWidget.controller.removeListener(_handleControllerChanged);
+      oldWidget.controller.textController.removeListener(
+        _handleTextChangedForHover,
+      );
+      oldWidget.controller.scrollController.removeListener(
+        _dismissSpellHoverMenu,
+      );
       _lastEditorFontFamily = widget.controller.editorFontFamily;
+      _lastHoverTextSnapshot = widget.controller.textController.text;
       widget.controller.addListener(_handleControllerChanged);
+      widget.controller.textController.addListener(_handleTextChangedForHover);
+      widget.controller.scrollController.addListener(_dismissSpellHoverMenu);
+      _dismissSpellHoverMenu();
     }
   }
 
   @override
   void dispose() {
+    _dismissSpellHoverMenu();
     widget.controller.removeListener(_handleControllerChanged);
+    widget.controller.textController.removeListener(_handleTextChangedForHover);
+    widget.controller.scrollController.removeListener(_dismissSpellHoverMenu);
     super.dispose();
+  }
+
+  void _handleTextChangedForHover() {
+    final current = widget.controller.textController.text;
+    if (current != _lastHoverTextSnapshot) {
+      _lastHoverTextSnapshot = current;
+      _dismissSpellHoverMenu();
+    }
   }
 
   void _handleControllerChanged() {
@@ -136,27 +175,373 @@ class _EditorViewState extends State<EditorView> {
     return offsets;
   }
 
+  SpellErrorRange? _spellErrorAtGlobalPosition(
+    RenderEditable renderEditable,
+    Offset globalPos,
+  ) {
+    if (!renderEditable.hasSize || !renderEditable.attached) return null;
+    final textPos = renderEditable.getPositionForPoint(globalPos);
+    final candidate = widget.controller.textController.spellErrorAtOffset(
+      textPos.offset,
+    );
+    if (candidate == null) return null;
+
+    final localPos = renderEditable.globalToLocal(globalPos);
+    final boxes = renderEditable.getBoxesForSelection(
+      TextSelection(baseOffset: candidate.start, extentOffset: candidate.end),
+    );
+    final hit = boxes.any(
+      (box) => box.toRect().inflate(4.0).contains(localPos),
+    );
+    return hit ? candidate : null;
+  }
+
+  SpellErrorRange? _resolveSpellErrorForContextMenu(
+    EditableTextState editableTextState,
+  ) {
+    final clickPos = _lastSecondaryClickGlobalPos;
+    if (clickPos != null) {
+      final renderEditable = editableTextState.renderEditable;
+      if (renderEditable.hasSize && renderEditable.attached) {
+        return _spellErrorAtGlobalPosition(renderEditable, clickPos);
+      }
+    }
+
+    final selection = editableTextState.textEditingValue.selection;
+    if (!selection.isValid) return null;
+    return widget.controller.textController.spellErrorAtOffset(
+      selection.baseOffset,
+    );
+  }
+
+  void _handleEditorHover(PointerHoverEvent event) {
+    if (!widget.controller.isSpellCheckEnabled) {
+      _dismissSpellHoverMenu();
+      return;
+    }
+
+    final renderEditable = _findRenderEditable();
+    if (renderEditable == null) return;
+
+    final error = _spellErrorAtGlobalPosition(renderEditable, event.position);
+    if (error == null) {
+      _pendingHoverError = null;
+      _spellHoverOpenTimer?.cancel();
+      _spellHoverOpenTimer = null;
+      if (_spellHoverOverlay != null && !_isPointerInsideHoverMenu) {
+        _scheduleHoverClose();
+      }
+      return;
+    }
+
+    _spellHoverCloseTimer?.cancel();
+    _spellHoverCloseTimer = null;
+
+    if (error == _activeHoverError || error == _pendingHoverError) {
+      return;
+    }
+
+    _pendingHoverError = error;
+    _spellHoverOpenTimer?.cancel();
+    _spellHoverOpenTimer = Timer(const Duration(milliseconds: 280), () {
+      if (!mounted || _pendingHoverError != error) return;
+      _showSpellHoverMenu(error, renderEditable);
+    });
+  }
+
+  void _handleEditorExit(PointerExitEvent event) {
+    _pendingHoverError = null;
+    _spellHoverOpenTimer?.cancel();
+    _spellHoverOpenTimer = null;
+    if (_spellHoverOverlay != null) {
+      _scheduleHoverClose();
+    }
+  }
+
+  void _scheduleHoverClose() {
+    if (_spellHoverCloseTimer?.isActive ?? false) return;
+    _spellHoverCloseTimer = Timer(const Duration(milliseconds: 180), () {
+      if (!_isPointerInsideHoverMenu) {
+        _dismissSpellHoverMenu();
+      }
+    });
+  }
+
+  void _dismissSpellHoverMenu() {
+    _pendingHoverError = null;
+    _activeHoverError = null;
+    _isPointerInsideHoverMenu = false;
+    _spellHoverOpenTimer?.cancel();
+    _spellHoverOpenTimer = null;
+    _spellHoverCloseTimer?.cancel();
+    _spellHoverCloseTimer = null;
+    _spellHoverOverlay?.remove();
+    _spellHoverOverlay = null;
+  }
+
+  void _showSpellHoverMenu(
+    SpellErrorRange error,
+    RenderEditable renderEditable,
+  ) {
+    if (!mounted || !renderEditable.hasSize || !renderEditable.attached) {
+      return;
+    }
+
+    final boxes = renderEditable.getBoxesForSelection(
+      TextSelection(baseOffset: error.start, extentOffset: error.end),
+    );
+    if (boxes.isEmpty) return;
+
+    final wordRectLocal = boxes.first.toRect();
+    final topLeftGlobal = renderEditable.localToGlobal(wordRectLocal.topLeft);
+    final bottomLeftGlobal = renderEditable.localToGlobal(
+      wordRectLocal.bottomLeft,
+    );
+
+    final overlay = Overlay.maybeOf(context);
+    if (overlay == null) return;
+
+    _spellHoverOverlay?.remove();
+    _spellHoverOverlay = null;
+    _activeHoverError = error;
+
+    final suggestions = widget.controller.getSpellingSuggestions(error.word);
+    final mediaSize = MediaQuery.of(context).size;
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final surfaceColor = isDark ? AppTheme.darkSurface : AppTheme.lightSurface;
+    final borderColor = isDark ? AppTheme.darkBorder : AppTheme.lightBorder;
+    final mutedColor = isDark
+        ? AppTheme.darkTextMuted
+        : AppTheme.lightTextMuted;
+
+    const double menuWidth = 220.0;
+    final int itemCount = (suggestions.isEmpty ? 1 : suggestions.length) + 2;
+    final double estimatedHeight = (itemCount * 34.0) + 16.0;
+
+    final double left = topLeftGlobal.dx.clamp(
+      8.0,
+      (mediaSize.width - menuWidth - 8.0).clamp(8.0, mediaSize.width),
+    );
+    final bool showAbove =
+        bottomLeftGlobal.dy + estimatedHeight + 8.0 > mediaSize.height &&
+        topLeftGlobal.dy - estimatedHeight - 6.0 >= 8.0;
+    final double top = showAbove
+        ? topLeftGlobal.dy - estimatedHeight - 4.0
+        : bottomLeftGlobal.dy + 4.0;
+
+    _spellHoverOverlay = OverlayEntry(
+      builder: (ctx) => Positioned(
+        left: left,
+        top: top,
+        width: menuWidth,
+        child: MouseRegion(
+          onEnter: (_) {
+            _isPointerInsideHoverMenu = true;
+            _spellHoverCloseTimer?.cancel();
+            _spellHoverCloseTimer = null;
+          },
+          onExit: (_) {
+            _isPointerInsideHoverMenu = false;
+            _scheduleHoverClose();
+          },
+          child: Material(
+            elevation: 8,
+            borderRadius: BorderRadius.circular(8),
+            color: surfaceColor,
+            child: Container(
+              key: const ValueKey('spellcheck-hover-menu'),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: borderColor),
+              ),
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (suggestions.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 7,
+                      ),
+                      child: Text(
+                        'No suggestions',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontStyle: FontStyle.italic,
+                          color: mutedColor,
+                        ),
+                      ),
+                    )
+                  else
+                    for (final suggestion in suggestions)
+                      InkWell(
+                        onTap: () {
+                          _dismissSpellHoverMenu();
+                          widget.controller.replaceSpellingError(
+                            error,
+                            suggestion,
+                          );
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 7,
+                          ),
+                          child: Text(
+                            suggestion,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ),
+                  Divider(height: 6, thickness: 1, color: borderColor),
+                  InkWell(
+                    onTap: () {
+                      _dismissSpellHoverMenu();
+                      widget.controller.addWordToDictionary(error.word);
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 7,
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.bookmark_add_outlined,
+                            size: 15,
+                            color: mutedColor,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Add "${error.word}" to dictionary',
+                              style: const TextStyle(fontSize: 12),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  InkWell(
+                    onTap: () {
+                      _dismissSpellHoverMenu();
+                      widget.controller.ignoreSpellingWord(error.word);
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 7,
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.visibility_off_outlined,
+                            size: 15,
+                            color: mutedColor,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Ignore "${error.word}"',
+                              style: const TextStyle(fontSize: 12),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    overlay.insert(_spellHoverOverlay!);
+  }
+
+  Widget _buildContextMenu(
+    BuildContext context,
+    EditableTextState editableTextState,
+  ) {
+    final defaultItems = editableTextState.contextMenuButtonItems;
+
+    if (!widget.controller.isSpellCheckEnabled) {
+      return AdaptiveTextSelectionToolbar.buttonItems(
+        anchors: editableTextState.contextMenuAnchors,
+        buttonItems: defaultItems,
+      );
+    }
+
+    final spellError = _resolveSpellErrorForContextMenu(editableTextState);
+    if (spellError == null) {
+      return AdaptiveTextSelectionToolbar.buttonItems(
+        anchors: editableTextState.contextMenuAnchors,
+        buttonItems: defaultItems,
+      );
+    }
+
+    final suggestions = widget.controller.getSpellingSuggestions(
+      spellError.word,
+    );
+    final items = <ContextMenuButtonItem>[
+      for (final suggestion in suggestions)
+        ContextMenuButtonItem(
+          label: suggestion,
+          onPressed: () {
+            editableTextState.hideToolbar();
+            widget.controller.replaceSpellingError(spellError, suggestion);
+          },
+        ),
+      ContextMenuButtonItem(
+        label: 'Add "${spellError.word}" to dictionary',
+        onPressed: () {
+          editableTextState.hideToolbar();
+          widget.controller.addWordToDictionary(spellError.word);
+        },
+      ),
+      ContextMenuButtonItem(
+        label: 'Ignore "${spellError.word}"',
+        onPressed: () {
+          editableTextState.hideToolbar();
+          widget.controller.ignoreSpellingWord(spellError.word);
+        },
+      ),
+      ...defaultItems,
+    ];
+
+    return AdaptiveTextSelectionToolbar.buttonItems(
+      anchors: editableTextState.contextMenuAnchors,
+      buttonItems: items,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final surfaceColor =
-        isDark ? AppTheme.darkSurface : AppTheme.lightSurface;
-    final borderColor =
-        isDark ? AppTheme.darkBorder : AppTheme.lightBorder;
-    final gutterColor =
-        isDark ? AppTheme.darkGutter : AppTheme.lightGutter;
-    final gutterTextColor =
-        isDark ? AppTheme.darkTextMuted : AppTheme.lightTextMuted;
+    final surfaceColor = isDark ? AppTheme.darkSurface : AppTheme.lightSurface;
+    final borderColor = isDark ? AppTheme.darkBorder : AppTheme.lightBorder;
+    final gutterColor = isDark ? AppTheme.darkGutter : AppTheme.lightGutter;
+    final gutterTextColor = isDark
+        ? AppTheme.darkTextMuted
+        : AppTheme.lightTextMuted;
 
     final editorTextStyle = TextStyle(
       fontFamily: widget.controller.editorFontFamily,
       fontFamilyFallback: AppTheme.editorFontFamilyFallback,
       fontSize: _fontSize,
       height: _lineHeightMultiplier,
-      color: isDark
-          ? AppTheme.darkTextPrimary
-          : AppTheme.lightTextPrimary,
+      color: isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary,
     );
 
     final editorStrutStyle = StrutStyle(
@@ -181,8 +566,11 @@ class _EditorViewState extends State<EditorView> {
         const SingleActivator(LogicalKeyboardKey.keyE, control: true): () {
           widget.onOpenExport();
         },
-        const SingleActivator(LogicalKeyboardKey.keyC,
-            control: true, shift: true): () {
+        const SingleActivator(
+          LogicalKeyboardKey.keyC,
+          control: true,
+          shift: true,
+        ): () {
           widget.onOpenCitation();
         },
         const SingleActivator(LogicalKeyboardKey.backslash, control: true): () {
@@ -205,10 +593,11 @@ class _EditorViewState extends State<EditorView> {
           child: LayoutBuilder(
             builder: (context, constraints) {
               final viewportHeight = constraints.maxHeight;
-              final editorWidth = (constraints.maxWidth -
-                      _gutterWidth -
-                      (_contentPaddingHorizontal * 2))
-                  .clamp(100.0, 99999.0);
+              final editorWidth =
+                  (constraints.maxWidth -
+                          _gutterWidth -
+                          (_contentPaddingHorizontal * 2))
+                      .clamp(100.0, 99999.0);
 
               return Row(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -220,12 +609,13 @@ class _EditorViewState extends State<EditorView> {
                         final scrollController =
                             widget.controller.scrollController;
                         if (scrollController.hasClients) {
-                          final targetOffset = (scrollController.offset +
-                                  pointerSignal.scrollDelta.dy)
-                              .clamp(
-                            0.0,
-                            scrollController.position.maxScrollExtent,
-                          );
+                          final targetOffset =
+                              (scrollController.offset +
+                                      pointerSignal.scrollDelta.dy)
+                                  .clamp(
+                                    0.0,
+                                    scrollController.position.maxScrollExtent,
+                                  );
                           scrollController.jumpTo(targetOffset);
                         }
                       }
@@ -242,14 +632,13 @@ class _EditorViewState extends State<EditorView> {
                           widget.controller.textController,
                         ]),
                         builder: (context, _) {
-                          final scrollOffset = widget
-                                  .controller.scrollController.hasClients
+                          final scrollOffset =
+                              widget.controller.scrollController.hasClients
                               ? widget.controller.scrollController.offset
                               : 0.0;
                           final currentText =
                               widget.controller.textController.text;
-                          final fontFamily =
-                              widget.controller.editorFontFamily;
+                          final fontFamily = widget.controller.editorFontFamily;
 
                           if (_cachedGutterSubtree != null &&
                               _lastGutterText == currentText &&
@@ -261,8 +650,9 @@ class _EditorViewState extends State<EditorView> {
                             return _cachedGutterSubtree!;
                           }
 
-                          final lineStartOffsets =
-                              _getLineStartOffsets(currentText);
+                          final lineStartOffsets = _getLineStartOffsets(
+                            currentText,
+                          );
 
                           final subtree = RepaintBoundary(
                             child: ClipRect(
@@ -305,25 +695,41 @@ class _EditorViewState extends State<EditorView> {
                   // Markdown Text Editing Area
                   Expanded(
                     child: RepaintBoundary(
-                      child: TextField(
-                        key: _textFieldKey,
-                        controller: widget.controller.textController,
-                        focusNode: widget.controller.focusNode,
-                        scrollController: widget.controller.scrollController,
-                        maxLines: null,
-                        expands: true,
-                        keyboardType: TextInputType.multiline,
-                        style: editorTextStyle,
-                        strutStyle: editorStrutStyle,
-                        decoration: const InputDecoration(
-                          border: InputBorder.none,
-                          contentPadding: EdgeInsets.fromLTRB(
-                            _contentPaddingHorizontal,
-                            _contentPaddingTop,
-                            _contentPaddingHorizontal,
-                            _contentPaddingBottom,
+                      child: MouseRegion(
+                        onHover: _handleEditorHover,
+                        onExit: _handleEditorExit,
+                        child: Listener(
+                          onPointerDown: (event) {
+                            _dismissSpellHoverMenu();
+                            if ((event.buttons & kSecondaryMouseButton) != 0) {
+                              _lastSecondaryClickGlobalPos = event.position;
+                            } else {
+                              _lastSecondaryClickGlobalPos = null;
+                            }
+                          },
+                          child: TextField(
+                            key: _textFieldKey,
+                            controller: widget.controller.textController,
+                            focusNode: widget.controller.focusNode,
+                            scrollController:
+                                widget.controller.scrollController,
+                            maxLines: null,
+                            expands: true,
+                            keyboardType: TextInputType.multiline,
+                            style: editorTextStyle,
+                            strutStyle: editorStrutStyle,
+                            contextMenuBuilder: _buildContextMenu,
+                            decoration: const InputDecoration(
+                              border: InputBorder.none,
+                              contentPadding: EdgeInsets.fromLTRB(
+                                _contentPaddingHorizontal,
+                                _contentPaddingTop,
+                                _contentPaddingHorizontal,
+                                _contentPaddingBottom,
+                              ),
+                              isDense: true,
+                            ),
                           ),
-                          isDense: true,
                         ),
                       ),
                     ),
@@ -412,10 +818,7 @@ class _LineNumberPainter extends CustomPainter {
     }
 
     final tp = TextPainter(
-      text: TextSpan(
-        text: '$lineNumber',
-        style: _cachedTextStyle,
-      ),
+      text: TextSpan(text: '$lineNumber', style: _cachedTextStyle),
       textAlign: TextAlign.right,
       textDirection: TextDirection.ltr,
       strutStyle: editorStrutStyle,
@@ -431,16 +834,18 @@ class _LineNumberPainter extends CustomPainter {
 
     final renderEditable = findRenderEditable();
     final bool hasEditable = renderEditable != null && renderEditable.hasSize;
-    final double singleLineHeight =
-        hasEditable ? renderEditable.preferredLineHeight : lineBoxHeight;
+    final double singleLineHeight = hasEditable
+        ? renderEditable.preferredLineHeight
+        : lineBoxHeight;
 
     double editableTopOffset = contentPaddingTop;
     if (hasEditable && renderEditable.attached) {
       final gutterBox =
           gutterPaintKey.currentContext?.findRenderObject() as RenderBox?;
       if (gutterBox != null && gutterBox.hasSize && gutterBox.attached) {
-        editableTopOffset =
-            renderEditable.localToGlobal(Offset.zero, ancestor: gutterBox).dy;
+        editableTopOffset = renderEditable
+            .localToGlobal(Offset.zero, ancestor: gutterBox)
+            .dy;
       }
     }
 
@@ -470,8 +875,7 @@ class _LineNumberPainter extends CustomPainter {
           TextSelection.collapsed(offset: charOffset),
         );
         if (endpoints.isNotEmpty) {
-          y = editableTopOffset +
-              (endpoints.first.point.dy - singleLineHeight);
+          y = editableTopOffset + (endpoints.first.point.dy - singleLineHeight);
           yCache[lineIndex] = y;
           return y;
         }

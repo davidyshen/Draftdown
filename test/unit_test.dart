@@ -439,14 +439,17 @@ void main() {
 
       expect(controller.citationSource, equals(CitationSource.bibtex));
       expect(controller.citations.isNotEmpty, isTrue);
-      expect(controller.citations.any((c) => c.key.contains('turing')), isTrue);
+      expect(
+        controller.citations.any((c) => c.key.contains('hutchinson')),
+        isTrue,
+      );
 
       await controller.setCitationSource(CitationSource.zotero);
       expect(controller.citationSource, equals(CitationSource.zotero));
       expect(controller.zoteroCitations.isNotEmpty, isTrue);
       expect(
         controller.zoteroCitations.any(
-          (c) => c.key.contains('vaswani2017attention'),
+          (c) => c.key.contains('loreau2001biodiversity'),
         ),
         isTrue,
       );
@@ -465,6 +468,48 @@ void main() {
 
         await controller.setCitationStyle(CitationStyle.authorYear);
         expect(controller.citationStyle, equals(CitationStyle.authorYear));
+      },
+    );
+
+    test(
+      'persists citation style per file across tab switches and reloads',
+      () async {
+        SharedPreferences.setMockInitialValues({});
+        final tempDir = await Directory.systemTemp.createTemp(
+          'draftdown_citstyle_',
+        );
+        addTearDown(() async {
+          if (tempDir.existsSync()) {
+            await tempDir.delete(recursive: true);
+          }
+        });
+
+        final fileA = File('${tempDir.path}${Platform.pathSeparator}PaperA.md');
+        final fileB = File('${tempDir.path}${Platform.pathSeparator}PaperB.md');
+        await fileA.writeAsString('# Paper A');
+        await fileB.writeAsString('# Paper B');
+
+        final controller = EditorController();
+        addTearDown(controller.dispose);
+
+        await controller.openFile(fileA.path);
+        await controller.setCitationStyle(CitationStyle.numeric);
+        expect(controller.citationStyle, equals(CitationStyle.numeric));
+
+        await controller.openFile(fileB.path);
+        expect(controller.citationStyle, equals(CitationStyle.authorYear));
+
+        // Switch back to PaperA: should restore numeric
+        await controller.openFile(fileA.path);
+        expect(controller.citationStyle, equals(CitationStyle.numeric));
+
+        // New controller instance should still remember PaperA = numeric, PaperB = authorYear
+        final controller2 = EditorController();
+        addTearDown(controller2.dispose);
+        await controller2.openFile(fileA.path);
+        expect(controller2.citationStyle, equals(CitationStyle.numeric));
+        await controller2.openFile(fileB.path);
+        expect(controller2.citationStyle, equals(CitationStyle.authorYear));
       },
     );
 
@@ -568,15 +613,18 @@ void main() {
       'ZoteroService provides distinct citekeys and titles from Zotero library',
       () async {
         final zoteroService = ZoteroService();
-        final items = await zoteroService.getOrSearch('attention');
+        final items = await zoteroService.getOrSearch('ecosystem functioning');
 
         expect(items.isNotEmpty, isTrue);
-        expect(items.first.key, equals('vaswani2017attention'));
-        expect(items.first.title, contains('Attention Is All You Need'));
-        expect(items.first.authors, contains('Ashish Vaswani'));
+        expect(items.first.key, equals('loreau2001biodiversity'));
+        expect(
+          items.first.title,
+          contains('Biodiversity and Ecosystem Functioning'),
+        );
+        expect(items.first.authors, contains('Michel Loreau'));
         expect(
           items.first.toPandocCitation(),
-          equals('[@vaswani2017attention]'),
+          equals('[@loreau2001biodiversity]'),
         );
       },
     );
@@ -737,8 +785,7 @@ void main() {
   group('Export Bibliography Consolidation', () {
     test('prepareExportBibliography generates temporary bib file for cited Zotero keys', () async {
       final controller = EditorController();
-      controller.textController.text =
-          '[@vaswani2017attention; @kaplan2020scaling; @devlin2019bert]';
+      controller.textController.text = '[@loreau2001biodiversity; @cardinale2012biodiversity; @diaz2019pervasive]';
 
       final tempBib = await controller.prepareExportBibliography(
         markdownText: controller.content,
@@ -746,9 +793,9 @@ void main() {
 
       expect(tempBib, isNotNull);
       final bibContent = await tempBib!.readAsString();
-      expect(bibContent, contains('vaswani2017attention'));
-      expect(bibContent, contains('kaplan2020scaling'));
-      expect(bibContent, contains('devlin2019bert'));
+      expect(bibContent, contains('loreau2001biodiversity'));
+      expect(bibContent, contains('cardinale2012biodiversity'));
+      expect(bibContent, contains('diaz2019pervasive'));
 
       // Clean up temporary file
       await tempBib.delete();
@@ -766,11 +813,11 @@ void main() {
       );
       controller.textController.text = '''# Research Note
 
-Deep learning architectures were surveyed by [@vaswani2017attention].
+Ecosystem functioning and biodiversity were surveyed by [@loreau2001biodiversity].
 
 ```python
-def forward(x):
-    return x * 2
+def shannon_index(counts):
+    return len(counts)
 ```
 ''';
 
@@ -795,13 +842,13 @@ def forward(x):
 
       // Verify auto-generated References heading and bibliography entry
       expect(html, contains('References'));
-      expect(html, contains('Attention Is All You Need'));
+      expect(html, contains('Biodiversity and Ecosystem Functioning'));
     });
 
     test('generateHtmlDocument formats citations and bibliography numerically when in numeric mode', () async {
       final controller = EditorController();
       await controller.setCitationStyle(CitationStyle.numeric);
-      controller.textController.text = 'Pioneering work [@turing1950computing] led to transformers [@vaswani2017attention].';
+      controller.textController.text = 'Pioneering work [@holling1973resilience] led to synthesis [@loreau2001biodiversity].';
 
       final service = controller.directExportService;
       final html = service.generateHtmlDocument(
@@ -818,10 +865,10 @@ def forward(x):
       expect(
         html,
         contains(
-          '<li><strong>Alan M. Turing</strong> (1950). <em>Computing Machinery and Intelligence</em>',
+          '<li><strong>C. S. Holling</strong> (1973). <em>Resilience and Stability of Ecological Systems</em>',
         ),
       );
-      expect(html, contains('<li><strong>Ashish Vaswani'));
+      expect(html, contains('<li><strong>Michel Loreau'));
     });
 
     test(
