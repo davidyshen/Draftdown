@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
 import '../../controllers/editor_controller.dart';
-import '../../models/history_entry.dart';
 import '../theme/app_theme.dart';
 
 /// Collapsible left navigation bar displaying the active document
@@ -9,12 +10,18 @@ class AppSidebar extends StatefulWidget {
   final EditorController controller;
   final VoidCallback onOpenFile;
   final VoidCallback onNewFile;
+  final VoidCallback onOpenSettingsDialog;
+  final VoidCallback onToggleTheme;
+  final bool isFloating;
 
   const AppSidebar({
     super.key,
     required this.controller,
     required this.onOpenFile,
     required this.onNewFile,
+    required this.onOpenSettingsDialog,
+    required this.onToggleTheme,
+    this.isFloating = false,
   });
 
   @override
@@ -24,11 +31,75 @@ class AppSidebar extends StatefulWidget {
 class _AppSidebarState extends State<AppSidebar> {
   String _searchFilter = '';
   final TextEditingController _searchController = TextEditingController();
+  bool _isEditingFileName = false;
+  bool _isCancellingRename = false;
+  final TextEditingController _renameController = TextEditingController();
+  final FocusNode _renameFocusNode = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    _renameFocusNode.addListener(_onRenameFocusChange);
+  }
 
   @override
   void dispose() {
+    _renameFocusNode.removeListener(_onRenameFocusChange);
+    _renameFocusNode.dispose();
+    _renameController.dispose();
     _searchController.dispose();
     super.dispose();
+  }
+
+  void _startRenamingFile(String currentFileName) {
+    final parts = EditorController.splitFileName(currentFileName);
+    _isCancellingRename = false;
+    _renameController.text = parts.stem;
+    _renameController.selection = TextSelection(
+      baseOffset: 0,
+      extentOffset: parts.stem.length,
+    );
+    setState(() {
+      _isEditingFileName = true;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _isEditingFileName) {
+        _renameFocusNode.requestFocus();
+      }
+    });
+  }
+
+  void _cancelRenamingFile() {
+    if (!_isEditingFileName) return;
+    _isCancellingRename = true;
+    setState(() {
+      _isEditingFileName = false;
+    });
+  }
+
+  Future<void> _commitRenamingFile() async {
+    if (!_isEditingFileName || _isCancellingRename) return;
+    final newStem = _renameController.text.trim();
+    setState(() {
+      _isEditingFileName = false;
+    });
+    if (newStem.isEmpty) return;
+
+    final error = await widget.controller.renameCurrentFile(newStem);
+    if (error != null && mounted) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(error)));
+    }
+  }
+
+  void _onRenameFocusChange() {
+    if (!_renameFocusNode.hasFocus && _isEditingFileName) {
+      if (_isCancellingRename) {
+        _isCancellingRename = false;
+        return;
+      }
+      _commitRenamingFile();
+    }
   }
 
   @override
@@ -37,71 +108,170 @@ class _AppSidebarState extends State<AppSidebar> {
     final isDark = theme.brightness == Brightness.dark;
     final sidebarBg = isDark ? AppTheme.darkSidebar : AppTheme.lightSidebar;
     final borderColor = isDark ? AppTheme.darkBorder : AppTheme.lightBorder;
-    final lightTextColor =
-        isDark ? AppTheme.darkTextMuted : AppTheme.lightTextMuted;
+    final lightTextColor = isDark
+        ? AppTheme.darkTextMuted
+        : AppTheme.lightTextMuted;
+
+    final sidebarContent = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Top settings & colour scheme actions
+        _buildTopActions(theme, isDark, borderColor),
+
+        // Currently open file card
+        _buildActiveFileCard(theme, isDark, lightTextColor, borderColor),
+
+        const SizedBox(height: 12),
+
+        // Search bar for history
+        _buildHistorySearchBar(theme, isDark, borderColor),
+
+        // History header with clear action
+        _buildHistorySectionHeader(theme, lightTextColor),
+
+        // History list
+        Expanded(
+          child: _buildHistoryList(theme, isDark, lightTextColor, borderColor),
+        ),
+
+        // Bibliography & Zotero status bar
+        _buildBibliographyStatusBar(theme, isDark, lightTextColor, borderColor),
+
+        // Bottom quick action buttons
+        _buildBottomActions(theme, borderColor),
+      ],
+    );
 
     return Container(
       width: 290,
       decoration: BoxDecoration(
         color: sidebarBg,
-        border: Border(right: BorderSide(color: borderColor)),
+        borderRadius: widget.isFloating ? BorderRadius.circular(12) : null,
+        border: widget.isFloating
+            ? Border.all(color: borderColor)
+            : Border(right: BorderSide(color: borderColor)),
+        boxShadow: widget.isFloating
+            ? [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: isDark ? 0.45 : 0.16),
+                  blurRadius: 18,
+                  offset: const Offset(0, 4),
+                ),
+              ]
+            : null,
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // Sidebar top header
-          _buildHeader(theme, borderColor),
-
-          // Currently open file card
-          _buildActiveFileCard(theme, isDark, lightTextColor, borderColor),
-
-          const SizedBox(height: 12),
-
-          // Search bar for history
-          _buildHistorySearchBar(theme, isDark, borderColor),
-
-          // History header with clear action
-          _buildHistorySectionHeader(theme, lightTextColor),
-
-          // History list
-          Expanded(
-            child: _buildHistoryList(theme, isDark, lightTextColor, borderColor),
-          ),
-
-          // Bibliography & Zotero status bar
-          _buildBibliographyStatusBar(theme, isDark, lightTextColor, borderColor),
-
-          // Bottom quick action buttons
-          _buildBottomActions(theme, borderColor),
-        ],
-      ),
+      child: widget.isFloating
+          ? ClipRRect(
+              borderRadius: BorderRadius.circular(11),
+              child: sidebarContent,
+            )
+          : sidebarContent,
     );
   }
 
-  Widget _buildHeader(ThemeData theme, Color borderColor) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        border: Border(bottom: BorderSide(color: borderColor.withValues(alpha: 0.6))),
-      ),
+  Widget _buildTopActions(ThemeData theme, bool isDark, Color borderColor) {
+    final spellCheckEnabled = widget.controller.isSpellCheckEnabled;
+    final scheme = AppTheme.activeSchemeForBrightness(isDark);
+    final accent = scheme.accent;
+    final activeIconColor = accent.computeLuminance() > 0.55
+        ? Colors.black87
+        : Colors.white;
+    const pillHeight = 32.0;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
       child: Row(
         children: [
-          Icon(Icons.edit_note, color: theme.colorScheme.primary, size: 22),
-          const SizedBox(width: 8),
-          const Text(
-            'Draftdown',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.5,
+          Expanded(
+            child: SizedBox(
+              height: pillHeight,
+              child: Tooltip(
+                message: 'Settings',
+                child: OutlinedButton.icon(
+                  key: const ValueKey('sidebar-settings-btn'),
+                  icon: const Icon(Icons.settings_outlined, size: 15),
+                  label: const Text(
+                    'Settings',
+                    style: TextStyle(fontSize: 11.5),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size(0, pillHeight),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 0,
+                      horizontal: 8,
+                    ),
+                    visualDensity: VisualDensity.compact,
+                    side: BorderSide(color: borderColor),
+                  ),
+                  onPressed: widget.onOpenSettingsDialog,
+                ),
+              ),
             ),
           ),
-          const Spacer(),
-          IconButton(
-            icon: const Icon(Icons.chevron_left, size: 20),
-            tooltip: 'Collapse Sidebar (Ctrl+\\)',
-            splashRadius: 18,
-            onPressed: widget.controller.toggleSidebar,
+          const SizedBox(width: 8),
+          Expanded(
+            child: SizedBox(
+              height: pillHeight,
+              child: Tooltip(
+                message: isDark ? 'Switch to Light' : 'Switch to Dark',
+                child: OutlinedButton.icon(
+                  key: const ValueKey('sidebar-theme-btn'),
+                  icon: Icon(
+                    isDark
+                        ? Icons.light_mode_outlined
+                        : Icons.dark_mode_outlined,
+                    size: 15,
+                  ),
+                  label: Text(
+                    isDark ? 'Light' : 'Dark',
+                    style: const TextStyle(fontSize: 11.5),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size(0, pillHeight),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 0,
+                      horizontal: 8,
+                    ),
+                    visualDensity: VisualDensity.compact,
+                    side: BorderSide(color: borderColor),
+                  ),
+                  onPressed: widget.onToggleTheme,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          SizedBox(
+            height: pillHeight,
+            child: Tooltip(
+              message: spellCheckEnabled
+                  ? 'Spellchecker Enabled (${widget.controller.spellCheckLanguage}) — Click to disable'
+                  : 'Spellchecker Disabled — Click to enable',
+              child: OutlinedButton(
+                key: const ValueKey('spellcheck-toggle-btn'),
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(0, pillHeight),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 0,
+                    horizontal: 10,
+                  ),
+                  visualDensity: VisualDensity.compact,
+                  backgroundColor: spellCheckEnabled ? accent : null,
+                  side: BorderSide(
+                    color: spellCheckEnabled ? accent : borderColor,
+                  ),
+                ),
+                onPressed: widget.controller.toggleSpellCheck,
+                child: Icon(
+                  Icons.spellcheck,
+                  size: 16,
+                  color: spellCheckEnabled ? activeIconColor : null,
+                ),
+              ),
+            ),
           ),
         ],
       ),
@@ -144,8 +314,10 @@ class _AppSidebarState extends State<AppSidebar> {
             Row(
               children: [
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
                     color: theme.colorScheme.primary.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(4),
@@ -175,7 +347,9 @@ class _AppSidebarState extends State<AppSidebar> {
                 if (isModified)
                   Container(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 5, vertical: 1.5),
+                      horizontal: 5,
+                      vertical: 1.5,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.amber.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(4),
@@ -192,16 +366,47 @@ class _AppSidebarState extends State<AppSidebar> {
               ],
             ),
             const SizedBox(height: 8),
-            // File Name
-            Text(
-              fileName,
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
+            // File Name (click to rename, keeping .md extension fixed)
+            if (_isEditingFileName)
+              _buildInlineFileNameEditor(
+                fileName,
+                theme,
+                isDark,
+                lightTextColor,
+              )
+            else
+              Tooltip(
+                message: 'Click to rename',
+                child: InkWell(
+                  key: const ValueKey('sidebar-active-filename'),
+                  borderRadius: BorderRadius.circular(4),
+                  onTap: () => _startRenamingFile(fileName),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 2),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            fileName,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Icon(
+                          Icons.edit_outlined,
+                          size: 13,
+                          color: lightTextColor.withValues(alpha: 0.7),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
             const SizedBox(height: 4),
             // File Path in light text
             Text(
@@ -243,13 +448,80 @@ class _AppSidebarState extends State<AppSidebar> {
                           border: Border.all(color: borderColor),
                           borderRadius: BorderRadius.circular(6),
                         ),
-                        child: Icon(Icons.folder_open,
-                            size: 15, color: lightTextColor),
+                        child: Icon(
+                          Icons.folder_open,
+                          size: 15,
+                          color: lightTextColor,
+                        ),
                       ),
                     ),
                   ),
                 ],
               ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInlineFileNameEditor(
+    String fileName,
+    ThemeData theme,
+    bool isDark,
+    Color lightTextColor,
+  ) {
+    final parts = EditorController.splitFileName(fileName);
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.escape): _cancelRenamingFile,
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        decoration: BoxDecoration(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.06)
+              : Colors.black.withValues(alpha: 0.04),
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(
+            color: theme.colorScheme.primary.withValues(alpha: 0.7),
+          ),
+        ),
+        child: Row(
+          children: [
+            Flexible(
+              child: IntrinsicWidth(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(minWidth: 24),
+                  child: TextField(
+                    key: const ValueKey('sidebar-rename-input'),
+                    controller: _renameController,
+                    focusNode: _renameFocusNode,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    decoration: const InputDecoration(
+                      isDense: true,
+                      contentPadding: EdgeInsets.zero,
+                      border: InputBorder.none,
+                    ),
+                    inputFormatters: [
+                      FilteringTextInputFormatter.deny(RegExp(r'[\\/:*?"<>|]')),
+                    ],
+                    onSubmitted: (_) => _commitRenamingFile(),
+                  ),
+                ),
+              ),
+            ),
+            Text(
+              parts.extension,
+              key: const ValueKey('sidebar-rename-extension'),
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: lightTextColor,
+              ),
             ),
           ],
         ),
@@ -370,6 +642,19 @@ class _AppSidebarState extends State<AppSidebar> {
     Color lightTextColor,
     Color borderColor,
   ) {
+    final activeDoc = widget.controller.activeDocument;
+    final currentPath = widget.controller.currentFilePath;
+    final openUntitledDocs = widget.controller.openDocuments.where((doc) {
+      if (doc.filePath != null) return false;
+      final isSoleUntouched =
+          widget.controller.openDocuments.length == 1 &&
+          !widget.controller.isModified &&
+          widget.controller.history.isEmpty;
+      if (isSoleUntouched) return false;
+      if (_searchFilter.isEmpty) return true;
+      return doc.fileName.toLowerCase().contains(_searchFilter);
+    }).toList();
+
     final history = widget.controller.history;
     final filtered = _searchFilter.isEmpty
         ? history
@@ -378,7 +663,31 @@ class _AppSidebarState extends State<AppSidebar> {
                 entry.path.toLowerCase().contains(_searchFilter);
           }).toList();
 
-    if (filtered.isEmpty) {
+    // Always place the active file at the top of the list.
+    final activeUntitledIndex = openUntitledDocs.indexWhere(
+      (doc) => activeDoc?.id == doc.id,
+    );
+    if (activeUntitledIndex > 0) {
+      final activeUntitled = openUntitledDocs.removeAt(activeUntitledIndex);
+      openUntitledDocs.insert(0, activeUntitled);
+    }
+
+    final activeHistoryIndex = currentPath == null
+        ? -1
+        : filtered.indexWhere((entry) => entry.path == currentPath);
+    final activeHistoryEntry = activeHistoryIndex != -1
+        ? filtered[activeHistoryIndex]
+        : null;
+    final remainingHistory = activeHistoryIndex != -1
+        ? [
+            ...filtered.sublist(0, activeHistoryIndex),
+            ...filtered.sublist(activeHistoryIndex + 1),
+          ]
+        : filtered;
+
+    if (openUntitledDocs.isEmpty &&
+        activeHistoryEntry == null &&
+        remainingHistory.isEmpty) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(24.0),
@@ -400,38 +709,180 @@ class _AppSidebarState extends State<AppSidebar> {
       );
     }
 
+    final hasActiveHistoryAtTop = activeHistoryEntry != null;
+    final totalCount =
+        (hasActiveHistoryAtTop ? 1 : 0) +
+        openUntitledDocs.length +
+        remainingHistory.length;
+
     return ListView.builder(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      itemCount: filtered.length,
+      itemCount: totalCount,
       itemBuilder: (context, index) {
-        final entry = filtered[index];
-        final isCurrent = entry.path == widget.controller.currentFilePath;
+        if (hasActiveHistoryAtTop && index == 0) {
+          final entry = activeHistoryEntry;
+          final isModified = widget.controller.isFileModified(entry.path);
+          final openDoc = widget.controller.openDocumentForPath(entry.path);
+          return _buildSidebarFileItem(
+            fileName: entry.fileName,
+            subtitlePath: entry.path,
+            subtitleTime: entry.relativeTime,
+            isCurrent: true,
+            isOpen: true,
+            isModified: isModified,
+            theme: theme,
+            isDark: isDark,
+            lightTextColor: lightTextColor,
+            closeTooltip: 'Close tab',
+            onTap: () async {
+              await widget.controller.openFile(entry.path);
+            },
+            onCloseOrRemove: () async {
+              if (openDoc != null) {
+                await _handleCloseOpenTab(
+                  openDoc.id,
+                  entry.fileName,
+                  isModified,
+                );
+              }
+            },
+          );
+        }
 
-        return _buildHistoryItem(
-          entry: entry,
+        final adjustedIndex = hasActiveHistoryAtTop ? index - 1 : index;
+        if (adjustedIndex < openUntitledDocs.length) {
+          final doc = openUntitledDocs[adjustedIndex];
+          final isCurrent = activeDoc?.id == doc.id;
+          final isModified = isCurrent
+              ? widget.controller.isModified
+              : doc.isModified;
+          return _buildSidebarFileItem(
+            itemKey: ValueKey('sidebar-open-doc-${doc.id}'),
+            fileName: doc.fileName,
+            subtitlePath: 'Not yet saved to disk',
+            subtitleTime: isCurrent ? 'Active tab' : 'Open tab',
+            isCurrent: isCurrent,
+            isOpen: true,
+            isModified: isModified,
+            theme: theme,
+            isDark: isDark,
+            lightTextColor: lightTextColor,
+            closeTooltip: 'Close tab',
+            onTap: () {
+              widget.controller.switchToDocumentById(doc.id);
+            },
+            onCloseOrRemove: () =>
+                _handleCloseOpenTab(doc.id, doc.fileName, isModified),
+          );
+        }
+
+        final entry = remainingHistory[adjustedIndex - openUntitledDocs.length];
+        final isCurrent = entry.path == widget.controller.currentFilePath;
+        final isOpen = widget.controller.isFileOpen(entry.path);
+        final isModified = widget.controller.isFileModified(entry.path);
+        final openDoc = widget.controller.openDocumentForPath(entry.path);
+
+        return _buildSidebarFileItem(
+          fileName: entry.fileName,
+          subtitlePath: entry.path,
+          subtitleTime: entry.relativeTime,
           isCurrent: isCurrent,
+          isOpen: isOpen,
+          isModified: isModified,
           theme: theme,
           isDark: isDark,
           lightTextColor: lightTextColor,
-          borderColor: borderColor,
+          closeTooltip: isOpen ? 'Close tab' : 'Remove from history',
+          onTap: () async {
+            await widget.controller.openFile(entry.path);
+          },
+          onCloseOrRemove: () async {
+            if (isOpen && openDoc != null) {
+              await _handleCloseOpenTab(openDoc.id, entry.fileName, isModified);
+            } else {
+              await widget.controller.historyService.removeEntry(entry.path);
+              setState(() {});
+            }
+          },
         );
       },
     );
   }
 
-  Widget _buildHistoryItem({
-    required HistoryEntry entry,
+  Future<void> _handleCloseOpenTab(
+    String docId,
+    String fileName,
+    bool isModified,
+  ) async {
+    if (isModified) {
+      final action = await showDialog<String>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Unsaved Changes'),
+          content: Text('Save changes to $fileName before closing?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, 'discard'),
+              child: const Text('Discard'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, 'cancel'),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, 'save'),
+              child: const Text('Save & Close'),
+            ),
+          ],
+        ),
+      );
+
+      if (action == 'cancel' || action == null) return;
+      if (action == 'save') {
+        if (widget.controller.activeDocument?.id != docId) {
+          widget.controller.switchToDocumentById(docId);
+        }
+        final saved = await widget.controller.saveFile();
+        if (!saved) return;
+      }
+    }
+
+    widget.controller.closeDocument(docId);
+  }
+
+  Widget _buildSidebarFileItem({
+    Key? itemKey,
+    required String fileName,
+    required String subtitlePath,
+    required String subtitleTime,
     required bool isCurrent,
+    required bool isOpen,
+    required bool isModified,
     required ThemeData theme,
     required bool isDark,
     required Color lightTextColor,
-    required Color borderColor,
+    required String closeTooltip,
+    required VoidCallback onTap,
+    required VoidCallback onCloseOrRemove,
   }) {
     final itemBg = isCurrent
         ? theme.colorScheme.primary.withValues(alpha: isDark ? 0.2 : 0.08)
         : Colors.transparent;
+    final secondaryTextColor = isDark
+        ? AppTheme.darkTextSecondary
+        : AppTheme.lightTextSecondary;
+    final primaryTextColor = isDark
+        ? AppTheme.darkTextPrimary
+        : AppTheme.lightTextPrimary;
+    final titleColor = isCurrent
+        ? theme.colorScheme.primary
+        : (isOpen ? primaryTextColor : secondaryTextColor);
+    final iconColor = isCurrent
+        ? theme.colorScheme.primary
+        : (isOpen ? primaryTextColor : lightTextColor);
 
     return Container(
+      key: itemKey,
       margin: const EdgeInsets.symmetric(vertical: 2),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(6),
@@ -447,96 +898,75 @@ class _AppSidebarState extends State<AppSidebar> {
         borderRadius: BorderRadius.circular(6),
         clipBehavior: Clip.antiAlias,
         child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-        visualDensity: VisualDensity.compact,
-        dense: true,
-        leading: Icon(
-          Icons.description_outlined,
-          size: 18,
-          color: isCurrent ? theme.colorScheme.primary : lightTextColor,
-        ),
-        title: Text(
-          entry.fileName,
-          style: TextStyle(
-            fontSize: 12.5,
-            fontWeight: isCurrent ? FontWeight.w600 : FontWeight.w500,
-            color: isCurrent ? theme.colorScheme.primary : null,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 8,
+            vertical: 2,
           ),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox(height: 2),
-            // Path in light text
-            Text(
-              entry.path,
-              style: TextStyle(
-                fontSize: 10,
-                color: lightTextColor,
-                fontFamily: 'Segoe UI',
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            const SizedBox(height: 2),
-            Text(
-              entry.relativeTime,
-              style: TextStyle(
-                fontSize: 9.5,
-                color: lightTextColor.withValues(alpha: 0.8),
-              ),
-            ),
-          ],
-        ),
-        trailing: IconButton(
-          icon: const Icon(Icons.close, size: 14),
-          tooltip: 'Remove from history',
-          splashRadius: 14,
-          onPressed: () async {
-            await widget.controller.historyService.removeEntry(entry.path);
-            setState(() {});
-          },
-        ),
-        onTap: () async {
-          // If currently editing and modified, ask to save or switch
-          if (widget.controller.isModified) {
-            final discardOrSave = await showDialog<String>(
-              context: context,
-              builder: (ctx) => AlertDialog(
-                title: const Text('Unsaved Changes'),
-                content: Text(
-                  'Save changes to ${widget.controller.currentFileName} before opening ${entry.fileName}?',
+          visualDensity: VisualDensity.compact,
+          dense: true,
+          leading: Icon(Icons.description_outlined, size: 18, color: iconColor),
+          title: Row(
+            children: [
+              Flexible(
+                child: Text(
+                  fileName,
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: isOpen ? FontWeight.w700 : FontWeight.w400,
+                    color: titleColor,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(ctx, 'discard'),
-                    child: const Text('Discard'),
-                  ),
-                  TextButton(
-                    onPressed: () => Navigator.pop(ctx, 'cancel'),
-                    child: const Text('Cancel'),
-                  ),
-                  FilledButton(
-                    onPressed: () => Navigator.pop(ctx, 'save'),
-                    child: const Text('Save & Open'),
-                  ),
-                ],
               ),
-            );
-
-            if (discardOrSave == 'cancel' || discardOrSave == null) return;
-            if (discardOrSave == 'save') {
-              await widget.controller.saveFile();
-            }
-          }
-
-          await widget.controller.openFile(entry.path);
-        },
+              if (isModified) ...[
+                const SizedBox(width: 6),
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: const BoxDecoration(
+                    color: Colors.amber,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ],
+            ],
+          ),
+          subtitle: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SizedBox(height: 2),
+              // Path in light text
+              Text(
+                subtitlePath,
+                style: TextStyle(
+                  fontSize: 10,
+                  color: lightTextColor,
+                  fontFamily: 'Segoe UI',
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 2),
+              Text(
+                subtitleTime,
+                style: TextStyle(
+                  fontSize: 9.5,
+                  color: lightTextColor.withValues(alpha: 0.8),
+                ),
+              ),
+            ],
+          ),
+          trailing: IconButton(
+            icon: const Icon(Icons.close, size: 14),
+            tooltip: closeTooltip,
+            splashRadius: 14,
+            onPressed: onCloseOrRemove,
+          ),
+          onTap: onTap,
+        ),
       ),
-    ),
-  );
+    );
   }
 
   Widget _buildBibliographyStatusBar(
@@ -567,10 +997,7 @@ class _AppSidebarState extends State<AppSidebar> {
           Expanded(
             child: Text(
               status,
-              style: TextStyle(
-                fontSize: 10.5,
-                color: lightTextColor,
-              ),
+              style: TextStyle(fontSize: 10.5, color: lightTextColor),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),

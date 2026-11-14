@@ -1,19 +1,16 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+
 import '../../controllers/editor_controller.dart';
+import '../../services/spell_check_service.dart';
 import '../../services/system_font_service.dart';
 import '../theme/app_theme.dart';
 
-/// Settings dialog to configure typography (monospace editor font,
-/// unified vs dual preview fonts), Pandoc executable paths, and Zotero integration.
+/// Settings dialog to configure typography (editor font,
+/// unified vs dual preview fonts), Zotero integration, and spellcheck.
 class SettingsDialog extends StatefulWidget {
   final EditorController controller;
 
-  const SettingsDialog({
-    super.key,
-    required this.controller,
-  });
+  const SettingsDialog({super.key, required this.controller});
 
   @override
   State<SettingsDialog> createState() => _SettingsDialogState();
@@ -33,15 +30,14 @@ class _SettingsDialogState extends State<SettingsDialog>
   List<String> _renderFonts = const [];
   bool _isLoadingFonts = true;
 
-  // Pandoc state
-  final TextEditingController _pandocPathController = TextEditingController();
-  String? _pandocTestStatus;
-  bool _isPandocSuccess = false;
-
   // Zotero & Bibliography state
   final TextEditingController _bibPathController = TextEditingController();
   String? _zoteroTestStatus;
   bool _isZoteroSuccess = false;
+
+  // Spellcheck state
+  late bool _spellCheckEnabled;
+  late String _spellCheckLanguage;
 
   @override
   void initState() {
@@ -53,9 +49,10 @@ class _SettingsDialogState extends State<SettingsDialog>
     _isDualRender = widget.controller.isDualRenderFont;
     _selectedBodyFont = widget.controller.renderBodyFont;
     _selectedHeaderFont = widget.controller.renderHeaderFont;
+    _spellCheckEnabled = widget.controller.isSpellCheckEnabled;
+    _spellCheckLanguage = widget.controller.spellCheckLanguage;
 
     _bibPathController.text = widget.controller.bibliographyPath ?? '';
-    _loadCustomPandocPath();
     _initSystemFonts();
   }
 
@@ -80,16 +77,9 @@ class _SettingsDialogState extends State<SettingsDialog>
     });
   }
 
-  Future<void> _loadCustomPandocPath() async {
-    final prefs = await SharedPreferences.getInstance();
-    final custom = prefs.getString('draftdown_custom_pandoc_path') ?? '';
-    _pandocPathController.text = custom;
-  }
-
   @override
   void dispose() {
     _tabController.dispose();
-    _pandocPathController.dispose();
     _bibPathController.dispose();
     super.dispose();
   }
@@ -119,60 +109,21 @@ class _SettingsDialogState extends State<SettingsDialog>
     widget.controller.updateTypography(renderHeaderFont: newFont);
   }
 
-  Future<void> _testPandoc() async {
-    final path = _pandocPathController.text.trim();
-    widget.controller.pandocService
-        .setCustomPath(path.isNotEmpty ? path : null);
-    await widget.controller.checkPandocAvailability();
-
-    setState(() {
-      if (widget.controller.isPandocAvailable) {
-        _isPandocSuccess = true;
-        _pandocTestStatus =
-            'Pandoc detected: ${widget.controller.pandocVersion ?? "Available"}';
-      } else {
-        _isPandocSuccess = false;
-        _pandocTestStatus =
-            'Pandoc executable not found at specified location.';
-      }
-    });
-
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('draftdown_custom_pandoc_path', path);
-  }
-
-  Future<void> _resetPandocToBundled() async {
-    _pandocPathController.clear();
-    widget.controller.pandocService.setCustomPath(null);
-    await widget.controller.checkPandocAvailability();
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('draftdown_custom_pandoc_path');
-    setState(() {
-      _pandocTestStatus = widget.controller.isPandocAvailable
-          ? 'Reverted to ${widget.controller.pandocVersion ?? "bundled Pandoc"}'
-          : null;
-      _isPandocSuccess = widget.controller.isPandocAvailable;
-    });
-  }
-
   Future<void> _testZotero() async {
     await widget.controller.checkZoteroConnection();
     setState(() {
       if (widget.controller.isZoteroConnected) {
         _isZoteroSuccess = true;
-        _zoteroTestStatus =
-            'Successfully connected to Zotero (Better BibTeX)!';
+        _zoteroTestStatus = 'Successfully connected to Zotero (Better BibTeX)!';
       } else {
         _isZoteroSuccess = false;
-        _zoteroTestStatus =
-            'Could not reach Zotero. Ensure Zotero is running with the Better BibTeX plugin enabled.';
+        _zoteroTestStatus = 'Could not reach Zotero. Ensure Zotero is running with the Better BibTeX plugin enabled.';
       }
     });
   }
 
   Future<void> _browseBib() async {
-    final path =
-        await widget.controller.fileService.pickBibliographyFile();
+    final path = await widget.controller.fileService.pickBibliographyFile();
     if (path != null) {
       _bibPathController.text = path;
       await widget.controller.loadBibliographyFile(path);
@@ -184,21 +135,17 @@ class _SettingsDialogState extends State<SettingsDialog>
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final borderColor =
-        isDark ? AppTheme.darkBorder : AppTheme.lightBorder;
-    final surfaceColor =
-        isDark ? AppTheme.darkSurface : AppTheme.lightSurface;
-    final mutedColor =
-        isDark ? AppTheme.darkTextMuted : AppTheme.lightTextMuted;
+    final borderColor = isDark ? AppTheme.darkBorder : AppTheme.lightBorder;
+    final surfaceColor = isDark ? AppTheme.darkSurface : AppTheme.lightSurface;
+    final mutedColor = isDark
+        ? AppTheme.darkTextMuted
+        : AppTheme.lightTextMuted;
 
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       backgroundColor: surfaceColor,
       child: ConstrainedBox(
-        constraints: const BoxConstraints(
-          maxWidth: 720,
-          maxHeight: 620,
-        ),
+        constraints: const BoxConstraints(maxWidth: 720, maxHeight: 620),
         child: Padding(
           padding: const EdgeInsets.all(22.0),
           child: Column(
@@ -207,8 +154,11 @@ class _SettingsDialogState extends State<SettingsDialog>
               // Header
               Row(
                 children: [
-                  Icon(Icons.settings,
-                      color: theme.colorScheme.primary, size: 22),
+                  Icon(
+                    Icons.settings,
+                    color: theme.colorScheme.primary,
+                    size: 22,
+                  ),
                   const SizedBox(width: 8),
                   const Text(
                     'Application Settings',
@@ -249,12 +199,12 @@ class _SettingsDialogState extends State<SettingsDialog>
                     text: 'Typography',
                   ),
                   Tab(
-                    icon: Icon(Icons.output, size: 18),
-                    text: 'Pandoc',
-                  ),
-                  Tab(
                     icon: Icon(Icons.book_outlined, size: 18),
                     text: 'Zotero',
+                  ),
+                  Tab(
+                    icon: Icon(Icons.spellcheck, size: 18),
+                    text: 'Spellcheck',
                   ),
                 ],
               ),
@@ -267,14 +217,13 @@ class _SettingsDialogState extends State<SettingsDialog>
                   controller: _tabController,
                   children: [
                     // Tab 1: Typography & Fonts
-                    _buildTypographyTab(
-                        theme, isDark, borderColor, mutedColor),
+                    _buildTypographyTab(theme, isDark, borderColor, mutedColor),
 
-                    // Tab 2: Pandoc Configuration
-                    _buildPandocTab(theme, isDark, borderColor, mutedColor),
-
-                    // Tab 3: Zotero & Bibliography
+                    // Tab 2: Zotero & Bibliography
                     _buildZoteroTab(theme, isDark, borderColor, mutedColor),
+
+                    // Tab 3: Spellcheck
+                    _buildSpellcheckTab(theme, isDark, borderColor, mutedColor),
                   ],
                 ),
               ),
@@ -302,8 +251,7 @@ class _SettingsDialogState extends State<SettingsDialog>
     Color borderColor,
     Color mutedColor,
   ) {
-    final previewBg =
-        isDark ? AppTheme.darkSidebar : AppTheme.lightSidebar;
+    final previewBg = isDark ? AppTheme.darkSidebar : AppTheme.lightSidebar;
     final activeScheme = AppTheme.schemeById(_selectedColorSchemeId);
 
     return SingleChildScrollView(
@@ -338,9 +286,13 @@ class _SettingsDialogState extends State<SettingsDialog>
               child: DropdownButton<String>(
                 key: const ValueKey('colour-scheme-dropdown'),
                 focusColor: Colors.transparent,
-                dropdownColor: isDark ? AppTheme.darkSurface : AppTheme.lightSurface,
-                value: AppTheme.availableColorSchemes
-                        .any((s) => s.id == _selectedColorSchemeId)
+                dropdownColor: isDark
+                    ? AppTheme.darkSurface
+                    : AppTheme.lightSurface,
+                value:
+                    AppTheme.availableColorSchemes.any(
+                      (s) => s.id == _selectedColorSchemeId,
+                    )
                     ? _selectedColorSchemeId
                     : AppTheme.availableColorSchemes.first.id,
                 isExpanded: true,
@@ -429,7 +381,7 @@ class _SettingsDialogState extends State<SettingsDialog>
               const Icon(Icons.terminal, size: 18),
               const SizedBox(width: 8),
               const Text(
-                'Markdown Editor Font (Strictly Monospace)',
+                'Markdown Editor Font',
                 style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold),
               ),
             ],
@@ -501,7 +453,7 @@ class _SettingsDialogState extends State<SettingsDialog>
               border: Border.all(color: borderColor),
             ),
             child: Text(
-              '1  # Literate Computing\n2  Literate programming as introduced by [@knuth1984literate]\n3  const double pi = 3.14159265;',
+              '1  # Ecological Resilience\n2  Ecosystem complexity and recovery [@holling1973resilience]\n3  const double shannonIndex = 2.4183;',
               style: TextStyle(
                 fontFamily: _selectedEditorFont,
                 fontFamilyFallback: AppTheme.editorFontFamilyFallback,
@@ -537,23 +489,25 @@ class _SettingsDialogState extends State<SettingsDialog>
               ButtonSegment<bool>(
                 value: false,
                 icon: Icon(Icons.format_shapes, size: 15),
-                label: Text('Unified (Single Font)',
-                    style: TextStyle(fontSize: 11.5)),
+                label: Text(
+                  'Unified (Single Font)',
+                  style: TextStyle(fontSize: 11.5),
+                ),
               ),
               ButtonSegment<bool>(
                 value: true,
                 icon: Icon(Icons.view_headline, size: 15),
-                label: Text('Dual (Separate Header & Body)',
-                    style: TextStyle(fontSize: 11.5)),
+                label: Text(
+                  'Dual (Separate Header & Body)',
+                  style: TextStyle(fontSize: 11.5),
+                ),
               ),
             ],
             selected: {_isDualRender},
             onSelectionChanged: (Set<bool> newSelection) {
               _onDualModeChanged(newSelection.first);
             },
-            style: ButtonStyle(
-              visualDensity: VisualDensity.compact,
-            ),
+            style: ButtonStyle(visualDensity: VisualDensity.compact),
           ),
 
           const SizedBox(height: 12),
@@ -585,7 +539,9 @@ class _SettingsDialogState extends State<SettingsDialog>
                       const Text(
                         'Header Font (H1 - H6)',
                         style: TextStyle(
-                            fontSize: 12, fontWeight: FontWeight.w600),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                       const SizedBox(height: 6),
                       _buildFontDropdown(
@@ -604,7 +560,9 @@ class _SettingsDialogState extends State<SettingsDialog>
                       const Text(
                         'Body Font (Paragraphs & Tables)',
                         style: TextStyle(
-                            fontSize: 12, fontWeight: FontWeight.w600),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                       const SizedBox(height: 6),
                       _buildFontDropdown(
@@ -634,17 +592,18 @@ class _SettingsDialogState extends State<SettingsDialog>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'The Architecture of Literate Systems',
+                  'The Complexity of Restored Ecosystems',
                   style: TextStyle(
-                    fontFamily:
-                        _isDualRender ? _selectedHeaderFont : _selectedBodyFont,
+                    fontFamily: _isDualRender
+                        ? _selectedHeaderFont
+                        : _selectedBodyFont,
                     fontSize: 16.5,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  'Computing machinery and intelligence explore the intersection between formal logic and human communication. Attention mechanisms enable scalable sequence transduction without recurrence.',
+                  'Ecological resilience describes the capacity of an ecosystem to absorb disturbance whilst maintaining core trophic structure and species interactions. Long-term restoration monitors biodiversity recovery across fragmented habitats.',
                   style: TextStyle(
                     fontFamily: _selectedBodyFont,
                     fontSize: 12.5,
@@ -724,8 +683,9 @@ class _SettingsDialogState extends State<SettingsDialog>
       );
     }
 
-    final effectiveValue =
-        _renderFonts.contains(value) ? value : _renderFonts.first;
+    final effectiveValue = _renderFonts.contains(value)
+        ? value
+        : _renderFonts.first;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -752,205 +712,6 @@ class _SettingsDialogState extends State<SettingsDialog>
             if (val != null) onChanged(val);
           },
         ),
-      ),
-    );
-  }
-
-  /// Pandoc Tab: Bundled binary status & optional custom executable override
-  Widget _buildPandocTab(
-    ThemeData theme,
-    bool isDark,
-    Color borderColor,
-    Color mutedColor,
-  ) {
-    final isUsingBundled = widget.controller.isUsingBundledPandoc;
-    final isAvailable = widget.controller.isPandocAvailable;
-    final versionStr = widget.controller.pandocVersion ?? 'Pandoc 3.6.3 (Bundled)';
-    final resolvedPath = widget.controller.resolvedPandocPath ?? 'Bundled with application';
-    final cardBg = isDark ? AppTheme.darkSidebar : AppTheme.lightSidebar;
-
-    return SingleChildScrollView(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Section 1: Bundled Pandoc Status Card
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: isAvailable
-                  ? Colors.green.withValues(alpha: 0.08)
-                  : cardBg,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: isAvailable
-                    ? Colors.green.withValues(alpha: 0.3)
-                    : borderColor,
-              ),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(
-                      isUsingBundled
-                          ? Icons.inventory_2_outlined
-                          : Icons.check_circle_outline,
-                      color: isAvailable ? Colors.green : mutedColor,
-                      size: 20,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      isUsingBundled
-                          ? 'Bundled Pandoc Standalone Binary'
-                          : 'Custom Pandoc Binary Active',
-                      style: TextStyle(
-                        fontSize: 13.5,
-                        fontWeight: FontWeight.bold,
-                        color: isAvailable ? Colors.green : null,
-                      ),
-                    ),
-                    const Spacer(),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: isAvailable
-                            ? Colors.green.withValues(alpha: 0.15)
-                            : Colors.grey.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        versionStr,
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: isAvailable ? Colors.green : mutedColor,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Draftdown bundles a complete standalone Pandoc distribution so you never need to install, configure, or manage external dependencies separately. All document export formats (PDF, Word DOCX, HTML5, EPUB, LaTeX, ODT, RTF) and academic citation processing work immediately.',
-                  style: TextStyle(fontSize: 11.5, color: mutedColor, height: 1.45),
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Text(
-                      'Resolved location: ',
-                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: mutedColor),
-                    ),
-                    Expanded(
-                      child: Text(
-                        resolvedPath,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontFamily: AppTheme.editorFontFamily,
-                          color: isDark ? Colors.blue[200] : Colors.blue[800],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 20),
-
-          // Section 2: Custom Executable Override
-          Row(
-            children: [
-              const Icon(Icons.tune_outlined, size: 18),
-              const SizedBox(width: 8),
-              const Text(
-                'Custom Binary Override (Optional)',
-                style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'Leave this blank to always use the bundled Pandoc binary. If you maintain a custom LaTeX installation or specialised Pandoc build, specify its path below.',
-            style: TextStyle(fontSize: 11.5, color: mutedColor),
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _pandocPathController,
-                  style: const TextStyle(fontSize: 12),
-                  decoration: InputDecoration(
-                    hintText: Platform.isWindows
-                        ? r'C:\Program Files\Pandoc\pandoc.exe'
-                        : '/usr/local/bin/pandoc',
-                    contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 10, vertical: 8),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(6),
-                      borderSide: BorderSide(color: borderColor),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              FilledButton.tonal(
-                onPressed: _testPandoc,
-                child: const Text('Test / Save',
-                    style: TextStyle(fontSize: 11.5)),
-              ),
-              if (_pandocPathController.text.isNotEmpty) ...[
-                const SizedBox(width: 6),
-                OutlinedButton(
-                  onPressed: _resetPandocToBundled,
-                  child: const Text('Reset to Bundled',
-                      style: TextStyle(fontSize: 11.5)),
-                ),
-              ],
-            ],
-          ),
-          if (_pandocTestStatus != null) ...[
-            const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: _isPandocSuccess
-                    ? Colors.green.withValues(alpha: 0.12)
-                    : Colors.red.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    _isPandocSuccess
-                        ? Icons.check_circle_outline
-                        : Icons.error_outline,
-                    size: 16,
-                    color: _isPandocSuccess ? Colors.green : Colors.red,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      _pandocTestStatus!,
-                      style: TextStyle(
-                        fontSize: 11.5,
-                        color: _isPandocSuccess
-                            ? Colors.green
-                            : Colors.redAccent,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ],
       ),
     );
   }
@@ -990,10 +751,11 @@ class _SettingsDialogState extends State<SettingsDialog>
                   readOnly: true,
                   style: const TextStyle(fontSize: 12),
                   decoration: InputDecoration(
-                    hintText:
-                        'No bibliography chosen (using built-in sample)',
+                    hintText: 'No bibliography chosen (using built-in sample)',
                     contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 10, vertical: 8),
+                      horizontal: 10,
+                      vertical: 8,
+                    ),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(6),
                       borderSide: BorderSide(color: borderColor),
@@ -1004,8 +766,10 @@ class _SettingsDialogState extends State<SettingsDialog>
               const SizedBox(width: 8),
               OutlinedButton.icon(
                 icon: const Icon(Icons.folder_open, size: 14),
-                label:
-                    const Text('Browse...', style: TextStyle(fontSize: 11.5)),
+                label: const Text(
+                  'Browse...',
+                  style: TextStyle(fontSize: 11.5),
+                ),
                 onPressed: _browseBib,
               ),
             ],
@@ -1036,8 +800,10 @@ class _SettingsDialogState extends State<SettingsDialog>
           const SizedBox(height: 10),
           FilledButton.tonalIcon(
             icon: const Icon(Icons.wifi_find, size: 16),
-            label: const Text('Test Zotero Connection',
-                style: TextStyle(fontSize: 11.5)),
+            label: const Text(
+              'Test Zotero Connection',
+              style: TextStyle(fontSize: 11.5),
+            ),
             onPressed: _testZotero,
           ),
           if (_zoteroTestStatus != null) ...[
@@ -1076,6 +842,136 @@ class _SettingsDialogState extends State<SettingsDialog>
               ),
             ),
           ],
+        ],
+      ),
+    );
+  }
+
+  /// Spellcheck Tab: Enable/disable, dictionary locale, and custom dictionary management.
+  Widget _buildSpellcheckTab(
+    ThemeData theme,
+    bool isDark,
+    Color borderColor,
+    Color mutedColor,
+  ) {
+    final customWords = widget.controller.customDictionaryWords.toList()
+      ..sort();
+
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text(
+              'Enable Markdown Spellchecker',
+              style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold),
+            ),
+            subtitle: Text(
+              'Highlight misspelled prose in the Markdown editor while skipping code blocks, LaTeX math, URLs, and citation keys.',
+              style: TextStyle(fontSize: 11.5, color: mutedColor),
+            ),
+            value: _spellCheckEnabled,
+            onChanged: (val) {
+              setState(() => _spellCheckEnabled = val);
+              widget.controller.setSpellCheckEnabled(val);
+            },
+          ),
+
+          const SizedBox(height: 16),
+
+          const Text(
+            'Dictionary Language',
+            style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Select the English variant used to check spelling.',
+            style: TextStyle(fontSize: 11.5, color: mutedColor),
+          ),
+          const SizedBox(height: 8),
+
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(
+              border: Border.all(color: borderColor),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                key: const ValueKey('spellcheck-language-dropdown'),
+                focusColor: Colors.transparent,
+                dropdownColor: isDark
+                    ? AppTheme.darkSurface
+                    : AppTheme.lightSurface,
+                value:
+                    SpellCheckLanguage.supported.any(
+                      (l) => l.tag == _spellCheckLanguage,
+                    )
+                    ? _spellCheckLanguage
+                    : SpellCheckLanguage.supported.first.tag,
+                isExpanded: true,
+                icon: const Icon(Icons.keyboard_arrow_down, size: 20),
+                items: SpellCheckLanguage.supported.map((lang) {
+                  return DropdownMenuItem<String>(
+                    value: lang.tag,
+                    child: Text(
+                      '${lang.label} (${lang.tag})',
+                      style: const TextStyle(fontSize: 13),
+                    ),
+                  );
+                }).toList(),
+                onChanged: (val) {
+                  if (val != null) {
+                    setState(() => _spellCheckLanguage = val);
+                    widget.controller.setSpellCheckLanguage(val);
+                  }
+                },
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 20),
+
+          const Text(
+            'Custom Dictionary',
+            style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Words you have added via the editor context menu.',
+            style: TextStyle(fontSize: 11.5, color: mutedColor),
+          ),
+          const SizedBox(height: 10),
+
+          if (customWords.isEmpty)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                border: Border.all(color: borderColor),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                'No custom words added yet. Right-click a underlined word in the editor and choose "Add to dictionary".',
+                style: TextStyle(fontSize: 12, color: mutedColor),
+              ),
+            )
+          else
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: customWords.map((word) {
+                return Chip(
+                  label: Text(word, style: const TextStyle(fontSize: 12)),
+                  deleteIcon: const Icon(Icons.close, size: 14),
+                  onDeleted: () {
+                    setState(() {});
+                    widget.controller.removeWordFromDictionary(word);
+                  },
+                );
+              }).toList(),
+            ),
         ],
       ),
     );

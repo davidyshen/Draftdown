@@ -90,9 +90,11 @@ class CitationItem {
       if (rawAuthor.isNotEmpty) {
         final formattedAuthor = rawAuthor
             .split('-')
-            .map((part) => part.isNotEmpty
-                ? '${part[0].toUpperCase()}${part.substring(1)}'
-                : '')
+            .map(
+              (part) => part.isNotEmpty
+                  ? '${part[0].toUpperCase()}${part.substring(1)}'
+                  : '',
+            )
             .join('-');
         if (prefix.length > rawAuthor.length) {
           return '$formattedAuthor et al.';
@@ -101,16 +103,17 @@ class CitationItem {
       }
     }
 
-    final cleanAlpha = clean.split(_nonAlphaDashRegex).firstWhere(
-          (s) => s.isNotEmpty,
-          orElse: () => clean,
-        );
+    final cleanAlpha = clean
+        .split(_nonAlphaDashRegex)
+        .firstWhere((s) => s.isNotEmpty, orElse: () => clean);
     if (cleanAlpha.isNotEmpty) {
       return cleanAlpha
           .split('-')
-          .map((part) => part.isNotEmpty
-              ? '${part[0].toUpperCase()}${part.substring(1)}'
-              : '')
+          .map(
+            (part) => part.isNotEmpty
+                ? '${part[0].toUpperCase()}${part.substring(1)}'
+                : '',
+          )
           .join('-');
     }
     return clean;
@@ -125,7 +128,8 @@ class CitationItem {
       if (authors.length == 1) {
         result = extractSurname(authors.first);
       } else if (authors.length == 2) {
-        result = '${extractSurname(authors[0])} & ${extractSurname(authors[1])}';
+        result =
+            '${extractSurname(authors[0])} & ${extractSurname(authors[1])}';
       } else {
         result = '${extractSurname(authors.first)} et al.';
       }
@@ -215,7 +219,14 @@ class CitationItem {
     // C
     'ç': 'c', 'ć': 'c', 'ĉ': 'c', 'ċ': 'c', 'č': 'c', 'ḉ': 'c',
     // D
-    'ð': 'd', 'ď': 'd', 'đ': 'd', 'ḋ': 'd', 'ḍ': 'd', 'ḏ': 'd', 'ḑ': 'd', 'ḓ': 'd',
+    'ð': 'd',
+    'ď': 'd',
+    'đ': 'd',
+    'ḋ': 'd',
+    'ḍ': 'd',
+    'ḏ': 'd',
+    'ḑ': 'd',
+    'ḓ': 'd',
     // E
     'è': 'e', 'é': 'e', 'ê': 'e', 'ë': 'e', 'ē': 'e', 'ĕ': 'e', 'ė': 'e',
     'ę': 'e', 'ě': 'e', 'ȅ': 'e', 'ȇ': 'e', 'ȩ': 'e', 'ḙ': 'e', 'ḛ': 'e',
@@ -224,7 +235,14 @@ class CitationItem {
     // F
     'ḟ': 'f',
     // G
-    'ĝ': 'g', 'ğ': 'g', 'ġ': 'g', 'ģ': 'g', 'ǥ': 'g', 'ǧ': 'g', 'ǵ': 'g', 'ḡ': 'g',
+    'ĝ': 'g',
+    'ğ': 'g',
+    'ġ': 'g',
+    'ģ': 'g',
+    'ǥ': 'g',
+    'ǧ': 'g',
+    'ǵ': 'g',
+    'ḡ': 'g',
     // H
     'ĥ': 'h', 'ħ': 'h', 'ḣ': 'h', 'ḥ': 'h', 'ḧ': 'h', 'ḩ': 'h', 'ḫ': 'h',
     // I
@@ -259,7 +277,14 @@ class CitationItem {
     'ś': 's', 'ŝ': 's', 'ş': 's', 'š': 's', 'ș': 's', 'ṡ': 's', 'ṣ': 's',
     'ṥ': 's', 'ṧ': 's', 'ṩ': 's', 'ß': 'ss',
     // T
-    'ţ': 't', 'ť': 't', 'ŧ': 't', 'ț': 't', 'ṫ': 't', 'ṭ': 't', 'ṯ': 't', 'ṱ': 't',
+    'ţ': 't',
+    'ť': 't',
+    'ŧ': 't',
+    'ț': 't',
+    'ṫ': 't',
+    'ṭ': 't',
+    'ṯ': 't',
+    'ṱ': 't',
     // TH
     'þ': 'th',
     // U
@@ -396,7 +421,9 @@ class CitationItem {
 
     final buffer = StringBuffer();
     buffer.writeln('@$type{$cleanKey,');
-    buffer.writeln('  title = {${title.replaceAll('{', '').replaceAll('}', '')}},');
+    buffer.writeln(
+      '  title = {${title.replaceAll('{', '').replaceAll('}', '')}},',
+    );
 
     if (authors.isNotEmpty) {
       buffer.writeln('  author = {${authors.join(' and ')}},');
@@ -427,8 +454,10 @@ class CitationItem {
     }
 
     if (abstractText != null && abstractText!.trim().isNotEmpty) {
-      final cleanAbstract =
-          abstractText!.trim().replaceAll('{', '').replaceAll('}', '');
+      final cleanAbstract = abstractText!
+          .trim()
+          .replaceAll('{', '')
+          .replaceAll('}', '');
       buffer.writeln('  abstract = {$cleanAbstract},');
     }
 
@@ -515,7 +544,8 @@ class CitationItem {
     return CitationItem(
       key: json['key'] as String? ?? 'citation',
       title: json['title'] as String? ?? 'Untitled',
-      authors: (json['authors'] as List<dynamic>?)
+      authors:
+          (json['authors'] as List<dynamic>?)
               ?.map((e) => e.toString())
               .toList() ??
           const [],
@@ -567,17 +597,20 @@ class DetectedCitation {
     this.locator,
   });
 
-  static final RegExp _bracketCiteKeyRegex =
-      RegExp(r'(-?@[a-zA-Z0-9_\-:#\/]+)');
-  static final RegExp _locatorInBracketRegex =
-      RegExp(r',\s*([^;@\]]+)(?:;|$)');
-  static final RegExp _inTextCitationLineRegex =
-      RegExp(r'(?<![\w@])@([a-zA-Z0-9_\-:#\/]+)(?:\s*\[([^\]]+)\])?');
+  static final RegExp _bracketCiteKeyRegex = RegExp(
+    r'(-?@[a-zA-Z0-9_\-:#\/]+)',
+  );
+  static final RegExp _locatorInBracketRegex = RegExp(r',\s*([^;@\]]+)(?:;|$)');
+  static final RegExp _inTextCitationLineRegex = RegExp(
+    r'(?<![\w@])@([a-zA-Z0-9_\-:#\/]+)(?:\s*\[([^\]]+)\])?',
+  );
   static final RegExp _extractBracketRegex = RegExp(r'\[([^\]]*@[^\]]+)\]');
-  static final RegExp _extractKeyInBracketRegex =
-      RegExp(r'(-?@([a-zA-Z0-9_\-:#\/]+))');
-  static final RegExp _extractInTextRegex =
-      RegExp(r'(?<![\w@])@([a-zA-Z0-9_\-:#\/]+)');
+  static final RegExp _extractKeyInBracketRegex = RegExp(
+    r'(-?@([a-zA-Z0-9_\-:#\/]+))',
+  );
+  static final RegExp _extractInTextRegex = RegExp(
+    r'(?<![\w@])@([a-zA-Z0-9_\-:#\/]+)',
+  );
 
   /// Scan the text around [cursor] to detect if it sits within a citation.
   static DetectedCitation? findAt(String text, int cursor) {
@@ -585,9 +618,11 @@ class DetectedCitation {
 
     // 1. Check if cursor is inside or adjacent to a bracketed citation [...]
     int openBracket = -1;
-    for (int i = (cursor < text.length ? cursor : text.length - 1);
-        i >= 0 && i >= cursor - 500;
-        i--) {
+    for (
+      int i = (cursor < text.length ? cursor : text.length - 1);
+      i >= 0 && i >= cursor - 500;
+      i--
+    ) {
       final code = text.codeUnitAt(i);
       if (code == 10) break; // '\n'
       if (code == 93) {
@@ -607,7 +642,11 @@ class DetectedCitation {
 
     if (openBracket != -1) {
       int closeBracket = -1;
-      for (int i = openBracket; i < text.length && i <= openBracket + 500; i++) {
+      for (
+        int i = openBracket;
+        i < text.length && i <= openBracket + 500;
+        i++
+      ) {
         final code = text.codeUnitAt(i);
         if (code == 10) break; // '\n'
         if (code == 93) {
@@ -620,7 +659,8 @@ class DetectedCitation {
       if (closeBracket != -1 &&
           cursor >= openBracket &&
           cursor <= closeBracket + 1) {
-        final isLink = closeBracket + 1 < text.length &&
+        final isLink =
+            closeBracket + 1 < text.length &&
             text.codeUnitAt(closeBracket + 1) == 40; // '('
         if (!isLink) {
           final content = text.substring(openBracket + 1, closeBracket);

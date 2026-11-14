@@ -1,6 +1,8 @@
 import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
 import '../../controllers/editor_controller.dart';
 import '../../models/citation_item.dart';
 import '../theme/app_theme.dart';
@@ -49,10 +51,10 @@ class _CitationDialogState extends State<CitationDialog> {
 
   CitationItem? get _selectedItem =>
       (_availableItems.isNotEmpty &&
-              _highlightedIndex >= 0 &&
-              _highlightedIndex < _availableItems.length)
-          ? _availableItems[_highlightedIndex]
-          : null;
+          _highlightedIndex >= 0 &&
+          _highlightedIndex < _availableItems.length)
+      ? _availableItems[_highlightedIndex]
+      : null;
 
   bool _inTextCitation = false;
   bool _suppressAuthor = false;
@@ -65,8 +67,8 @@ class _CitationDialogState extends State<CitationDialog> {
     _activeSource = widget.controller.citationSource;
     _activeCitationStyle = widget.controller.citationStyle;
     _searchFocusNode.onKeyEvent = _handleKeyEvent;
-    _editingCitation = widget.initialCitation ??
-        widget.controller.getCitationAtCursor();
+    _editingCitation =
+        widget.initialCitation ?? widget.controller.getCitationAtCursor();
     if (_editingCitation != null) {
       _inTextCitation = _editingCitation!.inText;
       _suppressAuthor = _editingCitation!.suppressAuthor;
@@ -154,8 +156,10 @@ class _CitationDialogState extends State<CitationDialog> {
       );
     } else if (targetOffset + itemHeight > currentOffset + viewportHeight) {
       _listScrollController.animateTo(
-        (targetOffset + itemHeight - viewportHeight)
-            .clamp(0.0, _listScrollController.position.maxScrollExtent),
+        (targetOffset + itemHeight - viewportHeight).clamp(
+          0.0,
+          _listScrollController.position.maxScrollExtent,
+        ),
         duration: const Duration(milliseconds: 60),
         curve: Curves.easeOut,
       );
@@ -249,11 +253,8 @@ class _CitationDialogState extends State<CitationDialog> {
       final cleanKey = key.trim();
       CitationItem? found =
           widget.controller.bibliographyService.findByKey(cleanKey) ??
-              widget.controller.zoteroService.findByKey(cleanKey);
-      found ??= CitationItem(
-        key: cleanKey,
-        title: 'Citation: @$cleanKey',
-      );
+          widget.controller.zoteroService.findByKey(cleanKey);
+      found ??= CitationItem(key: cleanKey, title: 'Citation: @$cleanKey');
 
       if (!_selectedCitations.contains(found)) {
         _selectedCitations.add(found);
@@ -313,8 +314,10 @@ class _CitationDialogState extends State<CitationDialog> {
         if (items.length == 1) {
           return '[1$locStr]';
         }
-        final nums =
-            List.generate(items.length, (idx) => '${idx + 1}').join(', ');
+        final nums = List.generate(
+          items.length,
+          (idx) => '${idx + 1}',
+        ).join(', ');
         return '[$nums$locStr]';
       }
     } else {
@@ -399,22 +402,18 @@ class _CitationDialogState extends State<CitationDialog> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final borderColor =
-        isDark ? AppTheme.darkBorder : AppTheme.lightBorder;
-    final surfaceColor =
-        isDark ? AppTheme.darkSurface : AppTheme.lightSurface;
-    final mutedColor =
-        isDark ? AppTheme.darkTextMuted : AppTheme.lightTextMuted;
+    final borderColor = isDark ? AppTheme.darkBorder : AppTheme.lightBorder;
+    final surfaceColor = isDark ? AppTheme.darkSurface : AppTheme.lightSurface;
+    final mutedColor = isDark
+        ? AppTheme.darkTextMuted
+        : AppTheme.lightTextMuted;
     final isZoteroConnected = widget.controller.isZoteroConnected;
 
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       backgroundColor: surfaceColor,
       child: ConstrainedBox(
-        constraints: const BoxConstraints(
-          maxWidth: 820,
-          maxHeight: 620,
-        ),
+        constraints: const BoxConstraints(maxWidth: 820, maxHeight: 620),
         child: Padding(
           padding: const EdgeInsets.all(20.0),
           child: Column(
@@ -423,15 +422,20 @@ class _CitationDialogState extends State<CitationDialog> {
               // Header row
               Row(
                 children: [
-                  Icon(Icons.format_quote,
-                      color: theme.colorScheme.primary, size: 22),
+                  Icon(
+                    Icons.format_quote,
+                    color: theme.colorScheme.primary,
+                    size: 22,
+                  ),
                   const SizedBox(width: 8),
                   Text(
                     _editingCitation != null
                         ? 'Edit Literature Citation'
                         : 'Insert Literature Citation',
                     style: const TextStyle(
-                        fontSize: 17, fontWeight: FontWeight.bold),
+                      fontSize: 17,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   const Spacer(),
                   IconButton(
@@ -477,7 +481,9 @@ class _CitationDialogState extends State<CitationDialog> {
                         height: 7,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          color: isZoteroConnected ? Colors.green : Colors.amber,
+                          color: isZoteroConnected
+                              ? Colors.green
+                              : Colors.amber,
                         ),
                       ),
                     ),
@@ -493,9 +499,9 @@ class _CitationDialogState extends State<CitationDialog> {
                         label: Text(
                           widget.controller.bibliographyPath != null
                               ? File(widget.controller.bibliographyPath!)
-                                  .uri
-                                  .pathSegments
-                                  .last
+                                    .uri
+                                    .pathSegments
+                                    .last
                               : 'Change .bib',
                           style: const TextStyle(fontSize: 11.5),
                         ),
@@ -515,7 +521,9 @@ class _CitationDialogState extends State<CitationDialog> {
                           if (isZoteroConnected)
                             Container(
                               padding: const EdgeInsets.symmetric(
-                                  horizontal: 6, vertical: 2),
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
                               margin: const EdgeInsets.only(right: 6),
                               decoration: BoxDecoration(
                                 color: Colors.green.withValues(alpha: 0.12),
@@ -543,8 +551,10 @@ class _CitationDialogState extends State<CitationDialog> {
                                     ),
                                   )
                                 : const Icon(Icons.refresh, size: 14),
-                            label: const Text('Refresh',
-                                style: TextStyle(fontSize: 11.5)),
+                            label: const Text(
+                              'Refresh',
+                              style: TextStyle(fontSize: 11.5),
+                            ),
                             onPressed: _isCheckingConnection
                                 ? null
                                 : _retryZoteroConnection,
@@ -608,10 +618,14 @@ class _CitationDialogState extends State<CitationDialog> {
               ),
 
               // Offline notice banner if Zotero is selected and disconnected
-              if (_activeSource == CitationSource.zotero && !isZoteroConnected) ...[
+              if (_activeSource == CitationSource.zotero &&
+                  !isZoteroConnected) ...[
                 const SizedBox(height: 10),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.amber.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(6),
@@ -621,14 +635,20 @@ class _CitationDialogState extends State<CitationDialog> {
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.info_outline, color: Colors.amber, size: 16),
+                      const Icon(
+                        Icons.info_outline,
+                        color: Colors.amber,
+                        size: 16,
+                      ),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           'Zotero desktop is not responding on 127.0.0.1:23119. Showing cached references with Zotero citekeys. Start Zotero with Better BibTeX to search live.',
                           style: TextStyle(
                             fontSize: 11.5,
-                            color: isDark ? Colors.amber[200] : Colors.brown[800],
+                            color: isDark
+                                ? Colors.amber[200]
+                                : Colors.brown[800],
                           ),
                         ),
                       ),
@@ -639,8 +659,10 @@ class _CitationDialogState extends State<CitationDialog> {
                           padding: const EdgeInsets.symmetric(horizontal: 8),
                         ),
                         onPressed: _retryZoteroConnection,
-                        child: const Text('Check Connection',
-                            style: TextStyle(fontSize: 11)),
+                        child: const Text(
+                          'Check Connection',
+                          style: TextStyle(fontSize: 11),
+                        ),
                       ),
                     ],
                   ),
@@ -652,20 +674,24 @@ class _CitationDialogState extends State<CitationDialog> {
               // Selected Citations Basket (if any citations have been added)
               if (_selectedCitations.isNotEmpty) ...[
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: theme.colorScheme.primary.withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
-                      color:
-                          theme.colorScheme.primary.withValues(alpha: 0.25),
+                      color: theme.colorScheme.primary.withValues(alpha: 0.25),
                     ),
                   ),
                   child: Row(
                     children: [
-                      Icon(Icons.collections_bookmark_outlined,
-                          size: 16, color: theme.colorScheme.primary),
+                      Icon(
+                        Icons.collections_bookmark_outlined,
+                        size: 16,
+                        color: theme.colorScheme.primary,
+                      ),
                       const SizedBox(width: 8),
                       Text(
                         'Selected (${_selectedCitations.length}):',
@@ -689,12 +715,14 @@ class _CitationDialogState extends State<CitationDialog> {
                                       MaterialTapTargetSize.shrinkWrap,
                                   padding: EdgeInsets.zero,
                                   labelPadding: const EdgeInsets.symmetric(
-                                      horizontal: 6),
+                                    horizontal: 6,
+                                  ),
                                   backgroundColor: theme.colorScheme.primary
                                       .withValues(alpha: 0.15),
                                   side: BorderSide(
-                                    color: theme.colorScheme.primary
-                                        .withValues(alpha: 0.3),
+                                    color: theme.colorScheme.primary.withValues(
+                                      alpha: 0.3,
+                                    ),
                                   ),
                                   label: Text(
                                     '@${item.key}',
@@ -732,8 +760,10 @@ class _CitationDialogState extends State<CitationDialog> {
                           });
                           _searchFocusNode.requestFocus();
                         },
-                        child: const Text('Clear all',
-                            style: TextStyle(fontSize: 11)),
+                        child: const Text(
+                          'Clear all',
+                          style: TextStyle(fontSize: 11),
+                        ),
                       ),
                     ],
                   ),
@@ -749,8 +779,8 @@ class _CitationDialogState extends State<CitationDialog> {
                 decoration: InputDecoration(
                   hintText: _selectedCitations.isEmpty
                       ? (_activeSource == CitationSource.bibtex
-                          ? 'Search .bib database (↑/↓ to navigate, Enter to select)...'
-                          : 'Search Zotero library (↑/↓ to navigate, Enter to select)...')
+                            ? 'Search .bib database (↑/↓ to navigate, Enter to select)...'
+                            : 'Search Zotero library (↑/↓ to navigate, Enter to select)...')
                       : 'Type to search another citation, or press Enter to insert (${_selectedCitations.length} selected)...',
                   prefixIcon: const Icon(Icons.search, size: 18),
                   suffixIcon: _searchController.text.isNotEmpty
@@ -775,8 +805,10 @@ class _CitationDialogState extends State<CitationDialog> {
                     borderRadius: BorderRadius.circular(8),
                     borderSide: BorderSide(color: borderColor),
                   ),
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 10,
+                  ),
                 ),
                 onChanged: _onSearch,
                 onSubmitted: (_) => _onEnterPressed(),
@@ -809,8 +841,8 @@ class _CitationDialogState extends State<CitationDialog> {
                                           _filteredItems.isNotEmpty
                                       ? 'All matching references are in Selected Citations.\nPress Enter to insert into text.'
                                       : (_activeSource == CitationSource.bibtex
-                                          ? 'No references found in .bib database.\nTry a different search or load a .bib file.'
-                                          : 'No references found in Zotero.\nTry a different query or check your connection.'),
+                                            ? 'No references found in .bib database.\nTry a different search or load a .bib file.'
+                                            : 'No references found in Zotero.\nTry a different query or check your connection.'),
                                   textAlign: TextAlign.center,
                                   style: TextStyle(
                                     fontSize: 12,
@@ -836,11 +868,13 @@ class _CitationDialogState extends State<CitationDialog> {
                                     },
                                     child: Container(
                                       padding: const EdgeInsets.symmetric(
-                                          horizontal: 12, vertical: 8),
+                                        horizontal: 12,
+                                        vertical: 8,
+                                      ),
                                       decoration: BoxDecoration(
                                         color: isHighlighted
                                             ? theme.colorScheme.primary
-                                                .withValues(alpha: 0.12)
+                                                  .withValues(alpha: 0.12)
                                             : Colors.transparent,
                                         border: Border(
                                           left: isHighlighted
@@ -851,8 +885,9 @@ class _CitationDialogState extends State<CitationDialog> {
                                                 )
                                               : BorderSide.none,
                                           bottom: BorderSide(
-                                            color: borderColor
-                                                .withValues(alpha: 0.5),
+                                            color: borderColor.withValues(
+                                              alpha: 0.5,
+                                            ),
                                           ),
                                         ),
                                       ),
@@ -869,18 +904,22 @@ class _CitationDialogState extends State<CitationDialog> {
                                                   children: [
                                                     Flexible(
                                                       child: Container(
-                                                        padding: const EdgeInsets
-                                                            .symmetric(
-                                                            horizontal: 6,
-                                                            vertical: 2),
+                                                        padding:
+                                                            const EdgeInsets.symmetric(
+                                                              horizontal: 6,
+                                                              vertical: 2,
+                                                            ),
                                                         decoration: BoxDecoration(
                                                           color: theme
-                                                              .colorScheme.primary
+                                                              .colorScheme
+                                                              .primary
                                                               .withValues(
-                                                                  alpha: 0.15),
+                                                                alpha: 0.15,
+                                                              ),
                                                           borderRadius:
                                                               BorderRadius.circular(
-                                                                  4),
+                                                                4,
+                                                              ),
                                                         ),
                                                         child: Text(
                                                           '@${item.key}',
@@ -947,7 +986,8 @@ class _CitationDialogState extends State<CitationDialog> {
                                                   .withValues(alpha: 0.7),
                                             ),
                                             splashRadius: 14,
-                                            tooltip: 'Add to selected citations',
+                                            tooltip:
+                                                'Add to selected citations',
                                             onPressed: () =>
                                                 _toggleCitation(item),
                                           ),
@@ -984,20 +1024,25 @@ class _CitationDialogState extends State<CitationDialog> {
                                       if (_selectedCitations.isNotEmpty) ...[
                                         Container(
                                           padding: const EdgeInsets.symmetric(
-                                              horizontal: 10, vertical: 4),
+                                            horizontal: 10,
+                                            vertical: 4,
+                                          ),
                                           decoration: BoxDecoration(
                                             color: theme.colorScheme.primary
                                                 .withValues(alpha: 0.12),
-                                            borderRadius:
-                                                BorderRadius.circular(4),
+                                            borderRadius: BorderRadius.circular(
+                                              4,
+                                            ),
                                           ),
                                           child: Row(
                                             mainAxisSize: MainAxisSize.min,
                                             children: [
-                                              Icon(Icons.check_circle_outline,
-                                                  size: 14,
-                                                  color: theme
-                                                      .colorScheme.primary),
+                                              Icon(
+                                                Icons.check_circle_outline,
+                                                size: 14,
+                                                color:
+                                                    theme.colorScheme.primary,
+                                              ),
                                               const SizedBox(width: 6),
                                               Text(
                                                 '${_selectedCitations.length} citation${_selectedCitations.length > 1 ? "s" : ""} selected',
@@ -1036,25 +1081,28 @@ class _CitationDialogState extends State<CitationDialog> {
                                           padding: const EdgeInsets.all(6),
                                           decoration: BoxDecoration(
                                             color: isDark
-                                                ? Colors.black
-                                                    .withValues(alpha: 0.3)
+                                                ? Colors.black.withValues(
+                                                    alpha: 0.3,
+                                                  )
                                                 : Colors.white,
-                                            border:
-                                                Border.all(color: borderColor),
-                                            borderRadius:
-                                                BorderRadius.circular(4),
+                                            border: Border.all(
+                                              color: borderColor,
+                                            ),
+                                            borderRadius: BorderRadius.circular(
+                                              4,
+                                            ),
                                           ),
                                           child: Text(
                                             CitationItem.formatMultiple(
                                               _selectedCitations,
                                               inText: _inTextCitation,
                                               suppressAuthor: _suppressAuthor,
-                                              locator: _locatorController
-                                                      .text
+                                              locator:
+                                                  _locatorController.text
                                                       .trim()
                                                       .isNotEmpty
                                                   ? _locatorController.text
-                                                      .trim()
+                                                        .trim()
                                                   : null,
                                             ),
                                             textAlign: TextAlign.center,
@@ -1084,14 +1132,17 @@ class _CitationDialogState extends State<CitationDialog> {
                                             color: theme.colorScheme.primary
                                                 .withValues(alpha: 0.08),
                                             border: Border.all(
-                                                color: theme.colorScheme.primary
-                                                    .withValues(alpha: 0.25)),
-                                            borderRadius:
-                                                BorderRadius.circular(4),
+                                              color: theme.colorScheme.primary
+                                                  .withValues(alpha: 0.25),
+                                            ),
+                                            borderRadius: BorderRadius.circular(
+                                              4,
+                                            ),
                                           ),
                                           child: Text(
                                             _formatRenderPreview(
-                                                _selectedCitations),
+                                              _selectedCitations,
+                                            ),
                                             textAlign: TextAlign.center,
                                             style: TextStyle(
                                               fontFamily:
@@ -1103,16 +1154,21 @@ class _CitationDialogState extends State<CitationDialog> {
                                           ),
                                         ),
                                       ] else ...[
-                                        Icon(Icons.touch_app_outlined,
-                                            size: 28,
-                                            color: mutedColor
-                                                .withValues(alpha: 0.6)),
+                                        Icon(
+                                          Icons.touch_app_outlined,
+                                          size: 28,
+                                          color: mutedColor.withValues(
+                                            alpha: 0.6,
+                                          ),
+                                        ),
                                         const SizedBox(height: 8),
                                         Text(
                                           'Use ↓ arrow or type to search and select a reference',
                                           textAlign: TextAlign.center,
                                           style: TextStyle(
-                                              fontSize: 12, color: mutedColor),
+                                            fontSize: 12,
+                                            color: mutedColor,
+                                          ),
                                         ),
                                       ],
                                     ],
@@ -1127,27 +1183,41 @@ class _CitationDialogState extends State<CitationDialog> {
                                       children: [
                                         Container(
                                           padding: const EdgeInsets.symmetric(
-                                              horizontal: 6, vertical: 2),
+                                            horizontal: 6,
+                                            vertical: 2,
+                                          ),
                                           decoration: BoxDecoration(
-                                            color: _activeSource == CitationSource.zotero
-                                                ? Colors.purple.withValues(alpha: 0.15)
-                                                : Colors.blue.withValues(alpha: 0.15),
-                                            borderRadius: BorderRadius.circular(4),
+                                            color:
+                                                _activeSource ==
+                                                    CitationSource.zotero
+                                                ? Colors.purple.withValues(
+                                                    alpha: 0.15,
+                                                  )
+                                                : Colors.blue.withValues(
+                                                    alpha: 0.15,
+                                                  ),
+                                            borderRadius: BorderRadius.circular(
+                                              4,
+                                            ),
                                           ),
                                           child: Text(
-                                            _activeSource == CitationSource.zotero
+                                            _activeSource ==
+                                                    CitationSource.zotero
                                                 ? 'Zotero Item'
                                                 : 'BibTeX (.bib)',
                                             style: TextStyle(
                                               fontSize: 10,
                                               fontWeight: FontWeight.bold,
-                                              color: _activeSource == CitationSource.zotero
+                                              color:
+                                                  _activeSource ==
+                                                      CitationSource.zotero
                                                   ? Colors.purple
                                                   : Colors.blue,
                                             ),
                                           ),
                                         ),
-                                        if (_selectedItem!.itemType != null) ...[
+                                        if (_selectedItem!.itemType !=
+                                            null) ...[
                                           const SizedBox(width: 6),
                                           Flexible(
                                             child: Text(
@@ -1204,7 +1274,8 @@ class _CitationDialogState extends State<CitationDialog> {
                                       ),
                                     ],
                                     const Divider(height: 18),
-                                    if (_selectedItem!.abstractText != null) ...[
+                                    if (_selectedItem!.abstractText !=
+                                        null) ...[
                                       const Text(
                                         'Abstract',
                                         style: TextStyle(
@@ -1238,10 +1309,14 @@ class _CitationDialogState extends State<CitationDialog> {
                                     const SizedBox(height: 4),
                                     Container(
                                       padding: const EdgeInsets.symmetric(
-                                          horizontal: 8, vertical: 4),
+                                        horizontal: 8,
+                                        vertical: 4,
+                                      ),
                                       decoration: BoxDecoration(
                                         color: isDark
-                                            ? Colors.black.withValues(alpha: 0.3)
+                                            ? Colors.black.withValues(
+                                                alpha: 0.3,
+                                              )
                                             : Colors.white,
                                         border: Border.all(color: borderColor),
                                         borderRadius: BorderRadius.circular(4),
@@ -1252,22 +1327,28 @@ class _CitationDialogState extends State<CitationDialog> {
                                                 _selectedCitations,
                                                 inText: _inTextCitation,
                                                 suppressAuthor: _suppressAuthor,
-                                                locator: _locatorController.text
+                                                locator:
+                                                    _locatorController.text
                                                         .trim()
                                                         .isNotEmpty
-                                                    ? _locatorController.text.trim()
+                                                    ? _locatorController.text
+                                                          .trim()
                                                     : null,
                                               )
                                             : (_selectedItem?.toPandocCitation(
                                                     inText: _inTextCitation,
-                                                    suppressAuthor: _suppressAuthor,
-                                                    locator: _locatorController.text
+                                                    suppressAuthor:
+                                                        _suppressAuthor,
+                                                    locator:
+                                                        _locatorController.text
                                                             .trim()
                                                             .isNotEmpty
-                                                        ? _locatorController.text.trim()
+                                                        ? _locatorController
+                                                              .text
+                                                              .trim()
                                                         : null,
                                                   ) ??
-                                                ''),
+                                                  ''),
                                         style: TextStyle(
                                           fontFamily: AppTheme.editorFontFamily,
                                           fontSize: 12,
@@ -1288,23 +1369,28 @@ class _CitationDialogState extends State<CitationDialog> {
                                     Container(
                                       width: double.infinity,
                                       padding: const EdgeInsets.symmetric(
-                                          horizontal: 8, vertical: 4),
+                                        horizontal: 8,
+                                        vertical: 4,
+                                      ),
                                       decoration: BoxDecoration(
                                         color: theme.colorScheme.primary
                                             .withValues(alpha: 0.08),
                                         border: Border.all(
-                                            color: theme.colorScheme.primary
-                                                .withValues(alpha: 0.25)),
+                                          color: theme.colorScheme.primary
+                                              .withValues(alpha: 0.25),
+                                        ),
                                         borderRadius: BorderRadius.circular(4),
                                       ),
                                       child: Text(
                                         _selectedCitations.isNotEmpty
                                             ? _formatRenderPreview(
-                                                _selectedCitations)
+                                                _selectedCitations,
+                                              )
                                             : (_selectedItem != null
-                                                ? _formatRenderPreview(
-                                                    [_selectedItem!])
-                                                : ''),
+                                                  ? _formatRenderPreview([
+                                                      _selectedItem!,
+                                                    ])
+                                                  : ''),
                                         style: TextStyle(
                                           fontFamily: AppTheme.editorFontFamily,
                                           fontSize: 12,
@@ -1333,8 +1419,10 @@ class _CitationDialogState extends State<CitationDialog> {
                       child: Row(
                         children: [
                           FilterChip(
-                            label: const Text('In-text (@key)',
-                                style: TextStyle(fontSize: 11)),
+                            label: const Text(
+                              'In-text (@key)',
+                              style: TextStyle(fontSize: 11),
+                            ),
                             selected: _inTextCitation,
                             onSelected: (val) {
                               setState(() {
@@ -1345,8 +1433,10 @@ class _CitationDialogState extends State<CitationDialog> {
                           ),
                           const SizedBox(width: 8),
                           FilterChip(
-                            label: const Text('Suppress Author ([-@key])',
-                                style: TextStyle(fontSize: 11)),
+                            label: const Text(
+                              'Suppress Author ([-@key])',
+                              style: TextStyle(fontSize: 11),
+                            ),
                             selected: _suppressAuthor,
                             onSelected: (val) {
                               setState(() {
@@ -1366,7 +1456,9 @@ class _CitationDialogState extends State<CitationDialog> {
                                 hintText: 'Page (e.g. p. 42)',
                                 hintStyle: const TextStyle(fontSize: 11),
                                 contentPadding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 6),
+                                  horizontal: 8,
+                                  vertical: 6,
+                                ),
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(6),
                                   borderSide: BorderSide(color: borderColor),
@@ -1392,14 +1484,14 @@ class _CitationDialogState extends State<CitationDialog> {
                     label: Text(
                       _editingCitation != null
                           ? (_selectedCitations.length > 1
-                              ? 'Update Citations (${_selectedCitations.length})'
-                              : 'Update Citation')
+                                ? 'Update Citations (${_selectedCitations.length})'
+                                : 'Update Citation')
                           : (_selectedCitations.length > 1
-                              ? 'Insert Citations (${_selectedCitations.length})'
-                              : 'Insert Citation'),
+                                ? 'Insert Citations (${_selectedCitations.length})'
+                                : 'Insert Citation'),
                     ),
-                    onPressed: (_selectedCitations.isNotEmpty ||
-                            _selectedItem != null)
+                    onPressed:
+                        (_selectedCitations.isNotEmpty || _selectedItem != null)
                         ? _apply
                         : null,
                   ),
@@ -1441,7 +1533,7 @@ class _CitationDialogState extends State<CitationDialog> {
                       color: Colors.black.withValues(alpha: 0.05),
                       blurRadius: 2,
                       offset: const Offset(0, 1),
-                    )
+                    ),
                   ]
                 : null,
           ),
@@ -1503,7 +1595,7 @@ class _CitationDialogState extends State<CitationDialog> {
                       color: Colors.black.withValues(alpha: 0.05),
                       blurRadius: 2,
                       offset: const Offset(0, 1),
-                    )
+                    ),
                   ]
                 : null,
           ),

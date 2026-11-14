@@ -1,6 +1,8 @@
 import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+
 import '../ui/theme/app_theme.dart';
 
 /// Holds the discovered local font families installed on the user's system.
@@ -8,10 +10,7 @@ class InstalledFonts {
   final List<String> allFonts;
   final List<String> monospaceFonts;
 
-  const InstalledFonts({
-    required this.allFonts,
-    required this.monospaceFonts,
-  });
+  const InstalledFonts({required this.allFonts, required this.monospaceFonts});
 }
 
 /// Service for discovering locally installed system fonts without relying on
@@ -74,12 +73,13 @@ class SystemFontService {
   Future<InstalledFonts> _loadInstalledFonts() async {
     try {
       final rawFamilies = await _queryOsFontFamilies();
-      final filtered = rawFamilies
-          .map((f) => f.trim())
-          .where((f) => f.isNotEmpty && !_symbolFontBlacklist.contains(f))
-          .toSet()
-          .toList()
-        ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+      final filtered =
+          rawFamilies
+              .map((f) => f.trim())
+              .where((f) => f.isNotEmpty && !_symbolFontBlacklist.contains(f))
+              .toSet()
+              .toList()
+            ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
 
       if (filtered.isEmpty) {
         return _fallbackFonts();
@@ -112,16 +112,13 @@ class SystemFontService {
     }
 
     if (Platform.isWindows) {
-      final result = await Process.run(
-        'powershell',
-        [
-          '-NoProfile',
-          '-NonInteractive',
-          '-Command',
-          'Add-Type -AssemblyName System.Drawing; '
-              '[System.Drawing.Text.InstalledFontCollection]::new().Families.Name',
-        ],
-      );
+      final result = await Process.run('powershell', [
+        '-NoProfile',
+        '-NonInteractive',
+        '-Command',
+        'Add-Type -AssemblyName System.Drawing; '
+            '[System.Drawing.Text.InstalledFontCollection]::new().Families.Name',
+      ]);
       if (result.exitCode == 0) {
         return parseLineSeparatedFamilies(result.stdout.toString());
       }
@@ -129,16 +126,13 @@ class SystemFontService {
     }
 
     if (Platform.isMacOS) {
-      final result = await Process.run(
-        'osascript',
-        [
-          '-l',
-          'JavaScript',
-          '-e',
-          'ObjC.import("AppKit"); '
-              r'$.NSFontManager.sharedFontManager.availableFontFamilies.js.map(f => f.js).join("\n")',
-        ],
-      );
+      final result = await Process.run('osascript', [
+        '-l',
+        'JavaScript',
+        '-e',
+        'ObjC.import("AppKit"); '
+            r'$.NSFontManager.sharedFontManager.availableFontFamilies.js.map(f => f.js).join("\n")',
+      ]);
       if (result.exitCode == 0) {
         final families = parseLineSeparatedFamilies(result.stdout.toString());
         if (families.isNotEmpty) return families;

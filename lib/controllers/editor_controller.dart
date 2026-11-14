@@ -1,8 +1,11 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:markdown/markdown.dart' as md;
 import 'package:shared_preferences/shared_preferences.dart';
+
 import '../models/citation_item.dart';
 import '../models/export_format.dart';
 import '../models/history_entry.dart';
@@ -12,20 +15,14 @@ import '../services/file_service.dart';
 import '../services/history_service.dart';
 import '../services/markdown_render_service.dart';
 import '../services/pandoc_service.dart';
+import '../services/spell_check_service.dart';
 import '../services/zotero_service.dart';
 import '../ui/theme/app_theme.dart';
 import 'markdown_syntax_controller.dart';
 
-enum EditorViewMode {
-  edit,
-  split,
-  preview,
-}
+enum EditorViewMode { edit, split, preview }
 
-enum CitationSource {
-  bibtex,
-  zotero,
-}
+enum CitationSource { bibtex, zotero }
 
 /// Represents information about a task list checkbox in markdown source.
 class MarkdownCheckboxInfo {
@@ -35,6 +32,43 @@ class MarkdownCheckboxInfo {
   const MarkdownCheckboxInfo({
     required this.charOffset,
     required this.isChecked,
+  });
+}
+
+/// Represents an open document tab held in memory by [EditorController].
+class OpenDocument {
+  String id;
+  String? filePath;
+  String fileName;
+  String content;
+  TextSelection selection;
+  double scrollOffset;
+  bool isModified;
+  String previewMarkdown;
+  Map<String, int> numericIndices;
+  List<md.Node>? astNodes;
+  int wordCount;
+  int charCount;
+  int lineCount;
+  int readingTimeMinutes;
+  CitationStyle citationStyle;
+
+  OpenDocument({
+    required this.id,
+    this.filePath,
+    required this.fileName,
+    this.content = '',
+    this.selection = const TextSelection.collapsed(offset: 0),
+    this.scrollOffset = 0.0,
+    this.isModified = false,
+    this.previewMarkdown = '',
+    this.numericIndices = const {},
+    this.astNodes,
+    this.wordCount = 0,
+    this.charCount = 0,
+    this.lineCount = 1,
+    this.readingTimeMinutes = 1,
+    this.citationStyle = CitationStyle.authorYear,
   });
 }
 
@@ -50,12 +84,16 @@ class EditorController extends ChangeNotifier {
   final PandocService pandocService;
   final ZoteroService zoteroService;
   final DirectExportService directExportService;
+  final SpellCheckService spellCheckService;
 
   SharedPreferences? _prefs;
   Future<SharedPreferences> _getPrefs() async =>
       _prefs ??= await SharedPreferences.getInstance();
 
   // Document state
+  final List<OpenDocument> _openDocuments = [];
+  int _activeDocumentIndex = -1;
+  int _nextUntitledId = 0;
   String? _currentFilePath;
   String _currentFileName = 'Untitled.md';
   bool _isModified = false;
@@ -72,7 +110,7 @@ class EditorController extends ChangeNotifier {
 
   // View state
   EditorViewMode _viewMode = EditorViewMode.split;
-  bool _isSidebarOpen = true;
+  bool _isSidebarOpen = false;
 
   // Bibliography & Zotero state
   String? _bibliographyPath;
@@ -105,6 +143,7 @@ class EditorController extends ChangeNotifier {
   Timer? _debounceTimer;
   int _activeRenderSequence = 0;
   int _completedRenderSequence = 0;
+  int _documentEpoch = 0;
   bool _isBackgroundRendering = false;
   bool? _isProgrammaticUpdate;
   String? _lastObservedText;
@@ -115,6 +154,26 @@ class EditorController extends ChangeNotifier {
   String? get currentFilePath => _currentFilePath;
   String get currentFileName => _currentFileName;
   bool get isModified => _isModified;
+  List<OpenDocument> get openDocuments => List.unmodifiable(_openDocuments);
+  OpenDocument? get activeDocument =>
+      (_activeDocumentIndex >= 0 &&
+          _activeDocumentIndex < _openDocuments.length)
+      ? _openDocuments[_activeDocumentIndex]
+      : null;
+  bool isFileOpen(String path) =>
+      _openDocuments.any((d) => _pathsEqual(d.filePath, path));
+  OpenDocument? openDocumentForPath(String path) {
+    for (final doc in _openDocuments) {
+      if (_pathsEqual(doc.filePath, path)) return doc;
+    }
+    return null;
+  }
+
+  bool isFileModified(String path) {
+    if (_pathsEqual(_currentFilePath, path)) return _isModified;
+    return openDocumentForPath(path)?.isModified ?? false;
+  }
+
   bool get isBackgroundRendering => _isBackgroundRendering;
   bool get isRenderPending =>
       (_debounceTimer?.isActive ?? false) || _isBackgroundRendering;
@@ -152,6 +211,10 @@ class EditorController extends ChangeNotifier {
       AppTheme.schemeById(activeColorSchemeId);
   String get content => textController.text;
   String get previewMarkdown => _previewMarkdown;
+  bool get isSpellCheckEnabled => spellCheckService.isEnabled;
+  String get spellCheckLanguage => spellCheckService.languageTag;
+  Set<String> get customDictionaryWords => spellCheckService.customWords;
+  List<SpellErrorRange> get spellErrors => textController.spellErrors;
 
   EditorController({
     FileService? fileService,
@@ -161,29 +224,34 @@ class EditorController extends ChangeNotifier {
     ZoteroService? zoteroService,
     DirectExportService? directExportService,
     MarkdownRenderService? renderService,
+    SpellCheckService? spellCheckService,
     Duration? renderDebounceDuration,
-  })  : fileService = fileService ?? FileService(),
-        historyService = historyService ?? HistoryService(),
-        bibliographyService = bibliographyService ?? BibliographyService(),
-        pandocService = pandocService ?? PandocService(),
-        zoteroService = zoteroService ?? ZoteroService(),
-        directExportService = directExportService ?? DirectExportService(),
-        _renderService = renderService ?? MarkdownRenderService(),
-        _customRenderDebounce = renderDebounceDuration {
+  }) : fileService = fileService ?? FileService(),
+       historyService = historyService ?? HistoryService(),
+       bibliographyService = bibliographyService ?? BibliographyService(),
+       pandocService = pandocService ?? PandocService(),
+       zoteroService = zoteroService ?? ZoteroService(),
+       directExportService = directExportService ?? DirectExportService(),
+       _renderService = renderService ?? MarkdownRenderService(),
+       spellCheckService = spellCheckService ?? SpellCheckService(),
+       _customRenderDebounce = renderDebounceDuration {
+    textController.spellCheckService = this.spellCheckService;
     _lastObservedText = textController.text;
     textController.addListener(_onTextChanged);
+    _openDocuments.add(
+      OpenDocument(
+        id: 'untitled_${++_nextUntitledId}',
+        fileName: _currentFileName,
+        content: textController.text,
+      ),
+    );
+    _activeDocumentIndex = 0;
   }
 
   /// Initialise controller, check Pandoc & Zotero, load history and preferences
   Future<void> initialise() async {
-    await Future.wait([
-      historyService.loadHistory(),
-      _loadPreferences(),
-    ]);
-    await Future.wait([
-      checkPandocAvailability(),
-      checkZoteroConnection(),
-    ]);
+    await Future.wait([historyService.loadHistory(), _loadPreferences()]);
+    await Future.wait([checkPandocAvailability(), checkZoteroConnection()]);
 
     // Check if there is an active history entry or load welcome document
     if (history.isNotEmpty && File(history.first.path).existsSync()) {
@@ -216,8 +284,10 @@ class EditorController extends ChangeNotifier {
           prefs.getString('draftdown_render_header_font') ?? 'Georgia';
 
       _darkSchemeId =
-          prefs.getString('draftdown_dark_scheme') ?? AppTheme.slateDarkScheme.id;
-      _lightSchemeId = prefs.getString('draftdown_light_scheme') ??
+          prefs.getString('draftdown_dark_scheme') ??
+          AppTheme.slateDarkScheme.id;
+      _lightSchemeId =
+          prefs.getString('draftdown_light_scheme') ??
           AppTheme.slateLightScheme.id;
       _isDarkMode = prefs.getBool('draftdown_dark_mode') ?? false;
 
@@ -228,13 +298,103 @@ class EditorController extends ChangeNotifier {
       if (savedSource == 'zotero') {
         _citationSource = CitationSource.zotero;
       }
-      final savedStyle = prefs.getString('draftdown_citation_style');
-      if (savedStyle == 'numeric') {
-        _citationStyle = CitationStyle.numeric;
-      } else if (savedStyle == 'authorYear') {
-        _citationStyle = CitationStyle.authorYear;
+
+      final spellEnabled = prefs.getBool('draftdown_spellcheck_enabled');
+      if (spellEnabled != null) {
+        spellCheckService.setEnabled(spellEnabled);
       }
+      final spellLang = prefs.getString('draftdown_spellcheck_language');
+      if (spellLang != null && spellLang.isNotEmpty) {
+        spellCheckService.setLanguage(spellLang);
+      }
+      final customWords = prefs.getStringList(
+        'draftdown_spellcheck_custom_words',
+      );
+      if (customWords != null) {
+        spellCheckService.loadCustomWords(customWords);
+      }
+      textController.invalidateSpellCheck();
     } catch (_) {}
+  }
+
+  /// Toggles Markdown spellchecking on or off.
+  Future<void> toggleSpellCheck() => setSpellCheckEnabled(!isSpellCheckEnabled);
+
+  /// Enables or disables Markdown spellchecking and persists the preference.
+  Future<void> setSpellCheckEnabled(bool enabled) async {
+    spellCheckService.setEnabled(enabled);
+    textController.invalidateSpellCheck();
+    notifyListeners();
+    try {
+      final prefs = await _getPrefs();
+      await prefs.setBool('draftdown_spellcheck_enabled', enabled);
+    } catch (_) {}
+  }
+
+  /// Changes the active spellchecker dictionary locale (e.g. `en-GB`, `en-US`).
+  Future<void> setSpellCheckLanguage(String languageTag) async {
+    spellCheckService.setLanguage(languageTag);
+    textController.invalidateSpellCheck();
+    notifyListeners();
+    try {
+      final prefs = await _getPrefs();
+      await prefs.setString('draftdown_spellcheck_language', languageTag);
+    } catch (_) {}
+  }
+
+  /// Adds [word] to the user's persistent custom dictionary.
+  Future<void> addWordToDictionary(String word) async {
+    spellCheckService.addCustomWord(word);
+    textController.invalidateSpellCheck();
+    notifyListeners();
+    try {
+      final prefs = await _getPrefs();
+      await prefs.setStringList(
+        'draftdown_spellcheck_custom_words',
+        spellCheckService.customWords.toList()..sort(),
+      );
+    } catch (_) {}
+  }
+
+  /// Removes [word] from the user's persistent custom dictionary.
+  Future<void> removeWordFromDictionary(String word) async {
+    spellCheckService.removeCustomWord(word);
+    textController.invalidateSpellCheck();
+    notifyListeners();
+    try {
+      final prefs = await _getPrefs();
+      await prefs.setStringList(
+        'draftdown_spellcheck_custom_words',
+        spellCheckService.customWords.toList()..sort(),
+      );
+    } catch (_) {}
+  }
+
+  /// Ignores [word] for the current editing session.
+  void ignoreSpellingWord(String word) {
+    spellCheckService.ignoreWord(word);
+    textController.invalidateSpellCheck();
+    notifyListeners();
+  }
+
+  /// Returns spelling suggestions for [word].
+  List<String> getSpellingSuggestions(String word, {int maxSuggestions = 5}) {
+    return spellCheckService.suggest(word, maxSuggestions: maxSuggestions);
+  }
+
+  /// Replaces a misspelled [error] range with [replacement] in the editor.
+  void replaceSpellingError(SpellErrorRange error, String replacement) {
+    final text = textController.text;
+    if (error.start < 0 || error.end > text.length || error.start > error.end) {
+      return;
+    }
+    final updated = text.replaceRange(error.start, error.end, replacement);
+    textController.value = TextEditingValue(
+      text: updated,
+      selection: TextSelection.collapsed(
+        offset: error.start + replacement.length,
+      ),
+    );
   }
 
   /// Change active citation source (BibTeX file vs. Zotero)
@@ -247,15 +407,63 @@ class EditorController extends ChangeNotifier {
     } catch (_) {}
   }
 
+  static const String _fileCitationStylesKey = 'draftdown_file_citation_styles';
+
+  String _normalizePathKey(String path) =>
+      Platform.isWindows ? path.toLowerCase() : path;
+
+  Future<Map<String, String>> _readFileCitationStylesMap() async {
+    try {
+      final prefs = await _getPrefs();
+      final raw = prefs.getString(_fileCitationStylesKey);
+      if (raw == null || raw.isEmpty) return {};
+      final decoded = jsonDecode(raw);
+      if (decoded is Map) {
+        return decoded.map((k, v) => MapEntry(k.toString(), v.toString()));
+      }
+    } catch (_) {}
+    return {};
+  }
+
+  Future<CitationStyle> _loadFileCitationStyle(String path) async {
+    final map = await _readFileCitationStylesMap();
+    final saved = map[_normalizePathKey(path)];
+    if (saved == CitationStyle.numeric.name) {
+      return CitationStyle.numeric;
+    }
+    return CitationStyle.authorYear;
+  }
+
+  Future<void> _saveFileCitationStyle(String path, CitationStyle style) async {
+    try {
+      final prefs = await _getPrefs();
+      final map = await _readFileCitationStylesMap();
+      map[_normalizePathKey(path)] = style.name;
+      await prefs.setString(_fileCitationStylesKey, jsonEncode(map));
+    } catch (_) {}
+  }
+
+  Future<void> _removeFileCitationStyle(String path) async {
+    try {
+      final prefs = await _getPrefs();
+      final map = await _readFileCitationStylesMap();
+      if (map.remove(_normalizePathKey(path)) != null) {
+        await prefs.setString(_fileCitationStylesKey, jsonEncode(map));
+      }
+    } catch (_) {}
+  }
+
   /// Change active document citation style (Author-Year vs Numeric)
   Future<void> setCitationStyle(CitationStyle style) async {
     if (_citationStyle == style) return;
     _citationStyle = style;
+    activeDocument?.citationStyle = style;
+    flushPendingRenderUpdate();
     notifyListeners();
-    try {
-      final prefs = await _getPrefs();
-      await prefs.setString('draftdown_citation_style', style.name);
-    } catch (_) {}
+    final path = _currentFilePath;
+    if (path != null) {
+      await _saveFileCitationStyle(path, style);
+    }
   }
 
   /// Update editor and render typography settings
@@ -341,6 +549,8 @@ class EditorController extends ChangeNotifier {
       _isModified = true;
       _computeMetrics();
       _previewMarkdown = currentText;
+      activeDocument?.isModified = true;
+      activeDocument?.content = currentText;
       return;
     }
 
@@ -353,6 +563,7 @@ class EditorController extends ChangeNotifier {
 
     if (!_isModified) {
       _isModified = true;
+      activeDocument?.isModified = true;
       notifyListeners();
     }
   }
@@ -366,6 +577,7 @@ class EditorController extends ChangeNotifier {
 
     final snapshotText = textController.text;
     final renderSeq = ++_activeRenderSequence;
+    final renderEpoch = _documentEpoch;
     _isBackgroundRendering = true;
 
     final allCitations = [...citations, ...zoteroCitations];
@@ -376,60 +588,70 @@ class EditorController extends ChangeNotifier {
       citationStyle: _citationStyle,
     );
 
-    _renderService.render(payload).then((result) {
-      // Discard if a newer render has already completed
-      if (result.renderId < _completedRenderSequence) {
-        return;
-      }
+    _renderService
+        .render(payload)
+        .then((result) {
+          // Discard if a newer render has already completed or tab changed
+          if (renderEpoch != _documentEpoch ||
+              result.renderId < _completedRenderSequence) {
+            return;
+          }
 
-      void applyResult() {
-        if (result.renderId >= _completedRenderSequence) {
-          _completedRenderSequence = result.renderId;
-          _numericIndices = result.numericIndices;
-          _astNodes = result.astNodes;
-          _previewMarkdown = result.processedMarkdown;
-          _wordCount = result.wordCount;
-          _lineCount = result.lineCount;
-          _readingTimeMinutes = result.readingTimeMinutes;
-          _isBackgroundRendering = false;
-          previewNotifier.value = result.processedMarkdown;
-          notifyListeners();
-        }
-      }
+          void applyResult() {
+            if (renderEpoch == _documentEpoch &&
+                result.renderId >= _completedRenderSequence) {
+              _completedRenderSequence = result.renderId;
+              _numericIndices = result.numericIndices;
+              _astNodes = result.astNodes;
+              _previewMarkdown = result.processedMarkdown;
+              _wordCount = result.wordCount;
+              _lineCount = result.lineCount;
+              _readingTimeMinutes = result.readingTimeMinutes;
+              _isBackgroundRendering = false;
+              previewNotifier.value = result.processedMarkdown;
+              notifyListeners();
+            }
+          }
 
-      // If user typed new text while background render was running,
-      // silently record cached values without interrupting active typing.
-      if (_debounceTimer?.isActive == true) {
-        _completedRenderSequence = result.renderId;
-        _numericIndices = result.numericIndices;
-        _astNodes = result.astNodes;
-        _previewMarkdown = result.processedMarkdown;
-        _wordCount = result.wordCount;
-        _lineCount = result.lineCount;
-        _readingTimeMinutes = result.readingTimeMinutes;
-        _isBackgroundRendering = false;
-      } else if (scrollController.hasClients &&
-          scrollController.position.isScrollingNotifier.value) {
-        // If user is actively scrolling the editor, defer applying until scroll gesture finishes
-        void onScrollEnd() {
-          if (!scrollController.position.isScrollingNotifier.value) {
-            scrollController.position.isScrollingNotifier.removeListener(onScrollEnd);
+          // If user typed new text while background render was running,
+          // silently record cached values without interrupting active typing.
+          if (_debounceTimer?.isActive == true) {
+            _completedRenderSequence = result.renderId;
+            _numericIndices = result.numericIndices;
+            _astNodes = result.astNodes;
+            _previewMarkdown = result.processedMarkdown;
+            _wordCount = result.wordCount;
+            _lineCount = result.lineCount;
+            _readingTimeMinutes = result.readingTimeMinutes;
+            _isBackgroundRendering = false;
+          } else if (scrollController.hasClients &&
+              scrollController.position.isScrollingNotifier.value) {
+            // If user is actively scrolling the editor, defer applying until scroll gesture finishes
+            void onScrollEnd() {
+              if (!scrollController.position.isScrollingNotifier.value) {
+                scrollController.position.isScrollingNotifier.removeListener(
+                  onScrollEnd,
+                );
+                applyResult();
+              }
+            }
+
+            scrollController.position.isScrollingNotifier.addListener(
+              onScrollEnd,
+            );
+          } else {
             applyResult();
           }
-        }
-        scrollController.position.isScrollingNotifier.addListener(onScrollEnd);
-      } else {
-        applyResult();
-      }
-    }).catchError((_) {
-      if (renderSeq >= _completedRenderSequence) {
-        _completedRenderSequence = renderSeq;
-        _previewMarkdown = snapshotText;
-        _isBackgroundRendering = false;
-        previewNotifier.value = snapshotText;
-        notifyListeners();
-      }
-    });
+        })
+        .catchError((_) {
+          if (renderSeq >= _completedRenderSequence) {
+            _completedRenderSequence = renderSeq;
+            _previewMarkdown = snapshotText;
+            _isBackgroundRendering = false;
+            previewNotifier.value = snapshotText;
+            notifyListeners();
+          }
+        });
   }
 
   /// Manually or automatically flushes any pending debounced render and metrics update.
@@ -495,10 +717,132 @@ class EditorController extends ChangeNotifier {
     _readingTimeMinutes = (_wordCount / 200).ceil().clamp(1, 9999);
   }
 
-  /// Create a new blank Markdown document
-  void newFile() {
+  bool _pathsEqual(String? a, String? b) {
+    if (a == null || b == null) return false;
+    if (Platform.isWindows) {
+      return a.toLowerCase() == b.toLowerCase();
+    }
+    return a == b;
+  }
+
+  void _syncActiveDocumentToStore() {
+    final doc = activeDocument;
+    if (doc == null) return;
+    doc.filePath = _currentFilePath;
+    doc.fileName = _currentFileName;
+    doc.content = textController.text;
+    doc.selection = textController.selection;
+    doc.scrollOffset = scrollController.hasClients
+        ? scrollController.offset
+        : 0.0;
+    doc.isModified = _isModified;
+    doc.previewMarkdown = _previewMarkdown;
+    doc.numericIndices = _numericIndices;
+    doc.astNodes = _astNodes;
+    doc.wordCount = _wordCount;
+    doc.charCount = _charCount;
+    doc.lineCount = _lineCount;
+    doc.readingTimeMinutes = _readingTimeMinutes;
+    doc.citationStyle = _citationStyle;
+  }
+
+  void _loadDocumentFromStore(int index) {
+    _activeDocumentIndex = index;
+    final doc = _openDocuments[index];
     _debounceTimer?.cancel();
     _debounceTimer = null;
+    _documentEpoch++;
+    _isBackgroundRendering = false;
+
+    _currentFilePath = doc.filePath;
+    _currentFileName = doc.fileName;
+    _isProgrammaticUpdate = true;
+    textController.isActivelyTyping = false;
+    final safeBase = doc.selection.baseOffset.clamp(0, doc.content.length);
+    final safeExtent = doc.selection.extentOffset.clamp(0, doc.content.length);
+    textController.value = TextEditingValue(
+      text: doc.content,
+      selection: TextSelection(baseOffset: safeBase, extentOffset: safeExtent),
+    );
+    _isProgrammaticUpdate = false;
+    _lastObservedText = doc.content;
+    _previewMarkdown = doc.previewMarkdown;
+    _numericIndices = doc.numericIndices;
+    _astNodes = doc.astNodes;
+    _wordCount = doc.wordCount;
+    _charCount = doc.charCount;
+    _lineCount = doc.lineCount;
+    _readingTimeMinutes = doc.readingTimeMinutes;
+    _citationStyle = doc.citationStyle;
+    _isModified = doc.isModified;
+    previewNotifier.value = doc.previewMarkdown;
+    textController.invalidateSpellCheck();
+
+    if (scrollController.hasClients) {
+      final maxExtent = scrollController.position.maxScrollExtent;
+      scrollController.jumpTo(doc.scrollOffset.clamp(0.0, maxExtent));
+    }
+  }
+
+  /// Switch to an already-open document tab by its [index].
+  void switchToDocument(int index) {
+    if (index < 0 || index >= _openDocuments.length) return;
+    if (index == _activeDocumentIndex) return;
+
+    if (_debounceTimer?.isActive ?? false) {
+      flushPendingRenderUpdate();
+    }
+    _syncActiveDocumentToStore();
+    _loadDocumentFromStore(index);
+    notifyListeners();
+  }
+
+  /// Switch to an already-open document tab by its [id].
+  void switchToDocumentById(String id) {
+    final index = _openDocuments.indexWhere((d) => d.id == id);
+    if (index != -1) {
+      switchToDocument(index);
+    }
+  }
+
+  /// Close an open document tab by its [id].
+  /// If it is the last open tab, replaces it with a fresh blank document.
+  void closeDocument(String id) {
+    final index = _openDocuments.indexWhere((d) => d.id == id);
+    if (index == -1) return;
+
+    if (_openDocuments.length == 1) {
+      _openDocuments.clear();
+      _activeDocumentIndex = -1;
+      newFile();
+      return;
+    }
+
+    if (index == _activeDocumentIndex) {
+      _openDocuments.removeAt(index);
+      final nextIndex = index >= _openDocuments.length
+          ? _openDocuments.length - 1
+          : index;
+      _loadDocumentFromStore(nextIndex);
+    } else {
+      _openDocuments.removeAt(index);
+      if (index < _activeDocumentIndex) {
+        _activeDocumentIndex--;
+      }
+    }
+    notifyListeners();
+  }
+
+  /// Create a new blank Markdown document tab
+  void newFile() {
+    if (_debounceTimer?.isActive ?? false) {
+      flushPendingRenderUpdate();
+    }
+    _syncActiveDocumentToStore();
+
+    _debounceTimer?.cancel();
+    _debounceTimer = null;
+    _documentEpoch++;
     _currentFilePath = null;
     _currentFileName = 'Untitled.md';
     _isProgrammaticUpdate = true;
@@ -513,24 +857,64 @@ class EditorController extends ChangeNotifier {
     previewNotifier.value = '';
     _computeMetrics();
     _isModified = false;
+    _citationStyle = CitationStyle.authorYear;
     if (scrollController.hasClients) {
       scrollController.jumpTo(0.0);
     }
+
+    final doc = OpenDocument(
+      id: 'untitled_${++_nextUntitledId}',
+      fileName: _currentFileName,
+      content: '',
+      wordCount: _wordCount,
+      charCount: _charCount,
+      lineCount: _lineCount,
+      readingTimeMinutes: _readingTimeMinutes,
+      citationStyle: _citationStyle,
+    );
+    _openDocuments.add(doc);
+    _activeDocumentIndex = _openDocuments.length - 1;
     notifyListeners();
   }
 
-  /// Open a Markdown document from disk
+  /// Open a Markdown document from disk (or switch to its existing tab if already open)
   Future<bool> openFile([String? targetPath]) async {
     final path = targetPath ?? await fileService.pickMarkdownFile();
 
     if (path == null) return false;
 
+    final existingIndex = _openDocuments.indexWhere(
+      (d) => _pathsEqual(d.filePath, path),
+    );
+    if (existingIndex != -1) {
+      switchToDocument(existingIndex);
+      return true;
+    }
+
     try {
       final content = await fileService.readFile(path);
+      final fileCitationStyle = await _loadFileCitationStyle(path);
+
+      if (_debounceTimer?.isActive ?? false) {
+        flushPendingRenderUpdate();
+      }
+      _syncActiveDocumentToStore();
+
+      // Replace a single untouched blank Untitled.md tab on initial open
+      if (_openDocuments.length == 1 &&
+          _openDocuments[0].filePath == null &&
+          !_openDocuments[0].isModified &&
+          _openDocuments[0].content.isEmpty) {
+        _openDocuments.clear();
+        _activeDocumentIndex = -1;
+      }
+
       _debounceTimer?.cancel();
       _debounceTimer = null;
+      _documentEpoch++;
       _currentFilePath = path;
-      _currentFileName = File(path).uri.pathSegments.lastWhere((s) => s.isNotEmpty);
+      _currentFileName = File(path).uri.pathSegments
+          .lastWhere((s) => s.isNotEmpty);
       _isProgrammaticUpdate = true;
       textController.isActivelyTyping = false;
       textController.text = content;
@@ -538,6 +922,22 @@ class EditorController extends ChangeNotifier {
       _lastObservedText = content;
       _computeMetrics();
       _isModified = false;
+      _citationStyle = fileCitationStyle;
+
+      final doc = OpenDocument(
+        id: path,
+        filePath: path,
+        fileName: _currentFileName,
+        content: content,
+        isModified: false,
+        wordCount: _wordCount,
+        charCount: _charCount,
+        lineCount: _lineCount,
+        readingTimeMinutes: _readingTimeMinutes,
+        citationStyle: _citationStyle,
+      );
+      _openDocuments.add(doc);
+      _activeDocumentIndex = _openDocuments.length - 1;
 
       // Add to history
       await historyService.recordFileOpen(path);
@@ -546,6 +946,7 @@ class EditorController extends ChangeNotifier {
       _autoDetectAdjacentBibliography(File(path).parent.path);
 
       flushPendingRenderUpdate();
+      _syncActiveDocumentToStore();
 
       if (scrollController.hasClients) {
         scrollController.jumpTo(0.0);
@@ -593,6 +994,7 @@ class EditorController extends ChangeNotifier {
       _previewMarkdown = textController.text;
       await fileService.writeFile(_currentFilePath!, textController.text);
       _isModified = false;
+      _syncActiveDocumentToStore();
       await historyService.recordFileOpen(_currentFilePath!);
       notifyListeners();
       return true;
@@ -618,9 +1020,22 @@ class EditorController extends ChangeNotifier {
       _previewMarkdown = textController.text;
       await fileService.writeFile(destination, textController.text);
       _currentFilePath = destination;
-      _currentFileName =
-          File(destination).uri.pathSegments.lastWhere((s) => s.isNotEmpty);
+      _currentFileName = File(destination).uri.pathSegments
+          .lastWhere((s) => s.isNotEmpty);
       _isModified = false;
+      // Remove any other open tab that already pointed to this destination
+      for (int i = _openDocuments.length - 1; i >= 0; i--) {
+        if (i != _activeDocumentIndex &&
+            _pathsEqual(_openDocuments[i].filePath, destination)) {
+          _openDocuments.removeAt(i);
+          if (i < _activeDocumentIndex) {
+            _activeDocumentIndex--;
+          }
+        }
+      }
+      activeDocument?.id = destination;
+      _syncActiveDocumentToStore();
+      await _saveFileCitationStyle(destination, _citationStyle);
       await historyService.recordFileOpen(destination);
       notifyListeners();
       return true;
@@ -632,7 +1047,90 @@ class EditorController extends ChangeNotifier {
 
   /// Close current document
   void closeFile() {
-    newFile();
+    final doc = activeDocument;
+    if (doc != null) {
+      closeDocument(doc.id);
+    } else {
+      newFile();
+    }
+  }
+
+  /// Split a file name into its editable stem and fixed extension (`.md`).
+  static ({String stem, String extension}) splitFileName(String fileName) {
+    final lower = fileName.toLowerCase();
+    if (lower.endsWith('.md') && fileName.length > 3) {
+      return (
+        stem: fileName.substring(0, fileName.length - 3),
+        extension: fileName.substring(fileName.length - 3),
+      );
+    }
+    if (lower.endsWith('.markdown') && fileName.length > 9) {
+      return (
+        stem: fileName.substring(0, fileName.length - 9),
+        extension: fileName.substring(fileName.length - 9),
+      );
+    }
+    return (stem: fileName, extension: '.md');
+  }
+
+  /// Rename the current document's file name without changing its extension.
+  /// Returns `null` on success, or an error message if renaming failed.
+  Future<String?> renameCurrentFile(String newStem) async {
+    final trimmedStem = newStem.trim();
+    if (trimmedStem.isEmpty) {
+      return 'File name cannot be empty.';
+    }
+
+    final sanitizedStem = trimmedStem
+        .replaceAll(RegExp(r'[\\/:*?"<>|]'), '')
+        .trim();
+    if (sanitizedStem.isEmpty) {
+      return 'File name contains only invalid characters.';
+    }
+
+    final parts = splitFileName(_currentFileName);
+    final newFileName = '$sanitizedStem${parts.extension}';
+    if (newFileName == _currentFileName) {
+      return null;
+    }
+
+    if (_currentFilePath == null) {
+      _currentFileName = newFileName;
+      activeDocument?.fileName = newFileName;
+      notifyListeners();
+      return null;
+    }
+
+    try {
+      final oldPath = _currentFilePath!;
+      final oldFile = File(oldPath);
+      final newPath =
+          '${oldFile.parent.path}${Platform.pathSeparator}$newFileName';
+
+      final isCaseOnlyRename = oldPath.toLowerCase() == newPath.toLowerCase();
+      if (!isCaseOnlyRename && File(newPath).existsSync()) {
+        return 'A file named "$newFileName" already exists.';
+      }
+
+      if (oldFile.existsSync()) {
+        await oldFile.rename(newPath);
+      }
+
+      _currentFilePath = newPath;
+      _currentFileName = newFileName;
+      activeDocument?.id = newPath;
+      activeDocument?.filePath = newPath;
+      activeDocument?.fileName = newFileName;
+      await _removeFileCitationStyle(oldPath);
+      await _saveFileCitationStyle(newPath, _citationStyle);
+      await historyService.removeEntry(oldPath);
+      await historyService.recordFileOpen(newPath);
+      notifyListeners();
+      return null;
+    } catch (e) {
+      debugPrint('[EditorController] Error renaming file: $e');
+      return 'Failed to rename file: $e';
+    }
   }
 
   /// Toggle sidebar visibility
@@ -748,7 +1246,9 @@ class EditorController extends ChangeNotifier {
 
       final fullMatch = m.group(0)!;
       final bracketOffset = fullMatch.lastIndexOf('[');
-      if (bracketOffset == -1 || bracketOffset + 2 >= fullMatch.length) continue;
+      if (bracketOffset == -1 || bracketOffset + 2 >= fullMatch.length) {
+        continue;
+      }
       if (fullMatch[bracketOffset] != '[' ||
           fullMatch[bracketOffset + 2] != ']') {
         continue;
@@ -760,10 +1260,9 @@ class EditorController extends ChangeNotifier {
       final char = text[charOffset];
       final isChecked = char == 'x' || char == 'X';
 
-      result.add(MarkdownCheckboxInfo(
-        charOffset: charOffset,
-        isChecked: isChecked,
-      ));
+      result.add(
+        MarkdownCheckboxInfo(charOffset: charOffset, isChecked: isChecked),
+      );
     }
 
     return result;
@@ -846,7 +1345,8 @@ class EditorController extends ChangeNotifier {
 
   /// Detect whether the editor cursor is currently situated within a citation string.
   DetectedCitation? getCitationAtCursor([int? cursorOffset]) {
-    final offset = cursorOffset ??
+    final offset =
+        cursorOffset ??
         (textController.selection.isValid
             ? textController.selection.baseOffset
             : -1);
@@ -864,7 +1364,9 @@ class EditorController extends ChangeNotifier {
     _isProgrammaticUpdate = true;
     textController.value = TextEditingValue(
       text: newText,
-      selection: TextSelection.collapsed(offset: start + newCitationText.length),
+      selection: TextSelection.collapsed(
+        offset: start + newCitationText.length,
+      ),
     );
     _isProgrammaticUpdate = false;
     _isModified = true;
@@ -906,8 +1408,9 @@ class EditorController extends ChangeNotifier {
 
   /// Check if Zotero Better BibTeX is running
   Future<void> checkZoteroConnection({bool forceRefresh = false}) async {
-    _isZoteroConnected =
-        await zoteroService.isBbtRunning(forceRefresh: forceRefresh);
+    _isZoteroConnected = await zoteroService.isBbtRunning(
+      forceRefresh: forceRefresh,
+    );
     if (_isZoteroConnected) {
       _bibliographyStatus = 'Connected to Zotero (Better BibTeX)';
     }
@@ -927,7 +1430,8 @@ class EditorController extends ChangeNotifier {
 
     // If there are no citations in the document and no user bibliography is specified,
     // citeproc does not require a bibliography file.
-    final hasUserBib = userBibliographyPath != null &&
+    final hasUserBib =
+        userBibliographyPath != null &&
         userBibliographyPath.trim().isNotEmpty &&
         await File(userBibliographyPath.trim()).exists();
 
@@ -941,8 +1445,8 @@ class EditorController extends ChangeNotifier {
     // 1. If the user loaded or specified a bibliography file, prepend its contents
     if (hasUserBib) {
       try {
-        final userContent =
-            await File(userBibliographyPath.trim()).readAsString();
+        final userContent = await File(userBibliographyPath.trim())
+            .readAsString();
         buffer.writeln(userContent);
         buffer.writeln();
 
@@ -955,7 +1459,8 @@ class EditorController extends ChangeNotifier {
         }
       } catch (e) {
         debugPrint(
-            '[EditorController] Warning: Could not read user bibliography: $e');
+          '[EditorController] Warning: Could not read user bibliography: $e',
+        );
       }
     }
 
@@ -1031,8 +1536,9 @@ class EditorController extends ChangeNotifier {
 
     try {
       if (_currentFilePath == null || _isModified) {
-        tempSourceFile =
-            await fileService.createTemporaryFile(textController.text);
+        tempSourceFile = await fileService.createTemporaryFile(
+          textController.text,
+        );
         sourcePath = tempSourceFile.path;
       }
 
@@ -1101,7 +1607,7 @@ A minimalist, high-productivity Markdown editor with native academic citations a
 ## Key Features
 
 1. **Academic Citations**:
-   - Seamlessly insert citations formatted for Pandoc, such as [@turing1950computing] or in-text citations like @shannon1948mathematical.
+   - Seamlessly insert citations formatted for Pandoc, such as [@holling1973resilience] or in-text citations like @hutchinson1957concluding.
    - Press **Ctrl+Shift+C** or click the **@** icon to search and insert citations.
    - Integrated with **Zotero** (via Better BibTeX) and local `.bib` or `.json` bibliography files.
 
@@ -1117,7 +1623,7 @@ A minimalist, high-productivity Markdown editor with native academic citations a
 
 ## Writing Sample
 
-Literate programming, as introduced by @knuth1984literate, suggests that code and prose should harmonise. Deep learning architectures have similarly progressed from adversarial networks [@goodfellow2014generative] to attention-based Transformer models [@vaswani2017attention].
+Food web complexity and species diversity, as demonstrated by @paine1966food, shape how communities respond to environmental change. Foundational models of island biogeography [@macarthur1967theory] and long-term restoration of ecosystem complexity [@moreno-mateosLongtermRestorationEcosystem2020] highlight the importance of habitat connectivity and ecological resilience.
 
 ### Formatted Table Example
 
@@ -1135,6 +1641,7 @@ Try writing your thoughts, inserting literature references, and exporting to Wor
     _previewMarkdown = textController.text;
     _computeMetrics();
     _isModified = false;
+    _syncActiveDocumentToStore();
     notifyListeners();
   }
 
@@ -1147,6 +1654,7 @@ Try writing your thoughts, inserting literature references, and exporting to Wor
     focusNode.dispose();
     scrollController.dispose();
     zoteroService.dispose();
+    spellCheckService.dispose();
     super.dispose();
   }
 }

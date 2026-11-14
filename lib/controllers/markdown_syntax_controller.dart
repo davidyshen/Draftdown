@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+
+import '../services/spell_check_service.dart';
 import '../ui/theme/app_theme.dart';
 
 /// Semantic token types recognised by the Markdown syntax highlighter.
@@ -277,9 +279,7 @@ class MarkdownSyntaxTheme {
           backgroundColor: codeBlockBg,
         );
       case MarkdownTokenType.codeFence:
-        return baseStyle.copyWith(
-          color: codeFenceColor,
-        );
+        return baseStyle.copyWith(color: codeFenceColor);
       case MarkdownTokenType.linkText:
         return baseStyle.copyWith(
           color: linkTextColor,
@@ -287,9 +287,7 @@ class MarkdownSyntaxTheme {
           decorationColor: linkTextColor,
         );
       case MarkdownTokenType.linkUrl:
-        return baseStyle.copyWith(
-          color: linkUrlColor,
-        );
+        return baseStyle.copyWith(color: linkUrlColor);
       case MarkdownTokenType.imageMarker:
         return baseStyle.copyWith(
           color: imageMarkerColor,
@@ -301,9 +299,7 @@ class MarkdownSyntaxTheme {
           fontWeight: FontWeight.w600,
         );
       case MarkdownTokenType.citationLocator:
-        return baseStyle.copyWith(
-          color: citationLocatorColor,
-        );
+        return baseStyle.copyWith(color: citationLocatorColor);
       case MarkdownTokenType.citationBracket:
         return baseStyle.copyWith(
           color: citationBracketColor,
@@ -351,13 +347,9 @@ class MarkdownSyntaxTheme {
           fontWeight: FontWeight.bold,
         );
       case MarkdownTokenType.horizontalRule:
-        return baseStyle.copyWith(
-          color: horizontalRuleColor,
-        );
+        return baseStyle.copyWith(color: horizontalRuleColor);
       case MarkdownTokenType.delimiter:
-        return baseStyle.copyWith(
-          color: delimiterColor,
-        );
+        return baseStyle.copyWith(color: delimiterColor);
     }
   }
 }
@@ -495,9 +487,7 @@ class MarkdownSyntaxHighlighter {
     r'(?:\$\$([\s\S]+?)\$\$|\\\[([\s\S]+?)\\\])',
   );
 
-  static final RegExp _inlineCodeRegex = RegExp(
-    r'(`+)([^\n`]+?)\1',
-  );
+  static final RegExp _inlineCodeRegex = RegExp(r'(`+)([^\n`]+?)\1');
 
   static final RegExp _inlineMathRegex = RegExp(
     r'(?:(?<![\w\\])\$(?!\s)([^\$\n]+?)(?<!\s|\$)\$|\\\((.+?)\\\))',
@@ -520,9 +510,7 @@ class MarkdownSyntaxHighlighter {
   );
 
   // Footnote reference: [^1]
-  static final RegExp _footnoteRefRegex = RegExp(
-    r'\[\^([a-zA-Z0-9_\-]+)\]',
-  );
+  static final RegExp _footnoteRefRegex = RegExp(r'\[\^([a-zA-Z0-9_\-]+)\]');
 
   // Markdown links & images
   static final RegExp _imageRegex = RegExp(
@@ -561,9 +549,7 @@ class MarkdownSyntaxHighlighter {
     r'(\*\*\*|___)(?!\s)([^\n]+?)(?<!\s)\1',
   );
 
-  static final RegExp _boldRegex = RegExp(
-    r'(\*\*|__)(?!\s)([^\n]+?)(?<!\s)\1',
-  );
+  static final RegExp _boldRegex = RegExp(r'(\*\*|__)(?!\s)([^\n]+?)(?<!\s)\1');
 
   static final RegExp _italicRegex = RegExp(
     r'(\*|_)(?!\s)([^*\n_]+?)(?<!\s)\1',
@@ -582,11 +568,7 @@ class MarkdownSyntaxHighlighter {
 
     void addToken(int start, int end, MarkdownTokenType type) {
       if (start < 0 || end > text.length || start >= end) return;
-      tokens.add(ParsedToken(
-        start: start,
-        end: end,
-        type: type,
-      ));
+      tokens.add(ParsedToken(start: start, end: end, type: type));
     }
 
     // -------------------------------------------------------------------------
@@ -602,11 +584,23 @@ class MarkdownSyntaxHighlighter {
 
           if (firstNewline != -1 && lastNewline > firstNewline) {
             // Opening fence line
-            addToken(match.start, match.start + firstNewline, MarkdownTokenType.codeFence);
+            addToken(
+              match.start,
+              match.start + firstNewline,
+              MarkdownTokenType.codeFence,
+            );
             // Body lines
-            addToken(match.start + firstNewline, match.start + lastNewline, MarkdownTokenType.codeBlock);
+            addToken(
+              match.start + firstNewline,
+              match.start + lastNewline,
+              MarkdownTokenType.codeBlock,
+            );
             // Closing fence line
-            addToken(match.start + lastNewline, match.end, MarkdownTokenType.codeFence);
+            addToken(
+              match.start + lastNewline,
+              match.end,
+              MarkdownTokenType.codeFence,
+            );
           } else {
             addToken(match.start, match.end, MarkdownTokenType.codeBlock);
           }
@@ -619,8 +613,16 @@ class MarkdownSyntaxHighlighter {
           final fullMatch = match.group(0)!;
           final firstNewline = fullMatch.indexOf('\n');
           if (firstNewline != -1) {
-            addToken(match.start, match.start + firstNewline, MarkdownTokenType.codeFence);
-            addToken(match.start + firstNewline, match.end, MarkdownTokenType.codeBlock);
+            addToken(
+              match.start,
+              match.start + firstNewline,
+              MarkdownTokenType.codeFence,
+            );
+            addToken(
+              match.start + firstNewline,
+              match.end,
+              MarkdownTokenType.codeBlock,
+            );
           } else {
             addToken(match.start, match.end, MarkdownTokenType.codeFence);
           }
@@ -639,11 +641,23 @@ class MarkdownSyntaxHighlighter {
           final isDollar = full.startsWith(r'$$');
           final delimLen = isDollar ? 2 : 2;
 
-          addToken(match.start, match.start + delimLen, MarkdownTokenType.latexDelimiter);
+          addToken(
+            match.start,
+            match.start + delimLen,
+            MarkdownTokenType.latexDelimiter,
+          );
           if (match.end - delimLen > match.start + delimLen) {
-            addToken(match.start + delimLen, match.end - delimLen, MarkdownTokenType.latexDisplay);
+            addToken(
+              match.start + delimLen,
+              match.end - delimLen,
+              MarkdownTokenType.latexDisplay,
+            );
           }
-          addToken(match.end - delimLen, match.end, MarkdownTokenType.latexDelimiter);
+          addToken(
+            match.end - delimLen,
+            match.end,
+            MarkdownTokenType.latexDelimiter,
+          );
         }
       }
     }
@@ -658,9 +672,17 @@ class MarkdownSyntaxHighlighter {
           final ticks = match.group(1)!;
           final tickLen = ticks.length;
 
-          addToken(match.start, match.start + tickLen, MarkdownTokenType.delimiter);
+          addToken(
+            match.start,
+            match.start + tickLen,
+            MarkdownTokenType.delimiter,
+          );
           if (match.end - tickLen > match.start + tickLen) {
-            addToken(match.start + tickLen, match.end - tickLen, MarkdownTokenType.inlineCode);
+            addToken(
+              match.start + tickLen,
+              match.end - tickLen,
+              MarkdownTokenType.inlineCode,
+            );
           }
           addToken(match.end - tickLen, match.end, MarkdownTokenType.delimiter);
         }
@@ -678,11 +700,23 @@ class MarkdownSyntaxHighlighter {
           final isDollar = full.startsWith(r'$');
           final delimLen = isDollar ? 1 : 2;
 
-          addToken(match.start, match.start + delimLen, MarkdownTokenType.latexDelimiter);
+          addToken(
+            match.start,
+            match.start + delimLen,
+            MarkdownTokenType.latexDelimiter,
+          );
           if (match.end - delimLen > match.start + delimLen) {
-            addToken(match.start + delimLen, match.end - delimLen, MarkdownTokenType.latexInline);
+            addToken(
+              match.start + delimLen,
+              match.end - delimLen,
+              MarkdownTokenType.latexInline,
+            );
           }
-          addToken(match.end - delimLen, match.end, MarkdownTokenType.latexDelimiter);
+          addToken(
+            match.end - delimLen,
+            match.end,
+            MarkdownTokenType.latexDelimiter,
+          );
         }
       }
     }
@@ -694,7 +728,11 @@ class MarkdownSyntaxHighlighter {
       for (final match in _bracketedCitationRegex.allMatches(text)) {
         if (rangeSet.isRangeFree(match.start, match.end)) {
           rangeSet.markOccupied(match.start, match.end);
-          addToken(match.start, match.start + 1, MarkdownTokenType.citationBracket);
+          addToken(
+            match.start,
+            match.start + 1,
+            MarkdownTokenType.citationBracket,
+          );
 
           final innerContent = match.group(1)!;
           final innerStart = match.start + 1;
@@ -735,9 +773,21 @@ class MarkdownSyntaxHighlighter {
               if (bracketStart > keyEnd) {
                 addToken(keyEnd, bracketStart, MarkdownTokenType.delimiter);
               }
-              addToken(bracketStart, bracketStart + 1, MarkdownTokenType.citationBracket);
-              addToken(bracketStart + 1, match.end - 1, MarkdownTokenType.citationLocator);
-              addToken(match.end - 1, match.end, MarkdownTokenType.citationBracket);
+              addToken(
+                bracketStart,
+                bracketStart + 1,
+                MarkdownTokenType.citationBracket,
+              );
+              addToken(
+                bracketStart + 1,
+                match.end - 1,
+                MarkdownTokenType.citationLocator,
+              );
+              addToken(
+                match.end - 1,
+                match.end,
+                MarkdownTokenType.citationBracket,
+              );
             }
           }
         }
@@ -752,9 +802,17 @@ class MarkdownSyntaxHighlighter {
         if (rangeSet.isRangeFree(match.start, match.end)) {
           rangeSet.markOccupied(match.start, match.end);
           final labelPrefix = match.group(1)!; // [^1]:
-          addToken(match.start, match.start + labelPrefix.length, MarkdownTokenType.footnoteKey);
+          addToken(
+            match.start,
+            match.start + labelPrefix.length,
+            MarkdownTokenType.footnoteKey,
+          );
           if (match.end > match.start + labelPrefix.length) {
-            addToken(match.start + labelPrefix.length, match.end, MarkdownTokenType.delimiter);
+            addToken(
+              match.start + labelPrefix.length,
+              match.end,
+              MarkdownTokenType.delimiter,
+            );
           }
         }
       }
@@ -762,9 +820,21 @@ class MarkdownSyntaxHighlighter {
       for (final match in _footnoteRefRegex.allMatches(text)) {
         if (rangeSet.isRangeFree(match.start, match.end)) {
           rangeSet.markOccupied(match.start, match.end);
-          addToken(match.start, match.start + 2, MarkdownTokenType.footnoteBracket); // [^
-          addToken(match.start + 2, match.end - 1, MarkdownTokenType.footnoteKey);
-          addToken(match.end - 1, match.end, MarkdownTokenType.footnoteBracket); // ]
+          addToken(
+            match.start,
+            match.start + 2,
+            MarkdownTokenType.footnoteBracket,
+          ); // [^
+          addToken(
+            match.start + 2,
+            match.end - 1,
+            MarkdownTokenType.footnoteKey,
+          );
+          addToken(
+            match.end - 1,
+            match.end,
+            MarkdownTokenType.footnoteBracket,
+          ); // ]
         }
       }
     }
@@ -777,7 +847,11 @@ class MarkdownSyntaxHighlighter {
         if (rangeSet.isRangeFree(match.start, match.end)) {
           rangeSet.markOccupied(match.start, match.end);
           addToken(match.start, match.start + 1, MarkdownTokenType.imageMarker);
-          addToken(match.start + 1, match.start + 2, MarkdownTokenType.delimiter);
+          addToken(
+            match.start + 1,
+            match.start + 2,
+            MarkdownTokenType.delimiter,
+          );
 
           final alt = match.group(2) ?? '';
           final altStart = match.start + 2;
@@ -911,7 +985,10 @@ class MarkdownSyntaxHighlighter {
     // -------------------------------------------------------------------------
     // Priority 11: List Markers (-, *, +, 1.)
     // -------------------------------------------------------------------------
-    if (text.contains('-') || text.contains('*') || text.contains('+') || text.contains('.')) {
+    if (text.contains('-') ||
+        text.contains('*') ||
+        text.contains('+') ||
+        text.contains('.')) {
       for (final match in _listMarkerRegex.allMatches(text)) {
         final marker = match.group(1);
         if (marker != null) {
@@ -935,11 +1012,23 @@ class MarkdownSyntaxHighlighter {
         if (rangeSet.isRangeFree(match.start, match.end)) {
           rangeSet.markOccupied(match.start, match.end);
           final delimLen = match.group(1)!.length; // 3
-          addToken(match.start, match.start + delimLen, MarkdownTokenType.delimiter);
+          addToken(
+            match.start,
+            match.start + delimLen,
+            MarkdownTokenType.delimiter,
+          );
           if (match.end - delimLen > match.start + delimLen) {
-            addToken(match.start + delimLen, match.end - delimLen, MarkdownTokenType.boldItalic);
+            addToken(
+              match.start + delimLen,
+              match.end - delimLen,
+              MarkdownTokenType.boldItalic,
+            );
           }
-          addToken(match.end - delimLen, match.end, MarkdownTokenType.delimiter);
+          addToken(
+            match.end - delimLen,
+            match.end,
+            MarkdownTokenType.delimiter,
+          );
         }
       }
     }
@@ -949,11 +1038,23 @@ class MarkdownSyntaxHighlighter {
         if (rangeSet.isRangeFree(match.start, match.end)) {
           rangeSet.markOccupied(match.start, match.end);
           final delimLen = match.group(1)!.length; // 2
-          addToken(match.start, match.start + delimLen, MarkdownTokenType.delimiter);
+          addToken(
+            match.start,
+            match.start + delimLen,
+            MarkdownTokenType.delimiter,
+          );
           if (match.end - delimLen > match.start + delimLen) {
-            addToken(match.start + delimLen, match.end - delimLen, MarkdownTokenType.bold);
+            addToken(
+              match.start + delimLen,
+              match.end - delimLen,
+              MarkdownTokenType.bold,
+            );
           }
-          addToken(match.end - delimLen, match.end, MarkdownTokenType.delimiter);
+          addToken(
+            match.end - delimLen,
+            match.end,
+            MarkdownTokenType.delimiter,
+          );
         }
       }
     }
@@ -963,11 +1064,23 @@ class MarkdownSyntaxHighlighter {
         if (rangeSet.isRangeFree(match.start, match.end)) {
           rangeSet.markOccupied(match.start, match.end);
           final delimLen = match.group(1)!.length; // 1
-          addToken(match.start, match.start + delimLen, MarkdownTokenType.delimiter);
+          addToken(
+            match.start,
+            match.start + delimLen,
+            MarkdownTokenType.delimiter,
+          );
           if (match.end - delimLen > match.start + delimLen) {
-            addToken(match.start + delimLen, match.end - delimLen, MarkdownTokenType.italic);
+            addToken(
+              match.start + delimLen,
+              match.end - delimLen,
+              MarkdownTokenType.italic,
+            );
           }
-          addToken(match.end - delimLen, match.end, MarkdownTokenType.delimiter);
+          addToken(
+            match.end - delimLen,
+            match.end,
+            MarkdownTokenType.delimiter,
+          );
         }
       }
     }
@@ -977,11 +1090,23 @@ class MarkdownSyntaxHighlighter {
         if (rangeSet.isRangeFree(match.start, match.end)) {
           rangeSet.markOccupied(match.start, match.end);
           final delimLen = 2; // ~~
-          addToken(match.start, match.start + delimLen, MarkdownTokenType.delimiter);
+          addToken(
+            match.start,
+            match.start + delimLen,
+            MarkdownTokenType.delimiter,
+          );
           if (match.end - delimLen > match.start + delimLen) {
-            addToken(match.start + delimLen, match.end - delimLen, MarkdownTokenType.strikethrough);
+            addToken(
+              match.start + delimLen,
+              match.end - delimLen,
+              MarkdownTokenType.strikethrough,
+            );
           }
-          addToken(match.end - delimLen, match.end, MarkdownTokenType.delimiter);
+          addToken(
+            match.end - delimLen,
+            match.end,
+            MarkdownTokenType.delimiter,
+          );
         }
       }
     }
@@ -1027,8 +1152,9 @@ class MarkdownSyntaxHighlighter {
     }
 
     // 3. Expand to enclosing line boundaries
-    final int lineStart =
-        diffStart > 0 ? oldText.lastIndexOf('\n', diffStart - 1) + 1 : 0;
+    final int lineStart = diffStart > 0
+        ? oldText.lastIndexOf('\n', diffStart - 1) + 1
+        : 0;
     int oldLineEnd = oldText.indexOf('\n', oldDiffEnd);
     if (oldLineEnd == -1) oldLineEnd = oldLen;
     int newLineEnd = newText.indexOf('\n', newDiffEnd);
@@ -1085,29 +1211,31 @@ class MarkdownSyntaxHighlighter {
       } else if (t.start >= oldLineEnd) {
         if (!insertedSlice) {
           for (final st in sliceTokens) {
-            updated.add(ParsedToken(
-              start: st.start + lineStart,
-              end: st.end + lineStart,
-              type: st.type,
-            ));
+            updated.add(
+              ParsedToken(
+                start: st.start + lineStart,
+                end: st.end + lineStart,
+                type: st.type,
+              ),
+            );
           }
           insertedSlice = true;
         }
-        updated.add(ParsedToken(
-          start: t.start + delta,
-          end: t.end + delta,
-          type: t.type,
-        ));
+        updated.add(
+          ParsedToken(start: t.start + delta, end: t.end + delta, type: t.type),
+        );
       }
     }
 
     if (!insertedSlice) {
       for (final st in sliceTokens) {
-        updated.add(ParsedToken(
-          start: st.start + lineStart,
-          end: st.end + lineStart,
-          type: st.type,
-        ));
+        updated.add(
+          ParsedToken(
+            start: st.start + lineStart,
+            end: st.end + lineStart,
+            type: st.type,
+          ),
+        );
       }
     }
 
@@ -1123,19 +1251,15 @@ class MarkdownSyntaxHighlighter {
     if (text.isEmpty) return const [];
     final tokens = parseTokens(text);
     final styles = theme.getResolvedStyles(baseStyle);
-    final spans = List<HighlightSpan>.generate(
-      tokens.length,
-      (i) {
-        final t = tokens[i];
-        return HighlightSpan(
-          start: t.start,
-          end: t.end,
-          type: t.type,
-          style: styles[t.type.index],
-        );
-      },
-      growable: false,
-    );
+    final spans = List<HighlightSpan>.generate(tokens.length, (i) {
+      final t = tokens[i];
+      return HighlightSpan(
+        start: t.start,
+        end: t.end,
+        type: t.type,
+        style: styles[t.type.index],
+      );
+    }, growable: false);
     return spans;
   }
 
@@ -1151,6 +1275,8 @@ class MarkdownSyntaxHighlighter {
     TextRange? composingRange,
     int? windowStart,
     int? windowEnd,
+    List<SpellErrorRange>? spellErrors,
+    Color spellErrorColor = const Color(0xFFEF4444),
   }) {
     if (text.isEmpty) {
       return TextSpan(text: '', style: baseStyle);
@@ -1159,16 +1285,19 @@ class MarkdownSyntaxHighlighter {
     final styles = theme.getResolvedStyles(baseStyle);
     final children = <TextSpan>[];
     int cursor = 0;
+    int spellCursor = 0;
 
     final int effWindowStart = windowStart ?? 0;
     final int effWindowEnd = windowEnd ?? text.length;
 
-    void appendPiece(int start, int end, TextStyle style) {
+    void appendStyledSlice(int start, int end, TextStyle style) {
       if (start >= end) return;
       final piece = text.substring(start, end);
 
       // Handle IME composing underline
-      if (composingRange != null && composingRange.isValid && !composingRange.isCollapsed) {
+      if (composingRange != null &&
+          composingRange.isValid &&
+          !composingRange.isCollapsed) {
         final compStart = composingRange.start.clamp(0, text.length);
         final compEnd = composingRange.end.clamp(0, text.length);
 
@@ -1177,22 +1306,25 @@ class MarkdownSyntaxHighlighter {
           final intersectEnd = end.clamp(compStart, compEnd);
 
           if (intersectStart > start) {
-            children.add(TextSpan(
-              text: text.substring(start, intersectStart),
-              style: style,
-            ));
+            children.add(
+              TextSpan(
+                text: text.substring(start, intersectStart),
+                style: style,
+              ),
+            );
           }
 
-          children.add(TextSpan(
-            text: text.substring(intersectStart, intersectEnd),
-            style: style.copyWith(decoration: TextDecoration.underline),
-          ));
+          children.add(
+            TextSpan(
+              text: text.substring(intersectStart, intersectEnd),
+              style: style.copyWith(decoration: TextDecoration.underline),
+            ),
+          );
 
           if (end > intersectEnd) {
-            children.add(TextSpan(
-              text: text.substring(intersectEnd, end),
-              style: style,
-            ));
+            children.add(
+              TextSpan(text: text.substring(intersectEnd, end), style: style),
+            );
           }
           return;
         }
@@ -1201,11 +1333,63 @@ class MarkdownSyntaxHighlighter {
       children.add(TextSpan(text: piece, style: style));
     }
 
+    void appendPiece(int start, int end, TextStyle style) {
+      if (start >= end) return;
+      if (spellErrors == null || spellErrors.isEmpty) {
+        appendStyledSlice(start, end, style);
+        return;
+      }
+
+      while (spellCursor < spellErrors.length &&
+          spellErrors[spellCursor].end <= start) {
+        spellCursor++;
+      }
+
+      int pos = start;
+      while (spellCursor < spellErrors.length &&
+          spellErrors[spellCursor].start < end) {
+        final err = spellErrors[spellCursor];
+        if (err.start > pos) {
+          appendStyledSlice(pos, err.start, style);
+          pos = err.start;
+        }
+
+        final errEnd = err.end < end ? err.end : end;
+        if (errEnd > pos) {
+          final existingDeco = style.decoration;
+          final combinedDeco =
+              (existingDeco != null && existingDeco != TextDecoration.none)
+              ? TextDecoration.combine([existingDeco, TextDecoration.underline])
+              : TextDecoration.underline;
+          final errorStyle = style.copyWith(
+            decoration: combinedDeco,
+            decorationColor: spellErrorColor,
+            decorationStyle: TextDecorationStyle.wavy,
+            decorationThickness: 2.6,
+          );
+          appendStyledSlice(pos, errEnd, errorStyle);
+          pos = errEnd;
+        }
+
+        if (err.end <= end) {
+          spellCursor++;
+        } else {
+          break;
+        }
+      }
+
+      if (pos < end) {
+        appendStyledSlice(pos, end, style);
+      }
+    }
+
     for (final token in tokens) {
       if (token.end <= effWindowStart) continue;
       if (token.start >= effWindowEnd) break;
 
-      final tStart = token.start < effWindowStart ? effWindowStart : token.start;
+      final tStart = token.start < effWindowStart
+          ? effWindowStart
+          : token.start;
       final tEnd = token.end > effWindowEnd ? effWindowEnd : token.end;
       if (tStart >= tEnd) continue;
 
@@ -1234,7 +1418,9 @@ class MarkdownSyntaxHighlighter {
       return TextSpan(text: '', style: baseStyle);
     }
 
-    final theme = isDark ? MarkdownSyntaxTheme.dark() : MarkdownSyntaxTheme.light();
+    final theme = isDark
+        ? MarkdownSyntaxTheme.dark()
+        : MarkdownSyntaxTheme.light();
     final tokens = parseTokens(text);
     return buildSpanFromTokens(
       text: text,
@@ -1250,11 +1436,17 @@ class MarkdownSyntaxHighlighter {
 /// for Markdown formatting with cached AST tokens for instantaneous dark/light theme switching
 /// and O(1) incremental line-scoped token updates during typing on large documents.
 class MarkdownSyntaxEditingController extends TextEditingController {
-  MarkdownSyntaxEditingController({super.text});
+  MarkdownSyntaxEditingController({
+    super.text,
+    SpellCheckService? spellCheckService,
+  }) {
+    _spellCheckService = spellCheckService;
+  }
 
   static const int _largeDocumentThreshold = 30000;
   static const int _activeTypingWindowRadius = 10000;
 
+  SpellCheckService? _spellCheckService;
   String? _lastText;
   List<ParsedToken>? _cachedTokens;
   bool? _lastIsDark;
@@ -1265,6 +1457,47 @@ class MarkdownSyntaxEditingController extends TextEditingController {
   bool? _wasWindowed;
   bool? _isActivelyTyping;
 
+  List<SpellErrorRange> _spellErrors = const [];
+  String? _lastSpellText;
+  bool? _lastSpellEnabled;
+  String? _lastSpellLanguage;
+  bool _spellDirty = true;
+
+  SpellCheckService? get spellCheckService => _spellCheckService;
+  set spellCheckService(SpellCheckService? service) {
+    _spellCheckService = service;
+    invalidateSpellCheck();
+  }
+
+  /// Current detected spelling errors in the document.
+  List<SpellErrorRange> get spellErrors => _spellErrors;
+
+  /// Invalidates cached spellcheck results and triggers a re-render.
+  void invalidateSpellCheck() {
+    _spellDirty = true;
+    _cachedSpan = null;
+    notifyListeners();
+  }
+
+  /// Returns the [SpellErrorRange] at [offset], or `null` if none.
+  SpellErrorRange? spellErrorAtOffset(int offset) {
+    if (_spellErrors.isEmpty) return null;
+    int low = 0;
+    int high = _spellErrors.length - 1;
+    while (low <= high) {
+      final mid = (low + high) >> 1;
+      final err = _spellErrors[mid];
+      if (offset < err.start) {
+        high = mid - 1;
+      } else if (offset > err.end) {
+        low = mid + 1;
+      } else {
+        return err;
+      }
+    }
+    return null;
+  }
+
   /// Indicates whether the user is currently in an active typing session
   /// (before the 1.5-second idle render timer has elapsed).
   bool get isActivelyTyping => _isActivelyTyping == true;
@@ -1272,11 +1505,13 @@ class MarkdownSyntaxEditingController extends TextEditingController {
 
   /// Performs a full syntax token reconciliation once typing has paused for the idle period.
   void reconcileFullHighlight() {
+    final wasTyping = _isActivelyTyping == true;
     _isActivelyTyping = false;
-    if (_needsFullReconcile == true || _wasWindowed == true) {
+    if (_needsFullReconcile == true || _wasWindowed == true || wasTyping) {
       _needsFullReconcile = false;
       _wasWindowed = false;
       _cachedTokens = MarkdownSyntaxHighlighter.parseTokens(value.text);
+      _spellDirty = true;
       _cachedSpan = null;
       notifyListeners();
     }
@@ -1299,16 +1534,22 @@ class MarkdownSyntaxEditingController extends TextEditingController {
     final activeSchemeId = AppTheme.activeSchemeForBrightness(isDark).id;
     final baseStyle = style ?? const TextStyle();
     final currentText = value.text;
+    final spellEnabled = _spellCheckService?.isEnabled ?? false;
+    final spellLanguage = _spellCheckService?.languageTag;
 
     final composingRange = (withComposing && value.isComposingRangeValid)
         ? value.composing
         : null;
 
     if (composingRange == null &&
+        !_spellDirty &&
+        !isActivelyTyping &&
         currentText == _lastText &&
         isDark == _lastIsDark &&
         activeSchemeId == _lastSchemeId &&
         baseStyle == _lastStyle &&
+        spellEnabled == _lastSpellEnabled &&
+        spellLanguage == _lastSpellLanguage &&
         _cachedSpan != null) {
       return _cachedSpan!;
     }
@@ -1346,14 +1587,42 @@ class MarkdownSyntaxEditingController extends TextEditingController {
       _needsFullReconcile = false;
     }
 
+    if (spellEnabled && _spellCheckService != null) {
+      if (_spellDirty ||
+          currentText != _lastSpellText ||
+          spellEnabled != _lastSpellEnabled ||
+          spellLanguage != _lastSpellLanguage) {
+        _spellErrors = _spellCheckService!.findSpellingErrors(
+          text: currentText,
+          tokens: tokens,
+        );
+        _lastSpellText = currentText;
+        _lastSpellEnabled = spellEnabled;
+        _lastSpellLanguage = spellLanguage;
+        _spellDirty = false;
+      }
+    } else {
+      _spellErrors = const [];
+      _lastSpellText = currentText;
+      _lastSpellEnabled = spellEnabled;
+      _lastSpellLanguage = spellLanguage;
+      _spellDirty = false;
+    }
+
     int? windowStart;
     int? windowEnd;
     if (isActivelyTyping &&
         currentText.length >= _largeDocumentThreshold &&
         value.selection.isValid) {
       final cursor = value.selection.baseOffset.clamp(0, currentText.length);
-      windowStart = (cursor - _activeTypingWindowRadius).clamp(0, currentText.length);
-      windowEnd = (cursor + _activeTypingWindowRadius).clamp(0, currentText.length);
+      windowStart = (cursor - _activeTypingWindowRadius).clamp(
+        0,
+        currentText.length,
+      );
+      windowEnd = (cursor + _activeTypingWindowRadius).clamp(
+        0,
+        currentText.length,
+      );
       _wasWindowed = true;
     } else {
       _wasWindowed = false;
@@ -1367,14 +1636,23 @@ class MarkdownSyntaxEditingController extends TextEditingController {
       composingRange: composingRange,
       windowStart: windowStart,
       windowEnd: windowEnd,
+      spellErrors: _spellErrors,
+      spellErrorColor: isDark
+          ? const Color(0xFFFF5252)
+          : const Color(0xFFDC2626),
     );
 
-    if (composingRange == null) {
+    if (composingRange == null && !isActivelyTyping) {
       _lastText = currentText;
       _lastIsDark = isDark;
       _lastSchemeId = activeSchemeId;
       _lastStyle = baseStyle;
       _cachedSpan = span;
+    } else if (composingRange == null) {
+      _lastText = currentText;
+      _lastIsDark = isDark;
+      _lastSchemeId = activeSchemeId;
+      _lastStyle = baseStyle;
     }
 
     return span;

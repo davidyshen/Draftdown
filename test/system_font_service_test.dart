@@ -23,20 +23,23 @@ void main() {
       );
     });
 
-    test('setMockFonts caches and getInstalledFonts returns cached fonts', () async {
-      const mockFonts = InstalledFonts(
-        allFonts: ['Arial', 'Consolas', 'Georgia'],
-        monospaceFonts: ['Consolas'],
-      );
-      SystemFontService.instance.setMockFonts(mockFonts);
+    test(
+      'setMockFonts caches and getInstalledFonts returns cached fonts',
+      () async {
+        const mockFonts = InstalledFonts(
+          allFonts: ['Arial', 'Consolas', 'Georgia'],
+          monospaceFonts: ['Consolas'],
+        );
+        SystemFontService.instance.setMockFonts(mockFonts);
 
-      expect(SystemFontService.instance.cachedFonts, equals(mockFonts));
-      final loaded = await SystemFontService.instance.getInstalledFonts();
-      expect(loaded.allFonts, equals(['Arial', 'Consolas', 'Georgia']));
-      expect(loaded.monospaceFonts, equals(['Consolas']));
+        expect(SystemFontService.instance.cachedFonts, equals(mockFonts));
+        final loaded = await SystemFontService.instance.getInstalledFonts();
+        expect(loaded.allFonts, equals(['Arial', 'Consolas', 'Georgia']));
+        expect(loaded.monospaceFonts, equals(['Consolas']));
 
-      SystemFontService.instance.clearCache();
-      expect(SystemFontService.instance.cachedFonts, isNull);
-    });
+        SystemFontService.instance.clearCache();
+        expect(SystemFontService.instance.cachedFonts, isNull);
+      },
+    );
   });
 }

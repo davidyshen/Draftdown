@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+
 import '../models/citation_item.dart';
 
 /// Service responsible for loading, parsing, and caching bibliography databases
@@ -8,8 +9,10 @@ class BibliographyService {
   static final RegExp _entryRegex = RegExp(
     r'@([a-zA-Z]+)\s*\{\s*([a-zA-Z0-9_:.+-]+)\s*,\s*([\s\S]*?)(?=(?:\n\s*@|$))',
   );
-  static final RegExp _andSplitRegex =
-      RegExp(r'\s+and\s+', caseSensitive: false);
+  static final RegExp _andSplitRegex = RegExp(
+    r'\s+and\s+',
+    caseSensitive: false,
+  );
   static final RegExp _bracesRegex = RegExp(r'[{}]');
   static final RegExp _latexCmdRegex = RegExp(r'\\[a-zA-Z]+');
   static final RegExp _whitespaceRegex = RegExp(r'\s+');
@@ -112,18 +115,20 @@ class BibliographyService {
       final url = fields['url'];
       final abstractText = _cleanLatex(fields['abstract'] ?? '');
 
-      results.add(CitationItem(
-        key: key,
-        title: title.isNotEmpty ? title : key,
-        authors: authors,
-        year: year,
-        venue: venue.isNotEmpty ? venue : null,
-        itemType: type,
-        doi: doi,
-        url: url,
-        abstractText: abstractText.isNotEmpty ? abstractText : null,
-        rawBibtex: match.group(0),
-      ));
+      results.add(
+        CitationItem(
+          key: key,
+          title: title.isNotEmpty ? title : key,
+          authors: authors,
+          year: year,
+          venue: venue.isNotEmpty ? venue : null,
+          itemType: type,
+          doi: doi,
+          url: url,
+          abstractText: abstractText.isNotEmpty ? abstractText : null,
+          rawBibtex: match.group(0),
+        ),
+      );
     }
 
     return results;
@@ -280,8 +285,8 @@ class BibliographyService {
         final key = raw['id']?.toString() ?? 'unknown';
         final title = raw['title']?.toString() ?? 'Untitled';
         final type = raw['type']?.toString();
-        final venue = raw['container-title']?.toString() ??
-            raw['publisher']?.toString();
+        final venue =
+            raw['container-title']?.toString() ?? raw['publisher']?.toString();
         final doi = raw['DOI']?.toString();
         final url = raw['URL']?.toString();
         final abstractText = raw['abstract']?.toString();
@@ -305,8 +310,10 @@ class BibliographyService {
         if (authorList is List) {
           for (final a in authorList) {
             if (a is Map) {
-              final family = a['family']?.toString() ?? a['lastName']?.toString() ?? '';
-              final given = a['given']?.toString() ?? a['firstName']?.toString() ?? '';
+              final family =
+                  a['family']?.toString() ?? a['lastName']?.toString() ?? '';
+              final given =
+                  a['given']?.toString() ?? a['firstName']?.toString() ?? '';
               if (given.isNotEmpty && family.isNotEmpty) {
                 authors.add('$given $family');
               } else if (family.isNotEmpty) {
@@ -328,17 +335,19 @@ class BibliographyService {
           }
         }
 
-        items.add(CitationItem(
-          key: key,
-          title: title,
-          authors: authors,
-          year: year,
-          venue: venue,
-          itemType: type,
-          doi: doi,
-          url: url,
-          abstractText: abstractText,
-        ));
+        items.add(
+          CitationItem(
+            key: key,
+            title: title,
+            authors: authors,
+            year: year,
+            venue: venue,
+            itemType: type,
+            doi: doi,
+            url: url,
+            abstractText: abstractText,
+          ),
+        );
       }
     } catch (_) {
       // Return whatever could be parsed
@@ -357,98 +366,67 @@ class BibliographyService {
         .toList(growable: false);
     if (tokens.isEmpty) return items;
 
-    return _items.where((item) {
-      final text = item.searchableText;
-      for (int i = 0; i < tokens.length; i++) {
-        if (!text.contains(tokens[i])) return false;
-      }
-      return true;
-    }).toList(growable: false);
+    return _items
+        .where((item) {
+          final text = item.searchableText;
+          for (int i = 0; i < tokens.length; i++) {
+            if (!text.contains(tokens[i])) return false;
+          }
+          return true;
+        })
+        .toList(growable: false);
   }
 
   /// Preloaded foundational sample citations
   static const List<CitationItem> defaultSampleCitations = [
     CitationItem(
-      key: 'turing1950computing',
-      title: 'Computing Machinery and Intelligence',
-      authors: ['Alan M. Turing'],
-      year: '1950',
-      venue: 'Mind, 59(236), 433-460',
+      key: 'hutchinson1957concluding',
+      title: 'Concluding Remarks',
+      authors: ['G. Evelyn Hutchinson'],
+      year: '1957',
+      venue: 'Cold Spring Harbor Symposia on Quantitative Biology, 22, 415-427',
       itemType: 'article',
-      doi: '10.1093/mind/LIX.236.433',
-      abstractText:
-          'Proposes the imitation game (the Turing test) to address the question: "Can machines think?" and considers nine common objections.',
+      doi: '10.1101/SQB.1957.022.01.039',
+      abstractText: 'Formalises the ecological niche as an n-dimensional hypervolume of environmental conditions and resources required for species persistence.',
     ),
     CitationItem(
-      key: 'shannon1948mathematical',
-      title: 'A Mathematical Theory of Communication',
-      authors: ['Claude E. Shannon'],
-      year: '1948',
-      venue: 'Bell System Technical Journal, 27(3), 379-423',
+      key: 'paine1966food',
+      title: 'Food Web Complexity and Species Diversity',
+      authors: ['Robert T. Paine'],
+      year: '1966',
+      venue: 'The American Naturalist, 100(910), 65-75',
       itemType: 'article',
-      doi: '10.1002/j.1538-7305.1948.tb01338.x',
-      abstractText:
-          'Foundational paper establishing information theory, introducing the bit, channel capacity, and information entropy.',
+      doi: '10.1086/282400',
+      abstractText: 'Demonstrates how top predators regulate community diversity through trophic cascades and introduces the concept of keystone species.',
     ),
     CitationItem(
-      key: 'knuth1984literate',
-      title: 'Literate Programming',
-      authors: ['Donald E. Knuth'],
-      year: '1984',
-      venue: 'The Computer Journal, 27(2), 97-111',
+      key: 'macarthur1967theory',
+      title: 'The Theory of Island Biogeography',
+      authors: ['Robert H. MacArthur', 'Edward O. Wilson'],
+      year: '1967',
+      venue: 'Princeton University Press',
+      itemType: 'book',
+      abstractText: 'Establishes equilibrium models of species richness on islands and fragmented habitats based on immigration and extinction rates.',
+    ),
+    CitationItem(
+      key: 'holling1973resilience',
+      title: 'Resilience and Stability of Ecological Systems',
+      authors: ['C. S. Holling'],
+      year: '1973',
+      venue: 'Annual Review of Ecology and Systematics, 4(1), 1-23',
       itemType: 'article',
-      doi: '10.1093/comjnl/27.2.97',
-      abstractText:
-          'Advocates that computer programs should be written primarily as literary works for human reading rather than merely for machines.',
+      doi: '10.1146/annurev.es.04.110173.000245',
+      abstractText: 'Distinguishes engineering stability from ecological resilience, defining resilience as the capacity of an ecosystem to absorb disturbance and persist.',
     ),
     CitationItem(
-      key: 'vaswani2017attention',
-      title: 'Attention Is All You Need',
-      authors: [
-        'Ashish Vaswani',
-        'Noam Shazeer',
-        'Niki Parmar',
-        'Jakob Uszkoreit',
-        'Llion Jones',
-        'Aidan N. Gomez',
-        'Lukasz Kaiser',
-        'Illia Polosukhin'
-      ],
-      year: '2017',
-      venue: 'Advances in Neural Information Processing Systems (NeurIPS 30)',
-      itemType: 'inproceedings',
-      abstractText:
-          'Introduces the Transformer network architecture based entirely on self-attention mechanisms without recurrence or convolutions.',
-    ),
-    CitationItem(
-      key: 'goodfellow2014generative',
-      title: 'Generative Adversarial Nets',
-      authors: [
-        'Ian Goodfellow',
-        'Jean Pouget-Abadie',
-        'Mehdi Mirza',
-        'Bing Xu',
-        'David Warde-Farley',
-        'Sherjil Ozair',
-        'Aaron Courville',
-        'Yoshua Bengio'
-      ],
-      year: '2014',
-      venue: 'Advances in Neural Information Processing Systems (NeurIPS 27)',
-      itemType: 'inproceedings',
-      abstractText:
-          'Proposes a new framework for estimating generative models via an adversarial process with generator and discriminator networks.',
-    ),
-    CitationItem(
-      key: 'mcfarlane2020pandoc',
-      title: 'Pandoc: A Universal Document Converter',
-      authors: ['John MacFarlane'],
-      year: '2020',
-      venue: 'GitHub repository & documentation',
-      itemType: 'manual',
-      url: 'https://pandoc.org',
-      abstractText:
-          'The definitive reference for Pandoc document conversion, readers, writers, and markdown extensions.',
+      key: 'tilman1994biodiversity',
+      title: 'Biodiversity and stability in grasslands',
+      authors: ['David Tilman', 'John A. Downing'],
+      year: '1994',
+      venue: 'Nature, 367(6461), 363-365',
+      itemType: 'article',
+      doi: '10.1038/367363a0',
+      abstractText: 'Long-term grassland experiments showing that higher plant species richness buffers primary productivity against severe drought.',
     ),
     CitationItem(
       key: 'moreno-mateosLongtermRestorationEcosystem2020',
@@ -458,8 +436,7 @@ class BibliographyService {
       venue: 'Nature Ecology & Evolution, 4(5), 676-685',
       itemType: 'article',
       doi: '10.1038/s41559-020-1154-1',
-      abstractText:
-          'Ecosystem restoration often fails to recover pre-disturbance complexity, highlighting the need for long-term monitoring and ecological stewardship.',
+      abstractText: 'Ecosystem restoration often fails to recover pre-disturbance complexity, highlighting the need for long-term monitoring and ecological stewardship.',
     ),
   ];
 }

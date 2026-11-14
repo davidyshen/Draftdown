@@ -1,5 +1,7 @@
 import 'dart:io';
+
 import 'package:flutter/material.dart';
+
 import '../../controllers/editor_controller.dart';
 import '../../models/export_format.dart';
 import '../../services/pandoc_service.dart';
@@ -44,7 +46,10 @@ class _ExportDialogState extends State<ExportDialog> {
 
   void _initialiseDefaultTargetPath() {
     final currentPath = widget.controller.currentFilePath;
-    final baseName = widget.controller.currentFileName.replaceAll(RegExp(r'\.md$'), '');
+    final baseName = widget.controller.currentFileName.replaceAll(
+      RegExp(r'\.md$'),
+      '',
+    );
 
     if (currentPath != null) {
       final parentDir = File(currentPath).parent.path;
@@ -124,21 +129,17 @@ class _ExportDialogState extends State<ExportDialog> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final borderColor =
-        isDark ? AppTheme.darkBorder : AppTheme.lightBorder;
-    final surfaceColor =
-        isDark ? AppTheme.darkSurface : AppTheme.lightSurface;
-    final mutedColor =
-        isDark ? AppTheme.darkTextMuted : AppTheme.lightTextMuted;
+    final borderColor = isDark ? AppTheme.darkBorder : AppTheme.lightBorder;
+    final surfaceColor = isDark ? AppTheme.darkSurface : AppTheme.lightSurface;
+    final mutedColor = isDark
+        ? AppTheme.darkTextMuted
+        : AppTheme.lightTextMuted;
 
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       backgroundColor: surfaceColor,
       child: ConstrainedBox(
-        constraints: const BoxConstraints(
-          maxWidth: 820,
-          maxHeight: 700,
-        ),
+        constraints: const BoxConstraints(maxWidth: 820, maxHeight: 700),
         child: Padding(
           padding: const EdgeInsets.all(20.0),
           child: Column(
@@ -147,8 +148,11 @@ class _ExportDialogState extends State<ExportDialog> {
               // Header
               Row(
                 children: [
-                  Icon(Icons.output,
-                      color: theme.colorScheme.primary, size: 22),
+                  Icon(
+                    Icons.output,
+                    color: theme.colorScheme.primary,
+                    size: 22,
+                  ),
                   const SizedBox(width: 8),
                   const Text(
                     'Export Document',
@@ -176,7 +180,8 @@ class _ExportDialogState extends State<ExportDialog> {
                 child: ListView.separated(
                   scrollDirection: Axis.horizontal,
                   itemCount: ExportFormat.supportedFormats.length,
-                  separatorBuilder: (context, index) => const SizedBox(width: 8),
+                  separatorBuilder: (context, index) =>
+                      const SizedBox(width: 8),
                   itemBuilder: (context, index) {
                     final fmt = ExportFormat.supportedFormats[index];
                     final isSelected = fmt == _selectedFormat;
@@ -189,10 +194,12 @@ class _ExportDialogState extends State<ExportDialog> {
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
                           color: isSelected
-                              ? theme.colorScheme.primary.withValues(alpha: 0.12)
+                              ? theme.colorScheme.primary.withValues(
+                                  alpha: 0.12,
+                                )
                               : (isDark
-                                  ? AppTheme.darkSidebar
-                                  : AppTheme.lightBg),
+                                    ? AppTheme.darkSidebar
+                                    : AppTheme.lightBg),
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(
                             color: isSelected
@@ -260,7 +267,9 @@ class _ExportDialogState extends State<ExportDialog> {
                       decoration: InputDecoration(
                         hintText: 'Target output path...',
                         contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 8),
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(6),
                           borderSide: BorderSide(color: borderColor),
@@ -271,8 +280,10 @@ class _ExportDialogState extends State<ExportDialog> {
                   const SizedBox(width: 8),
                   OutlinedButton.icon(
                     icon: const Icon(Icons.folder_open, size: 16),
-                    label: const Text('Browse...',
-                        style: TextStyle(fontSize: 12)),
+                    label: const Text(
+                      'Browse...',
+                      style: TextStyle(fontSize: 12),
+                    ),
                     onPressed: _browseDestination,
                   ),
                 ],
@@ -282,14 +293,14 @@ class _ExportDialogState extends State<ExportDialog> {
 
               // Options: Citeproc, Standalone, TOC
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   border: Border.all(color: borderColor),
                   borderRadius: BorderRadius.circular(8),
-                  color: isDark
-                      ? AppTheme.darkSidebar
-                      : AppTheme.lightBg,
+                  color: isDark ? AppTheme.darkSidebar : AppTheme.lightBg,
                 ),
                 child: Wrap(
                   spacing: 16,
@@ -305,8 +316,10 @@ class _ExportDialogState extends State<ExportDialog> {
                           onChanged: (val) =>
                               setState(() => _useCiteproc = val ?? true),
                         ),
-                        const Text('Include Citations & References',
-                            style: TextStyle(fontSize: 12)),
+                        const Text(
+                          'Include Citations & References',
+                          style: TextStyle(fontSize: 12),
+                        ),
                       ],
                     ),
                     Row(
@@ -318,8 +331,10 @@ class _ExportDialogState extends State<ExportDialog> {
                           onChanged: (val) =>
                               setState(() => _standalone = val ?? true),
                         ),
-                        const Text('Standalone Document',
-                            style: TextStyle(fontSize: 12)),
+                        const Text(
+                          'Standalone Document',
+                          style: TextStyle(fontSize: 12),
+                        ),
                       ],
                     ),
                     Row(
@@ -331,16 +346,20 @@ class _ExportDialogState extends State<ExportDialog> {
                           onChanged: (val) =>
                               setState(() => _tableOfContents = val ?? false),
                         ),
-                        const Text('Table of Contents',
-                            style: TextStyle(fontSize: 12)),
+                        const Text(
+                          'Table of Contents',
+                          style: TextStyle(fontSize: 12),
+                        ),
                       ],
                     ),
                     if (_selectedFormat.type == ExportFormatType.pdf) ...[
                       Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Text('Page Size:',
-                              style: TextStyle(fontSize: 12)),
+                          const Text(
+                            'Page Size:',
+                            style: TextStyle(fontSize: 12),
+                          ),
                           const SizedBox(width: 8),
                           Container(
                             height: 28,
@@ -358,15 +377,24 @@ class _ExportDialogState extends State<ExportDialog> {
                                 value: _selectedPageSize,
                                 isDense: true,
                                 focusColor: Colors.transparent,
-                                icon: const Icon(Icons.keyboard_arrow_down, size: 16),
+                                icon: const Icon(
+                                  Icons.keyboard_arrow_down,
+                                  size: 16,
+                                ),
                                 items: const [
                                   DropdownMenuItem(
                                     value: 'a4',
-                                    child: Text('A4', style: TextStyle(fontSize: 12)),
+                                    child: Text(
+                                      'A4',
+                                      style: TextStyle(fontSize: 12),
+                                    ),
                                   ),
                                   DropdownMenuItem(
                                     value: 'letter',
-                                    child: Text('Letter', style: TextStyle(fontSize: 12)),
+                                    child: Text(
+                                      'Letter',
+                                      style: TextStyle(fontSize: 12),
+                                    ),
                                   ),
                                 ],
                                 onChanged: (val) {
@@ -382,8 +410,10 @@ class _ExportDialogState extends State<ExportDialog> {
                       Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Text('Margins:',
-                              style: TextStyle(fontSize: 12)),
+                          const Text(
+                            'Margins:',
+                            style: TextStyle(fontSize: 12),
+                          ),
                           const SizedBox(width: 8),
                           Container(
                             height: 28,
@@ -401,19 +431,31 @@ class _ExportDialogState extends State<ExportDialog> {
                                 value: _selectedMarginSize,
                                 isDense: true,
                                 focusColor: Colors.transparent,
-                                icon: const Icon(Icons.keyboard_arrow_down, size: 16),
+                                icon: const Icon(
+                                  Icons.keyboard_arrow_down,
+                                  size: 16,
+                                ),
                                 items: const [
                                   DropdownMenuItem(
                                     value: 'medium',
-                                    child: Text('Medium', style: TextStyle(fontSize: 12)),
+                                    child: Text(
+                                      'Medium',
+                                      style: TextStyle(fontSize: 12),
+                                    ),
                                   ),
                                   DropdownMenuItem(
                                     value: 'thin',
-                                    child: Text('Thin', style: TextStyle(fontSize: 12)),
+                                    child: Text(
+                                      'Thin',
+                                      style: TextStyle(fontSize: 12),
+                                    ),
                                   ),
                                   DropdownMenuItem(
                                     value: 'thick',
-                                    child: Text('Thick', style: TextStyle(fontSize: 12)),
+                                    child: Text(
+                                      'Thick',
+                                      style: TextStyle(fontSize: 12),
+                                    ),
                                   ),
                                 ],
                                 onChanged: (val) {
@@ -437,7 +479,8 @@ class _ExportDialogState extends State<ExportDialog> {
               InkWell(
                 borderRadius: BorderRadius.circular(4),
                 onTap: () => setState(
-                    () => _showAdvancedOptions = !_showAdvancedOptions),
+                  () => _showAdvancedOptions = !_showAdvancedOptions,
+                ),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(vertical: 2.0),
                   child: Row(
@@ -465,13 +508,17 @@ class _ExportDialogState extends State<ExportDialog> {
                 TextField(
                   controller: _customArgsController,
                   style: const TextStyle(
-                      fontFamily: 'Consolas, monospace', fontSize: 11.5),
+                    fontFamily: 'Consolas, monospace',
+                    fontSize: 11.5,
+                  ),
                   decoration: InputDecoration(
                     labelText: 'Additional Arguments (Optional)',
                     labelStyle: const TextStyle(fontSize: 11),
                     hintText: 'e.g. --number-sections',
                     contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 6),
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(6),
                       borderSide: BorderSide(color: borderColor),
@@ -487,9 +534,7 @@ class _ExportDialogState extends State<ExportDialog> {
                 child: Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: isDark
-                        ? AppTheme.darkBg
-                        : AppTheme.lightSidebar,
+                    color: isDark ? AppTheme.darkBg : AppTheme.lightSidebar,
                     borderRadius: BorderRadius.circular(6),
                     border: Border.all(color: borderColor),
                   ),
@@ -508,118 +553,126 @@ class _ExportDialogState extends State<ExportDialog> {
                           ),
                         )
                       : _lastResult == null
-                          ? Center(
-                              child: Text(
-                                'Ready to export ${_selectedFormat.name}. Click "Export Now" below.',
-                                style:
-                                    TextStyle(fontSize: 12, color: mutedColor),
-                              ),
-                            )
-                          : SingleChildScrollView(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
+                      ? Center(
+                          child: Text(
+                            'Ready to export ${_selectedFormat.name}. Click "Export Now" below.',
+                            style: TextStyle(fontSize: 12, color: mutedColor),
+                          ),
+                        )
+                      : SingleChildScrollView(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
                                 children: [
-                                  Row(
-                                    children: [
-                                      Icon(
-                                        _lastResult!.success
-                                            ? Icons.check_circle
-                                            : Icons.error_outline,
-                                        size: 16,
-                                        color: _lastResult!.success
-                                            ? Colors.green
-                                            : Colors.red,
-                                      ),
-                                      const SizedBox(width: 6),
-                                      Text(
-                                        _lastResult!.success
-                                            ? 'Export completed successfully in ${_lastResult!.duration.inMilliseconds}ms!'
-                                            : 'Export failed with exit code ${_lastResult!.exitCode}',
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.bold,
-                                          color: _lastResult!.success
-                                              ? Colors.green
-                                              : Colors.red,
-                                        ),
-                                      ),
-                                    ],
+                                  Icon(
+                                    _lastResult!.success
+                                        ? Icons.check_circle
+                                        : Icons.error_outline,
+                                    size: 16,
+                                    color: _lastResult!.success
+                                        ? Colors.green
+                                        : Colors.red,
                                   ),
-                                  if (_lastResult!.success) ...[
-                                    const SizedBox(height: 6),
-                                    Row(
-                                      children: [
-                                        ElevatedButton.icon(
-                                          icon: const Icon(Icons.open_in_new,
-                                              size: 14),
-                                          label: const Text('Open File',
-                                              style: TextStyle(fontSize: 11)),
-                                          style: ElevatedButton.styleFrom(
-                                            visualDensity:
-                                                VisualDensity.compact,
-                                          ),
-                                          onPressed: () => widget
-                                              .controller.fileService
-                                              .openFileWithSystemDefault(
-                                                  _lastResult!.targetFile),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        OutlinedButton.icon(
-                                          icon: const Icon(Icons.folder_open,
-                                              size: 14),
-                                          label: const Text(
-                                              'Reveal in Explorer',
-                                              style: TextStyle(fontSize: 11)),
-                                          style: OutlinedButton.styleFrom(
-                                            visualDensity:
-                                                VisualDensity.compact,
-                                          ),
-                                          onPressed: () => widget
-                                              .controller.fileService
-                                              .revealInExplorer(
-                                                  _lastResult!.targetFile),
-                                        ),
-                                      ],
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    _lastResult!.success
+                                        ? 'Export completed successfully in ${_lastResult!.duration.inMilliseconds}ms!'
+                                        : 'Export failed with exit code ${_lastResult!.exitCode}',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                      color: _lastResult!.success
+                                          ? Colors.green
+                                          : Colors.red,
                                     ),
-                                  ],
-                                  if (!_lastResult!.success &&
-                                      _lastResult!.stderr.isNotEmpty) ...[
-                                    const SizedBox(height: 8),
-                                    Text(
-                                      _lastResult!.stderr,
-                                      style: const TextStyle(
-                                        fontFamily: 'Consolas, monospace',
-                                        fontSize: 10.5,
-                                        color: Colors.redAccent,
-                                      ),
-                                    ),
-                                  ],
-                                  if (_lastResult!.success &&
-                                      _lastResult!.stderr.isNotEmpty) ...[
-                                    const SizedBox(height: 8),
-                                    Text(
-                                      _lastResult!.stderr,
-                                      style: TextStyle(
-                                        fontFamily: 'Consolas, monospace',
-                                        fontSize: 10.5,
-                                        color: mutedColor,
-                                      ),
-                                    ),
-                                  ],
-                                  if (_lastResult!.stdout.isNotEmpty) ...[
-                                    const SizedBox(height: 8),
-                                    Text(
-                                      _lastResult!.stdout,
-                                      style: TextStyle(
-                                        fontFamily: 'Consolas, monospace',
-                                        fontSize: 10.5,
-                                        color: mutedColor,
-                                      ),
-                                    ),
-                                  ],
+                                  ),
                                 ],
                               ),
-                            ),
+                              if (_lastResult!.success) ...[
+                                const SizedBox(height: 6),
+                                Row(
+                                  children: [
+                                    ElevatedButton.icon(
+                                      icon: const Icon(
+                                        Icons.open_in_new,
+                                        size: 14,
+                                      ),
+                                      label: const Text(
+                                        'Open File',
+                                        style: TextStyle(fontSize: 11),
+                                      ),
+                                      style: ElevatedButton.styleFrom(
+                                        visualDensity: VisualDensity.compact,
+                                      ),
+                                      onPressed: () => widget
+                                          .controller
+                                          .fileService
+                                          .openFileWithSystemDefault(
+                                            _lastResult!.targetFile,
+                                          ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    OutlinedButton.icon(
+                                      icon: const Icon(
+                                        Icons.folder_open,
+                                        size: 14,
+                                      ),
+                                      label: const Text(
+                                        'Reveal in Explorer',
+                                        style: TextStyle(fontSize: 11),
+                                      ),
+                                      style: OutlinedButton.styleFrom(
+                                        visualDensity: VisualDensity.compact,
+                                      ),
+                                      onPressed: () => widget
+                                          .controller
+                                          .fileService
+                                          .revealInExplorer(
+                                            _lastResult!.targetFile,
+                                          ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                              if (!_lastResult!.success &&
+                                  _lastResult!.stderr.isNotEmpty) ...[
+                                const SizedBox(height: 8),
+                                Text(
+                                  _lastResult!.stderr,
+                                  style: const TextStyle(
+                                    fontFamily: 'Consolas, monospace',
+                                    fontSize: 10.5,
+                                    color: Colors.redAccent,
+                                  ),
+                                ),
+                              ],
+                              if (_lastResult!.success &&
+                                  _lastResult!.stderr.isNotEmpty) ...[
+                                const SizedBox(height: 8),
+                                Text(
+                                  _lastResult!.stderr,
+                                  style: TextStyle(
+                                    fontFamily: 'Consolas, monospace',
+                                    fontSize: 10.5,
+                                    color: mutedColor,
+                                  ),
+                                ),
+                              ],
+                              if (_lastResult!.stdout.isNotEmpty) ...[
+                                const SizedBox(height: 8),
+                                Text(
+                                  _lastResult!.stdout,
+                                  style: TextStyle(
+                                    fontFamily: 'Consolas, monospace',
+                                    fontSize: 10.5,
+                                    color: mutedColor,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
                 ),
               ),
 
