@@ -12,6 +12,7 @@
   <a href="#architecture">Architecture</a> •
   <a href="#academic-features">Academic Capabilities</a> •
   <a href="#testing">Testing</a> •
+  <a href="#acknowledgements">Acknowledgements</a> •
   <a href="#license">License</a>
 </p>
 
@@ -19,7 +20,7 @@
 
 ## Overview
 
-**MDWriter** is a high-performance, distraction-free desktop Markdown editor designed specifically for researchers, academics, authors, and journalists. Originally conceived as an Electron application, MDWriter has been completely reimplemented in **Flutter** to deliver native desktop performance, instant startup times, lightweight memory utilisation, and seamless cross-platform support across Windows, macOS, and Linux.
+**MDWriter** is a high-performance, distraction-free desktop Markdown editor designed specifically for researchers, academics, authors, and journalists. Originally forked from and based on [Zettlr](https://github.com/Zettlr/Zettlr), MDWriter has since been completely reimplemented in **Flutter** to deliver native desktop performance, instant startup times, lightweight memory utilisation, and seamless cross-platform support across Windows, macOS, and Linux.
 
 MDWriter pairs real-time Markdown syntax highlighting with a paper-styled live preview, complete KaTeX mathematics, in-place academic citation formatting, robust image rendering, and a publication export pipeline powered by bundled Pandoc.
 
@@ -195,6 +196,12 @@ Contributions, bug reports, and suggestions are welcome! Please ensure:
 1. All code adheres to the project's linting rules (`flutter analyze` reports zero issues).
 2. Existing and newly created unit/widget tests pass cleanly (`flutter test`).
 3. British English spelling is used in documentation and user-facing copy.
+
+---
+
+## Acknowledgements
+
+MDWriter was originally forked from [Zettlr](https://github.com/Zettlr/Zettlr) and draws heavily on its design philosophy and academic writing workflows. While the codebase has since been completely reimplemented in Flutter and Dart, we gratefully acknowledge the Zettlr project and its contributors for laying the foundation.
 
 ---
 

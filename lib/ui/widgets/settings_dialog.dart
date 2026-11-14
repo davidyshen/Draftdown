@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../controllers/editor_controller.dart';
+import '../../services/system_font_service.dart';
 import '../theme/app_theme.dart';
 
 /// Settings dialog to configure typography (monospace editor font,
@@ -28,6 +29,9 @@ class _SettingsDialogState extends State<SettingsDialog>
   late bool _isDualRender;
   late String _selectedBodyFont;
   late String _selectedHeaderFont;
+  List<String> _monospaceFonts = const [];
+  List<String> _renderFonts = const [];
+  bool _isLoadingFonts = true;
 
   // Pandoc state
   final TextEditingController _pandocPathController = TextEditingController();
@@ -52,6 +56,28 @@ class _SettingsDialogState extends State<SettingsDialog>
 
     _bibPathController.text = widget.controller.bibliographyPath ?? '';
     _loadCustomPandocPath();
+    _initSystemFonts();
+  }
+
+  void _initSystemFonts() {
+    final cached = SystemFontService.instance.cachedFonts;
+    if (cached != null) {
+      _monospaceFonts = cached.monospaceFonts;
+      _renderFonts = cached.allFonts;
+      _isLoadingFonts = false;
+      return;
+    }
+    _loadSystemFonts();
+  }
+
+  Future<void> _loadSystemFonts() async {
+    final fonts = await SystemFontService.instance.getInstalledFonts();
+    if (!mounted) return;
+    setState(() {
+      _monospaceFonts = fonts.monospaceFonts;
+      _renderFonts = fonts.allFonts;
+      _isLoadingFonts = false;
+    });
   }
 
   Future<void> _loadCustomPandocPath() async {
@@ -422,43 +448,45 @@ class _SettingsDialogState extends State<SettingsDialog>
               border: Border.all(color: borderColor),
               borderRadius: BorderRadius.circular(6),
             ),
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<String>(
-                focusColor: Colors.transparent,
-                value: AppTheme.availableMonospaceFonts.contains(_selectedEditorFont)
-                    ? _selectedEditorFont
-                    : AppTheme.availableMonospaceFonts.first,
-                isExpanded: true,
-                icon: const Icon(Icons.keyboard_arrow_down, size: 20),
-                items: AppTheme.availableMonospaceFonts.map((font) {
-                  return DropdownMenuItem<String>(
-                    value: font,
-                    child: Row(
-                      children: [
-                        Text(
-                          font,
-                          style: TextStyle(
-                            fontFamily: font,
-                            fontSize: 13,
+            child: _isLoadingFonts || _monospaceFonts.isEmpty
+                ? _buildFontLoadingRow(mutedColor)
+                : DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      focusColor: Colors.transparent,
+                      value: _monospaceFonts.contains(_selectedEditorFont)
+                          ? _selectedEditorFont
+                          : _monospaceFonts.first,
+                      isExpanded: true,
+                      icon: const Icon(Icons.keyboard_arrow_down, size: 20),
+                      items: _monospaceFonts.map((font) {
+                        return DropdownMenuItem<String>(
+                          value: font,
+                          child: Row(
+                            children: [
+                              Text(
+                                font,
+                                style: TextStyle(
+                                  fontFamily: font,
+                                  fontSize: 13,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Text(
+                                '(Monospace)',
+                                style: TextStyle(
+                                  fontSize: 10.5,
+                                  color: mutedColor,
+                                ),
+                              ),
+                            ],
                           ),
-                        ),
-                        const SizedBox(width: 12),
-                        Text(
-                          '(Monospace)',
-                          style: TextStyle(
-                            fontSize: 10.5,
-                            color: mutedColor,
-                          ),
-                        ),
-                      ],
+                        );
+                      }).toList(),
+                      onChanged: (val) {
+                        if (val != null) _onEditorFontChanged(val);
+                      },
                     ),
-                  );
-                }).toList(),
-                onChanged: (val) {
-                  if (val != null) _onEditorFontChanged(val);
-                },
-              ),
-            ),
+                  ),
           ),
 
           const SizedBox(height: 8),
@@ -660,15 +688,44 @@ class _SettingsDialogState extends State<SettingsDialog>
     );
   }
 
+  Widget _buildFontLoadingRow(Color? mutedColor) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 14),
+      child: Row(
+        children: [
+          const SizedBox(
+            width: 14,
+            height: 14,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+          const SizedBox(width: 10),
+          Text(
+            'Loading installed local fonts...',
+            style: TextStyle(fontSize: 13, color: mutedColor),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildFontDropdown({
     required String value,
     required ValueChanged<String> onChanged,
     required Color borderColor,
   }) {
+    if (_isLoadingFonts || _renderFonts.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        decoration: BoxDecoration(
+          border: Border.all(color: borderColor),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: _buildFontLoadingRow(null),
+      );
+    }
+
     final effectiveValue =
-        AppTheme.availableRenderFonts.contains(value)
-            ? value
-            : AppTheme.availableRenderFonts.first;
+        _renderFonts.contains(value) ? value : _renderFonts.first;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -682,7 +739,7 @@ class _SettingsDialogState extends State<SettingsDialog>
           value: effectiveValue,
           isExpanded: true,
           icon: const Icon(Icons.keyboard_arrow_down, size: 20),
-          items: AppTheme.availableRenderFonts.map((font) {
+          items: _renderFonts.map((font) {
             return DropdownMenuItem<String>(
               value: font,
               child: Text(

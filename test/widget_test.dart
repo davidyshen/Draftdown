@@ -55,6 +55,39 @@ void main() {
         equals(AppTheme.editorFontFamilyFallback));
   });
 
+  testWidgets('EditorView updates monospace font when typography changes',
+      (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(1400, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+
+    SharedPreferences.setMockInitialValues({});
+    final controller = EditorController();
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(MDWriterApp(
+      controller: controller,
+      initialDarkMode: false,
+    ));
+
+    final editorTextFieldFinder = find.descendant(
+      of: find.byType(EditorView),
+      matching: find.byType(TextField),
+    );
+    expect(
+      tester.widget<TextField>(editorTextFieldFinder).style?.fontFamily,
+      equals('Consolas'),
+    );
+
+    await controller.updateTypography(editorFontFamily: 'Courier New');
+    await tester.pump();
+
+    expect(
+      tester.widget<TextField>(editorTextFieldFinder).style?.fontFamily,
+      equals('Courier New'),
+    );
+  });
+
   testWidgets('Line numbers gutter synchronises when editor is scrolled',
       (WidgetTester tester) async {
     tester.view.physicalSize = const Size(1400, 900);

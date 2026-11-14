@@ -58,11 +58,8 @@ body:
     attributes:
       label: Do you Wish to Attempt Implementing this Yourself?
       description: |
-        Zettlr runs on a dedicated Open Source community. We welcome anyone who
-        wants to tackle an issue. Here you can already indicate if you'd like to
-        try implementing this feature yourself. If you are unsure if you possess
-        the knowledge to do so, but still would like to tinker with the code,
-        choose "Yes", since we'll obviously help you get your own code running!
+        MDWriter is an open-source project and welcomes contributions. Here you
+        can indicate if you would like to try implementing this feature yourself.
       options:
         - "Yes"
         - "No"
@@ -72,15 +69,13 @@ body:
   - type: dropdown
     id: version
     attributes:
-      label: Zettlr Version
+      label: MDWriter Version
       description: |
-        What version of Zettlr are you running? Choose **Stable** if you are simply using the regular install.
+        What version of MDWriter are you running? Choose **Stable** if you are using a release build.
       options:
         - Stable (most recent version)
         - Stable (but an older version)
-        - Beta (if applicable)
-        - Nightly
-        - Right off the develop branch
+        - Built from source (main branch)
     validations:
       required: false
   # Also, we need to know the operating system(s) where this happens

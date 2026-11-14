@@ -54,6 +54,41 @@ class _EditorViewState extends State<EditorView> {
   double? _lastGutterViewportHeight;
   Color? _lastGutterTextColor;
   String? _lastGutterFontFamily;
+  late String _lastEditorFontFamily;
+
+  @override
+  void initState() {
+    super.initState();
+    _lastEditorFontFamily = widget.controller.editorFontFamily;
+    widget.controller.addListener(_handleControllerChanged);
+  }
+
+  @override
+  void didUpdateWidget(covariant EditorView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller.removeListener(_handleControllerChanged);
+      _lastEditorFontFamily = widget.controller.editorFontFamily;
+      widget.controller.addListener(_handleControllerChanged);
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_handleControllerChanged);
+    super.dispose();
+  }
+
+  void _handleControllerChanged() {
+    final currentFont = widget.controller.editorFontFamily;
+    if (currentFont != _lastEditorFontFamily) {
+      _lastEditorFontFamily = currentFont;
+      _cachedGutterSubtree = null;
+      if (mounted) {
+        setState(() {});
+      }
+    }
+  }
 
   @override
   void reassemble() {

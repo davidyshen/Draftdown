@@ -43,7 +43,7 @@ firstPRWelcomeComment: >
 
 # Comment to be posted to congratulate user on their first merged PR
 firstPRMergeComment: >
-  Your first PR just got merged. Thank you for making Zettlr a better app.
+  Your first PR just got merged. Thank you for making MDWriter a better app.
 
 # Comment to be posted to on first time issues
 firstIssueWelcomeComment: |
@@ -52,13 +52,10 @@ firstIssueWelcomeComment: |
   notifications turned on so that you can answer any additional questions we may
   have.
 
-  We want to make Zettlr better for everyone, but we cannot guarantee to
+  We want to make MDWriter better for everyone, but we cannot guarantee to
   implement a feature request, and cannot provide any ETA on when we are able to
   get to your issue.
 
   > [!NOTE]
-  > Please do not share screen captures of buggy behavior on YouTube. If
-  > you have uploaded a video on YouTube and linked it already, don't worry!
-  > But we would like to ask you to remove the video from YouTube, and upload it
-  > directly to GitHub instead, by editing your comment.
-  > [Read more here](https://github.com/Zettlr/Zettlr/discussions/4783).
+  > Where possible, please upload screen captures directly to GitHub rather than
+  > linking to external video hosting services.

@@ -34,17 +34,12 @@ body:
   - type: input
     id: version
     attributes:
-      label: Zettlr version
+      label: MDWriter version
       description: |
-        What version of Zettlr are you running? Specify the exact version. It
-        can be found in the About-dialog.
-      placeholder: e.g. 1.8.9 or 1.8.9+nightly-20210628
+        What version of MDWriter are you running? Specify the exact version.
+      placeholder: e.g. 1.0.0
     validations:
       required: true
-  # Since Zettlr is being distributed via many different channels, sometimes
-  # bugs are not necessarily the cause of the codebase, but rather how it's
-  # packaged. For example, we have received many bug reports in Q2 of 2022 that
-  # were caused by the Flathub package
   - type: dropdown
     id: package-manager
     attributes:

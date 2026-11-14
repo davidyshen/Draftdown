@@ -1,4 +1,4 @@
-# Code of Conduct for the Zettlr Project
+# Code of Conduct for the MDWriter Project
 
 ## Our Pledge
 
@@ -28,11 +28,10 @@ efficient conduct within the community spaces.
   permanent bans. Note that this does not include translating a text you wrote
   into English, or using an LLM to improve upon your contribution. See more in
   our [AI Policy](#usage-of-ai-in-communication) below.
-* The Zettlr project is not restricted to just this repository. It also includes
-  a forum, a Discord channel, and various other spaces. By participating in the
-  Zettlr community here or in any other space, you recognize that serious
-  transgressions in other spaces may also lead to your exclusion from
-  participating in this space, and vice versa.
+* The MDWriter project is hosted on GitHub and may include related community
+  spaces. By participating in the MDWriter community here or in any associated
+  space, you recognise that serious transgressions in one space may also lead to
+  your exclusion from participating in others.
 
 > [!caution]
 > The maintainers of this project have wide leverage to change or delete texts,
@@ -125,11 +124,9 @@ and this Code of Conduct reinforces encouraged behaviors and norms that can help
 avoid conflicts and minimize harm.
 
 When an incident does occur, it is important to report it promptly. To report a
-possible violation, please send a confidential email to the maintainers at
-<info@zettlr.com>. You may also contact the maintainers via direct message (DM)
-on the [Discord server](https://go.zettlr.com/discord). We treat reports
-confidential and guarantee to only publicize information where necessary to
-resolve the issue.
+possible violation, please contact the repository maintainers privately via
+GitHub. We treat reports confidentially and guarantee to only publicise
+information where necessary to resolve the issue.
 
 Community Moderators take reports of violations seriously and will make every
 effort to respond in a timely manner. They will investigate all reports of code
@@ -162,9 +159,7 @@ ability of Community Managers to use their discretion and judgment, in keeping
 with the best interests of our community.
 
 > [!WARNING]
-> Punishments are not limited to GitHub, and can also lead to suspension on all
-> other platforms where the user is active. Misbehaving on GitHub can get you
-> banned on the Forum and/or Discord server, and vice versa.
+> Enforcement actions apply across all project spaces where a user is active.
 
 ## Scope
 
