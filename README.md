@@ -116,8 +116,8 @@ lib/
 
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/dyshe/MDWriter.git
-   cd MDWriter
+   git clone https://github.com/davidyshen/Draftdown.git
+   cd Draftdown
    ```
 
 2. **Fetch dependencies:**

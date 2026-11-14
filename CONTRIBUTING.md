@@ -7,7 +7,7 @@ Draftdown welcomes contributions from the community. You do not have to be an ex
 
 ## Report Issues & Request Features
 
-If you find a bug or have an idea for an enhancement or new feature, please open an issue on the [GitHub issue tracker](https://github.com/davidyshen/MDWriter/issues) using the appropriate issue template.
+If you find a bug or have an idea for an enhancement or new feature, please open an issue on the [GitHub issue tracker](https://github.com/davidyshen/Draftdown/issues) using the appropriate issue template.
 
 > [!IMPORTANT]
 > Keep your GitHub notifications active after opening an issue or pull request so you can respond to follow-up questions.

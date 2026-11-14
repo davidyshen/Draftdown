@@ -18,10 +18,10 @@ Do not report a security vulnerability for intended local file read/write behavi
 
 ## Which Versions Receive Security Patches?
 
-Only the **latest released stable version** (and the current `main` branch) receives security-related patches. Releases can be found on the [GitHub Releases](https://github.com/davidyshen/MDWriter/releases) page.
+Only the **latest released stable version** (and the current `main` branch) receives security-related patches. Releases can be found on the [GitHub Releases](https://github.com/davidyshen/Draftdown/releases) page.
 
 ## How to Report a Security Problem
 
-If you discover a security vulnerability in Draftdown, please report it privately using GitHub's **Private Vulnerability Reporting** feature on the [Security tab](https://github.com/davidyshen/MDWriter/security/advisories) of this repository, rather than opening a public issue or pull request.
+If you discover a security vulnerability in Draftdown, please report it privately using GitHub's **Private Vulnerability Reporting** feature on the [Security tab](https://github.com/davidyshen/Draftdown/security/advisories) of this repository, rather than opening a public issue or pull request.
 
 By keeping the issue hidden from public view until a fix is released, we can investigate and address the vulnerability responsibly before public disclosure.
