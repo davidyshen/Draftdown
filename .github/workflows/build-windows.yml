@@ -90,9 +90,43 @@ jobs:
           $archiveName = "Draftdown-windows-${{ matrix.arch }}.zip"
           Compress-Archive -Path "$releaseDir/*" -DestinationPath $archiveName -Force
 
+      - name: Install Inno Setup
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $candidates = @(
+            "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
+            "$env:ProgramFiles\Inno Setup 6\ISCC.exe",
+            "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe"
+          )
+          if ($candidates | Where-Object { Test-Path $_ }) {
+            Write-Host "Inno Setup 6 already installed."
+            exit 0
+          }
+          if (Get-Command choco -ErrorAction SilentlyContinue) {
+            choco install innosetup -y --no-progress
+          } elseif (Get-Command winget -ErrorAction SilentlyContinue) {
+            winget install --id JRSoftware.InnoSetup --silent --accept-package-agreements --accept-source-agreements
+          } else {
+            throw "Neither choco nor winget is available to install Inno Setup."
+          }
+
+      - name: Build Windows Installer (${{ matrix.arch }})
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          pwsh -ExecutionPolicy Bypass -File .\windows\installer\build_installer.ps1 -Arch ${{ matrix.flutter_arch }} -SkipPandocFetch -SkipFlutterBuild
+
       - name: Upload Windows (${{ matrix.arch }}) Artifact
         uses: actions/upload-artifact@v4
         with:
           name: Draftdown-windows-${{ matrix.arch }}
           path: Draftdown-windows-${{ matrix.arch }}.zip
+          if-no-files-found: error
+
+      - name: Upload Windows (${{ matrix.arch }}) Installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: Draftdown-windows-${{ matrix.arch }}-installer
+          path: build/installer/Draftdown-Setup-${{ matrix.flutter_arch }}-*.exe
           if-no-files-found: error
