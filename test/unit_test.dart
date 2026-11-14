@@ -429,6 +429,9 @@ void main() {
         final version = await pandocService.getVersion();
         expect(version, matches(RegExp(r'^pandoc \d+\.\d+')));
       },
+      skip: (!Platform.isWindows || !File('assets/bin/pandoc.exe').existsSync())
+          ? 'Requires bundled Windows pandoc.exe in assets/bin'
+          : null,
     );
   });
 

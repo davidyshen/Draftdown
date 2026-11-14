@@ -31,6 +31,7 @@ jobs:
         if: matrix.arch == 'x86_64'
         uses: subosito/flutter-action@v2
         with:
+          flutter-version: '3.47.8'
           channel: 'stable'
           architecture: x64
           cache: true
@@ -41,7 +42,7 @@ jobs:
         run: |
           $flutterDir = Join-Path $env:RUNNER_TEMP "flutter"
           if (-not (Test-Path $flutterDir)) {
-            git clone --branch stable --depth 1 https://github.com/flutter/flutter.git $flutterDir
+            git clone --branch 3.47.8 --depth 1 https://github.com/flutter/flutter.git $flutterDir
           }
           Add-Content -Path $env:GITHUB_PATH -Value (Join-Path $flutterDir "bin")
           & (Join-Path $flutterDir "bin\flutter.bat") config --enable-windows-desktop
