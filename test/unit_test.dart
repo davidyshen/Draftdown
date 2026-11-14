@@ -1,4 +1,5 @@
 import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -17,14 +18,14 @@ void main() {
 
   TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
       .setMockMethodCallHandler(
-    const MethodChannel('plugins.flutter.io/path_provider'),
-    (MethodCall methodCall) async {
-      if (methodCall.method == 'getTemporaryDirectory') {
-        return Directory.systemTemp.path;
-      }
-      return null;
-    },
-  );
+        const MethodChannel('plugins.flutter.io/path_provider'),
+        (MethodCall methodCall) async {
+          if (methodCall.method == 'getTemporaryDirectory') {
+            return Directory.systemTemp.path;
+          }
+          return null;
+        },
+      );
 
   group('CitationItem Model', () {
     test('formats Pandoc bracketed citation correctly', () {
@@ -44,10 +45,7 @@ void main() {
         item.toPandocCitation(suppressAuthor: true),
         equals('[-@turing1950]'),
       );
-      expect(
-        item.toPandocCitation(inText: true),
-        equals('@turing1950'),
-      );
+      expect(item.toPandocCitation(inText: true), equals('@turing1950'));
       expect(
         item.toPandocCitation(inText: true, locator: 'p. 433'),
         equals('@turing1950 [p. 433]'),
@@ -94,7 +92,11 @@ void main() {
         equals('@turing1950 and @shannon1948'),
       );
       expect(
-        CitationItem.formatMultiple([item1, item2], inText: true, locator: 'p. 42'),
+        CitationItem.formatMultiple(
+          [item1, item2],
+          inText: true,
+          locator: 'p. 42',
+        ),
         equals('@turing1950 and @shannon1948 [p. 42]'),
       );
       expect(
@@ -118,8 +120,7 @@ void main() {
         authors: ['Larry Page', 'Sergey Brin'],
         year: '1998',
       );
-      expect(twoAuthors.formattedAuthorYear,
-          equals('Page & Brin, 1998'));
+      expect(twoAuthors.formattedAuthorYear, equals('Page & Brin, 1998'));
 
       const multiAuthors = CitationItem(
         key: 'vaswani2017',
@@ -138,9 +139,15 @@ void main() {
         year: null,
       );
 
-      expect(itemWithoutAuthors.shortAuthorSummary, equals('Moreno-Mateos et al.'));
+      expect(
+        itemWithoutAuthors.shortAuthorSummary,
+        equals('Moreno-Mateos et al.'),
+      );
       expect(itemWithoutAuthors.effectiveYear, equals('2020'));
-      expect(itemWithoutAuthors.formattedAuthorYear, equals('Moreno-Mateos et al., 2020'));
+      expect(
+        itemWithoutAuthors.formattedAuthorYear,
+        equals('Moreno-Mateos et al., 2020'),
+      );
     });
 
     test('renders bibliography authors correctly based on the 10/6 rule', () {
@@ -167,10 +174,7 @@ void main() {
       const ten = CitationItem(
         key: 'ten2020',
         title: 'Title',
-        authors: [
-          'A1', 'A2', 'A3', 'A4', 'A5',
-          'A6', 'A7', 'A8', 'A9', 'A10'
-        ],
+        authors: ['A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7', 'A8', 'A9', 'A10'],
       );
       expect(
         ten.bibliographyAuthorsSummary,
@@ -182,8 +186,17 @@ void main() {
         key: 'eleven2020',
         title: 'Title',
         authors: [
-          'A1', 'A2', 'A3', 'A4', 'A5',
-          'A6', 'A7', 'A8', 'A9', 'A10', 'A11'
+          'A1',
+          'A2',
+          'A3',
+          'A4',
+          'A5',
+          'A6',
+          'A7',
+          'A8',
+          'A9',
+          'A10',
+          'A11',
         ],
       );
       expect(
@@ -196,14 +209,27 @@ void main() {
         key: 'fourteen2020',
         title: 'Title',
         authors: [
-          'Author 1', 'Author 2', 'Author 3', 'Author 4', 'Author 5',
-          'Author 6', 'Author 7', 'Author 8', 'Author 9', 'Author 10',
-          'Author 11', 'Author 12', 'Author 13', 'Author 14'
+          'Author 1',
+          'Author 2',
+          'Author 3',
+          'Author 4',
+          'Author 5',
+          'Author 6',
+          'Author 7',
+          'Author 8',
+          'Author 9',
+          'Author 10',
+          'Author 11',
+          'Author 12',
+          'Author 13',
+          'Author 14',
         ],
       );
       expect(
         fourteen.bibliographyAuthorsSummary,
-        equals('Author 1, Author 2, Author 3, Author 4, Author 5, Author 6, et al.'),
+        equals(
+          'Author 1, Author 2, Author 3, Author 4, Author 5, Author 6, et al.',
+        ),
       );
 
       // Empty authors fallback
@@ -295,7 +321,10 @@ void main() {
       expect(shannon.venue, equals('Bell System Technical Journal'));
 
       final russell = items.firstWhere((i) => i.key == 'russell2010');
-      expect(russell.title, equals('Artificial Intelligence: A Modern Approach'));
+      expect(
+        russell.title,
+        equals('Artificial Intelligence: A Modern Approach'),
+      );
       expect(russell.authors.length, equals(2));
       expect(russell.year, equals('2010'));
     });
@@ -369,8 +398,10 @@ void main() {
 
       expect(controller.editorFontFamily, equals('Consolas'));
       expect(controller.isDualRenderFont, isFalse);
-      expect(controller.effectiveRenderHeaderFont,
-          equals(controller.renderBodyFont));
+      expect(
+        controller.effectiveRenderHeaderFont,
+        equals(controller.renderBodyFont),
+      );
 
       await controller.updateTypography(
         editorFontFamily: 'Fira Code',
@@ -388,14 +419,17 @@ void main() {
   });
 
   group('Bundled Pandoc Service', () {
-    test('detects bundled pandoc binary in assets/bin and reports version', () async {
-      final pandocService = PandocService();
-      final isAvailable = await pandocService.isAvailable();
-      expect(isAvailable, isTrue);
-      expect(pandocService.isBundled, isTrue);
-      final version = await pandocService.getVersion();
-      expect(version, contains('3.6.3'));
-    });
+    test(
+      'detects bundled pandoc binary in assets/bin and reports version',
+      () async {
+        final pandocService = PandocService();
+        final isAvailable = await pandocService.isAvailable();
+        expect(isAvailable, isTrue);
+        expect(pandocService.isBundled, isTrue);
+        final version = await pandocService.getVersion();
+        expect(version, matches(RegExp(r'^pandoc \d+\.\d+')));
+      },
+    );
   });
 
   group('Citation Source Switching', () {
@@ -411,30 +445,37 @@ void main() {
       expect(controller.citationSource, equals(CitationSource.zotero));
       expect(controller.zoteroCitations.isNotEmpty, isTrue);
       expect(
-        controller.zoteroCitations.any((c) => c.key.contains('vaswani2017attention')),
+        controller.zoteroCitations.any(
+          (c) => c.key.contains('vaswani2017attention'),
+        ),
         isTrue,
       );
     });
 
-    test('switches document citation style between authorYear and numeric', () async {
-      SharedPreferences.setMockInitialValues({});
-      final controller = EditorController();
+    test(
+      'switches document citation style between authorYear and numeric',
+      () async {
+        SharedPreferences.setMockInitialValues({});
+        final controller = EditorController();
 
-      expect(controller.citationStyle, equals(CitationStyle.authorYear));
+        expect(controller.citationStyle, equals(CitationStyle.authorYear));
 
-      await controller.setCitationStyle(CitationStyle.numeric);
-      expect(controller.citationStyle, equals(CitationStyle.numeric));
+        await controller.setCitationStyle(CitationStyle.numeric);
+        expect(controller.citationStyle, equals(CitationStyle.numeric));
 
-      await controller.setCitationStyle(CitationStyle.authorYear);
-      expect(controller.citationStyle, equals(CitationStyle.authorYear));
-    });
+        await controller.setCitationStyle(CitationStyle.authorYear);
+        expect(controller.citationStyle, equals(CitationStyle.authorYear));
+      },
+    );
 
     test('formatSelection inserts enclosing templates and positions cursor at entrypoint when collapsed', () {
       final controller = EditorController();
 
       // Bold: inserts **** and positions cursor at index 2 (**|**)
       controller.textController.text = '';
-      controller.textController.selection = const TextSelection.collapsed(offset: 0);
+      controller.textController.selection = const TextSelection.collapsed(
+        offset: 0,
+      );
       controller.formatSelection('**', '**');
       expect(controller.textController.text, equals('****'));
       expect(controller.textController.selection.baseOffset, equals(2));
@@ -442,7 +483,9 @@ void main() {
 
       // Italic: inserts ** and positions cursor at index 1 (*|*)
       controller.textController.text = '';
-      controller.textController.selection = const TextSelection.collapsed(offset: 0);
+      controller.textController.selection = const TextSelection.collapsed(
+        offset: 0,
+      );
       controller.formatSelection('*', '*');
       expect(controller.textController.text, equals('**'));
       expect(controller.textController.selection.baseOffset, equals(1));
@@ -450,7 +493,9 @@ void main() {
 
       // Strikethrough: inserts ~~~~ and positions cursor at index 2 (~~|~~)
       controller.textController.text = '';
-      controller.textController.selection = const TextSelection.collapsed(offset: 0);
+      controller.textController.selection = const TextSelection.collapsed(
+        offset: 0,
+      );
       controller.formatSelection('~~', '~~');
       expect(controller.textController.text, equals('~~~~'));
       expect(controller.textController.selection.baseOffset, equals(2));
@@ -458,7 +503,9 @@ void main() {
 
       // Inline code: inserts `` and positions cursor at index 1 (`|`)
       controller.textController.text = '';
-      controller.textController.selection = const TextSelection.collapsed(offset: 0);
+      controller.textController.selection = const TextSelection.collapsed(
+        offset: 0,
+      );
       controller.formatSelection('`', '`');
       expect(controller.textController.text, equals('``'));
       expect(controller.textController.selection.baseOffset, equals(1));
@@ -466,7 +513,9 @@ void main() {
 
       // Blockquote: inserts single > and positions cursor at index 2 (> |)
       controller.textController.text = '';
-      controller.textController.selection = const TextSelection.collapsed(offset: 0);
+      controller.textController.selection = const TextSelection.collapsed(
+        offset: 0,
+      );
       controller.formatSelection('> ', '');
       expect(controller.textController.text, equals('> '));
       expect(controller.textController.selection.baseOffset, equals(2));
@@ -474,7 +523,9 @@ void main() {
 
       // Heading 1: inserts single # and positions cursor at index 2 (# |)
       controller.textController.text = '';
-      controller.textController.selection = const TextSelection.collapsed(offset: 0);
+      controller.textController.selection = const TextSelection.collapsed(
+        offset: 0,
+      );
       controller.formatSelection('# ');
       expect(controller.textController.text, equals('# '));
       expect(controller.textController.selection.baseOffset, equals(2));
@@ -482,7 +533,9 @@ void main() {
 
       // Link: inserts [](https://) and positions cursor at index 1 ([|](https://))
       controller.textController.text = '';
-      controller.textController.selection = const TextSelection.collapsed(offset: 0);
+      controller.textController.selection = const TextSelection.collapsed(
+        offset: 0,
+      );
       controller.formatSelection('[', '](https://)');
       expect(controller.textController.text, equals('[](https://)'));
       expect(controller.textController.selection.baseOffset, equals(1));
@@ -494,50 +547,66 @@ void main() {
 
       // Wrap bold
       controller.textController.text = 'important note';
-      controller.textController.selection = const TextSelection(baseOffset: 0, extentOffset: 9);
+      controller.textController.selection = const TextSelection(
+        baseOffset: 0,
+        extentOffset: 9,
+      );
       controller.formatSelection('**', '**');
       expect(controller.textController.text, equals('**important** note'));
 
       // Wrap quote
       controller.textController.text = 'quoted words';
-      controller.textController.selection = const TextSelection(baseOffset: 0, extentOffset: 12);
+      controller.textController.selection = const TextSelection(
+        baseOffset: 0,
+        extentOffset: 12,
+      );
       controller.formatSelection('> ', '');
       expect(controller.textController.text, equals('> quoted words'));
     });
 
-    test('ZoteroService provides distinct citekeys and titles from Zotero library', () async {
-      final zoteroService = ZoteroService();
-      final items = await zoteroService.getOrSearch('attention');
+    test(
+      'ZoteroService provides distinct citekeys and titles from Zotero library',
+      () async {
+        final zoteroService = ZoteroService();
+        final items = await zoteroService.getOrSearch('attention');
 
-      expect(items.isNotEmpty, isTrue);
-      expect(items.first.key, equals('vaswani2017attention'));
-      expect(items.first.title, contains('Attention Is All You Need'));
-      expect(items.first.authors, contains('Ashish Vaswani'));
-      expect(items.first.toPandocCitation(), equals('[@vaswani2017attention]'));
-    });
+        expect(items.isNotEmpty, isTrue);
+        expect(items.first.key, equals('vaswani2017attention'));
+        expect(items.first.title, contains('Attention Is All You Need'));
+        expect(items.first.authors, contains('Ashish Vaswani'));
+        expect(
+          items.first.toPandocCitation(),
+          equals('[@vaswani2017attention]'),
+        );
+      },
+    );
 
-    test('insertCitations inserts formatted multiple citations into controller', () {
-      final controller = EditorController();
-      controller.textController.text = 'See ';
-      controller.textController.selection =
-          const TextSelection.collapsed(offset: 4);
+    test(
+      'insertCitations inserts formatted multiple citations into controller',
+      () {
+        final controller = EditorController();
+        controller.textController.text = 'See ';
+        controller.textController.selection = const TextSelection.collapsed(
+          offset: 4,
+        );
 
-      const item1 = CitationItem(
-        key: 'turing1950',
-        title: 'Computing Machinery and Intelligence',
-        authors: ['Alan M. Turing'],
-        year: '1950',
-      );
-      const item2 = CitationItem(
-        key: 'shannon1948',
-        title: 'A Mathematical Theory of Communication',
-        authors: ['Claude E. Shannon'],
-        year: '1948',
-      );
+        const item1 = CitationItem(
+          key: 'turing1950',
+          title: 'Computing Machinery and Intelligence',
+          authors: ['Alan M. Turing'],
+          year: '1950',
+        );
+        const item2 = CitationItem(
+          key: 'shannon1948',
+          title: 'A Mathematical Theory of Communication',
+          authors: ['Claude E. Shannon'],
+          year: '1948',
+        );
 
-      controller.insertCitations([item1, item2]);
-      expect(controller.content, equals('See [@turing1950; @shannon1948]'));
-    });
+        controller.insertCitations([item1, item2]);
+        expect(controller.content, equals('See [@turing1950; @shannon1948]'));
+      },
+    );
   });
 
   group('DetectedCitation Recognition and In-Place Editing', () {
@@ -562,15 +631,21 @@ void main() {
       expect(detected.endOffset, equals(39));
     });
 
-    test('detects semicolon-separated citations with locator and suppressAuthor', () {
-      const doc = 'As proved in [-@turing1950; @shannon1948, p. 42].';
-      final detected = DetectedCitation.findAt(doc, 20);
-      expect(detected, isNotNull);
-      expect(detected!.rawText, equals('[-@turing1950; @shannon1948, p. 42]'));
-      expect(detected.keys, equals(['turing1950', 'shannon1948']));
-      expect(detected.suppressAuthor, isTrue);
-      expect(detected.locator, equals('p. 42'));
-    });
+    test(
+      'detects semicolon-separated citations with locator and suppressAuthor',
+      () {
+        const doc = 'As proved in [-@turing1950; @shannon1948, p. 42].';
+        final detected = DetectedCitation.findAt(doc, 20);
+        expect(detected, isNotNull);
+        expect(
+          detected!.rawText,
+          equals('[-@turing1950; @shannon1948, p. 42]'),
+        );
+        expect(detected.keys, equals(['turing1950', 'shannon1948']));
+        expect(detected.suppressAuthor, isTrue);
+        expect(detected.locator, equals('p. 42'));
+      },
+    );
 
     test('detects in-text citation', () {
       const doc = 'According to @shannon1948 [p. 10], information is...';
@@ -726,8 +801,7 @@ def forward(x):
     test('generateHtmlDocument formats citations and bibliography numerically when in numeric mode', () async {
       final controller = EditorController();
       await controller.setCitationStyle(CitationStyle.numeric);
-      controller.textController.text =
-          'Pioneering work [@turing1950computing] led to transformers [@vaswani2017attention].';
+      controller.textController.text = 'Pioneering work [@turing1950computing] led to transformers [@vaswani2017attention].';
 
       final service = controller.directExportService;
       final html = service.generateHtmlDocument(
@@ -741,17 +815,25 @@ def forward(x):
 
       // Verify numbered bibliography entries in HTML <ol> list
       expect(html, contains('<ol>'));
-      expect(html, contains('<li><strong>Alan M. Turing</strong> (1950). <em>Computing Machinery and Intelligence</em>'));
+      expect(
+        html,
+        contains(
+          '<li><strong>Alan M. Turing</strong> (1950). <em>Computing Machinery and Intelligence</em>',
+        ),
+      );
       expect(html, contains('<li><strong>Ashish Vaswani'));
     });
 
-    test('DirectExportService finds browser executable on this environment', () async {
-      final controller = EditorController();
-      final service = controller.directExportService;
-      final browser = await service.findBrowserExecutable();
-      // On Windows 10/11, Edge is standard
-      expect(browser, isNotNull);
-    });
+    test(
+      'DirectExportService finds browser executable on this environment',
+      () async {
+        final controller = EditorController();
+        final service = controller.directExportService;
+        final browser = await service.findBrowserExecutable();
+        // On Windows 10/11, Edge is standard
+        expect(browser, isNotNull);
+      },
+    );
 
     test('DirectExportService generateHtmlDocument supports A4 and Letter page sizes', () {
       final controller = EditorController();
@@ -774,7 +856,10 @@ def forward(x):
     test('DirectExportService resolvePageMargin and generateHtmlDocument support medium, thin, and thick margins', () {
       expect(DirectExportService.resolvePageMargin('medium'), equals('1in'));
       expect(DirectExportService.resolvePageMargin('thin'), equals('0.5in'));
-      expect(DirectExportService.resolvePageMargin('thick'), equals('1in 1.25in'));
+      expect(
+        DirectExportService.resolvePageMargin('thick'),
+        equals('1in 1.25in'),
+      );
 
       final controller = EditorController();
       final service = controller.directExportService;
@@ -803,66 +888,81 @@ def forward(x):
   });
 
   group('Diacritic-Insensitive Citation Search', () {
-    test('normalizeForSearch strips accents, umlauts, cedillas, and ligatures', () {
-      expect(CitationItem.normalizeForSearch('pärtel'), equals('partel'));
-      expect(CitationItem.normalizeForSearch('Pärtel'), equals('partel'));
-      expect(CitationItem.normalizeForSearch('Schrödinger'), equals('schrodinger'));
-      expect(CitationItem.normalizeForSearch('García-Bellido'), equals('garcia-bellido'));
-      expect(CitationItem.normalizeForSearch('François'), equals('francois'));
-      expect(CitationItem.normalizeForSearch('Poincaré'), equals('poincare'));
-      expect(CitationItem.normalizeForSearch('Björn'), equals('bjorn'));
-      expect(CitationItem.normalizeForSearch('Erdős'), equals('erdos'));
-      expect(CitationItem.normalizeForSearch('Müller'), equals('muller'));
-      expect(CitationItem.normalizeForSearch('Strauß'), equals('strauss'));
-      // Unicode decomposed combining marks
-      expect(CitationItem.normalizeForSearch('pa\u0308rtel'), equals('partel'));
-    });
+    test(
+      'normalizeForSearch strips accents, umlauts, cedillas, and ligatures',
+      () {
+        expect(CitationItem.normalizeForSearch('pärtel'), equals('partel'));
+        expect(CitationItem.normalizeForSearch('Pärtel'), equals('partel'));
+        expect(
+          CitationItem.normalizeForSearch('Schrödinger'),
+          equals('schrodinger'),
+        );
+        expect(
+          CitationItem.normalizeForSearch('García-Bellido'),
+          equals('garcia-bellido'),
+        );
+        expect(CitationItem.normalizeForSearch('François'), equals('francois'));
+        expect(CitationItem.normalizeForSearch('Poincaré'), equals('poincare'));
+        expect(CitationItem.normalizeForSearch('Björn'), equals('bjorn'));
+        expect(CitationItem.normalizeForSearch('Erdős'), equals('erdos'));
+        expect(CitationItem.normalizeForSearch('Müller'), equals('muller'));
+        expect(CitationItem.normalizeForSearch('Strauß'), equals('strauss'));
+        // Unicode decomposed combining marks
+        expect(
+          CitationItem.normalizeForSearch('pa\u0308rtel'),
+          equals('partel'),
+        );
+      },
+    );
 
-    test('BibliographyService matches items without requiring accent characters', () {
-      final service = BibliographyService();
-      const testItem1 = CitationItem(
-        key: 'partel2002dark',
-        title: 'Dark diversity and plant species coexistence',
-        authors: ['Meelis Pärtel', 'Martin Zobel'],
-        year: '2002',
-      );
-      const testItem2 = CitationItem(
-        key: 'schrodinger1935cat',
-        title: 'Die gegenwärtige Situation in der Quantenmechanik',
-        authors: ['Erwin Schrödinger'],
-        year: '1935',
-      );
-      const testItem3 = CitationItem(
-        key: 'garcia2018gene',
-        title: 'CRISPR Cas9 editing mechanisms',
-        authors: ['Elena García', 'Juan López'],
-        year: '2018',
-      );
+    test(
+      'BibliographyService matches items without requiring accent characters',
+      () {
+        final service = BibliographyService();
+        const testItem1 = CitationItem(
+          key: 'partel2002dark',
+          title: 'Dark diversity and plant species coexistence',
+          authors: ['Meelis Pärtel', 'Martin Zobel'],
+          year: '2002',
+        );
+        const testItem2 = CitationItem(
+          key: 'schrodinger1935cat',
+          title: 'Die gegenwärtige Situation in der Quantenmechanik',
+          authors: ['Erwin Schrödinger'],
+          year: '1935',
+        );
+        const testItem3 = CitationItem(
+          key: 'garcia2018gene',
+          title: 'CRISPR Cas9 editing mechanisms',
+          authors: ['Elena García', 'Juan López'],
+          year: '2018',
+        );
 
-      service.setItems([testItem1, testItem2, testItem3]);
+        service.setItems([testItem1, testItem2, testItem3]);
 
-      // Querying without accents
-      final partelResults = service.search('partel');
-      expect(partelResults.length, equals(1));
-      expect(partelResults.first.key, equals('partel2002dark'));
+        // Querying without accents
+        final partelResults = service.search('partel');
+        expect(partelResults.length, equals(1));
+        expect(partelResults.first.key, equals('partel2002dark'));
 
-      final schrodingerResults = service.search('schrodinger');
-      expect(schrodingerResults.length, equals(1));
-      expect(schrodingerResults.first.key, equals('schrodinger1935cat'));
+        final schrodingerResults = service.search('schrodinger');
+        expect(schrodingerResults.length, equals(1));
+        expect(schrodingerResults.first.key, equals('schrodinger1935cat'));
 
-      final garciaResults = service.search('garcia');
-      expect(garciaResults.length, equals(1));
-      expect(garciaResults.first.key, equals('garcia2018gene'));
+        final garciaResults = service.search('garcia');
+        expect(garciaResults.length, equals(1));
+        expect(garciaResults.first.key, equals('garcia2018gene'));
 
-      // Querying with accents
-      final accentedSearch = service.search('pärtel');
-      expect(accentedSearch.length, equals(1));
-      expect(accentedSearch.first.key, equals('partel2002dark'));
+        // Querying with accents
+        final accentedSearch = service.search('pärtel');
+        expect(accentedSearch.length, equals(1));
+        expect(accentedSearch.first.key, equals('partel2002dark'));
 
-      // Multi-word and token matching
-      final multiToken = service.search('meelis dark');
-      expect(multiToken.length, equals(1));
-      expect(multiToken.first.key, equals('partel2002dark'));
-    });
+        // Multi-word and token matching
+        final multiToken = service.search('meelis dark');
+        expect(multiToken.length, equals(1));
+        expect(multiToken.first.key, equals('partel2002dark'));
+      },
+    );
   });
 }

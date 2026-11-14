@@ -1,9 +1,10 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
+
 import 'package:flutter/foundation.dart';
 import 'package:markdown/markdown.dart' as md;
-import '../controllers/editor_controller.dart' show CitationStyle;
+
 import '../models/citation_item.dart';
 
 // =============================================================================
@@ -11,8 +12,7 @@ import '../models/citation_item.dart';
 // =============================================================================
 
 class DisplayMathSyntax extends md.InlineSyntax {
-  DisplayMathSyntax()
-      : super(r'(?:\$\$([\s\S]+?)\$\$|\\\[([\s\S]+?)\\\])');
+  DisplayMathSyntax() : super(r'(?:\$\$([\s\S]+?)\$\$|\\\[([\s\S]+?)\\\])');
 
   @override
   bool onMatch(md.InlineParser parser, Match match) {
@@ -25,7 +25,7 @@ class DisplayMathSyntax extends md.InlineSyntax {
 
 class InlineMathSyntax extends md.InlineSyntax {
   InlineMathSyntax()
-      : super(r'(?:(?<!\\)\$(?!\$)(.+?)(?<!\\)\$|\\\((.+?)\\\))');
+    : super(r'(?:(?<!\\)\$(?!\$)(.+?)(?<!\\)\$|\\\((.+?)\\\))');
 
   @override
   bool onMatch(md.InlineParser parser, Match match) {
@@ -38,10 +38,10 @@ class InlineMathSyntax extends md.InlineSyntax {
 
 class SuperscriptSyntax extends md.InlineSyntax {
   SuperscriptSyntax()
-      : super(
-          r'(?:<sup\b[^>]*>(.*?)<\/sup>|(?<!\^)\^([^\^\s]+)\^(?!\^))',
-          caseSensitive: false,
-        );
+    : super(
+        r'(?:<sup\b[^>]*>(.*?)<\/sup>|(?<!\^)\^([^\^\s]+)\^(?!\^))',
+        caseSensitive: false,
+      );
 
   @override
   bool onMatch(md.InlineParser parser, Match match) {
@@ -54,10 +54,10 @@ class SuperscriptSyntax extends md.InlineSyntax {
 
 class SubscriptSyntax extends md.InlineSyntax {
   SubscriptSyntax()
-      : super(
-          r'(?:<sub\b[^>]*>(.*?)<\/sub>|(?<!~)~([^~\s]+)~(?!~))',
-          caseSensitive: false,
-        );
+    : super(
+        r'(?:<sub\b[^>]*>(.*?)<\/sub>|(?<!~)~([^~\s]+)~(?!~))',
+        caseSensitive: false,
+      );
 
   @override
   bool onMatch(md.InlineParser parser, Match match) {
@@ -70,7 +70,7 @@ class SubscriptSyntax extends md.InlineSyntax {
 
 class BracketedCitationSyntax extends md.InlineSyntax {
   BracketedCitationSyntax()
-      : super(r'\[(-?@[a-zA-Z0-9_\-:#\/]+(?:[^\n\]]*))\]');
+    : super(r'\[(-?@[a-zA-Z0-9_\-:#\/]+(?:[^\n\]]*))\]');
 
   @override
   bool onMatch(md.InlineParser parser, Match match) {
@@ -84,7 +84,7 @@ class BracketedCitationSyntax extends md.InlineSyntax {
 
 class InTextCitationSyntax extends md.InlineSyntax {
   InTextCitationSyntax()
-      : super(r'(?<![\w@])@([a-zA-Z0-9_\-:#\/]+)(?:\[([^\]]+)\])?');
+    : super(r'(?<![\w@])@([a-zA-Z0-9_\-:#\/]+)(?:\[([^\]]+)\])?');
 
   @override
   bool onMatch(md.InlineParser parser, Match match) {
@@ -148,24 +148,40 @@ class MarkdownRenderService {
     r'^([ \t]*(?:>\s*)*(?:[-*+]|\d+\.)[ \t]+\[[ xX]\])[ \t]*$',
     multiLine: true,
   );
-  static final RegExp _emptyBulletRegex =
-      RegExp(r'^([ \t]*)([-*+])([ \t]+)$', multiLine: true);
-  static final RegExp _multiSpaceBulletRegex =
-      RegExp(r'^([ \t]*[-*+])[ \t]{2,}', multiLine: true);
+  static final RegExp _emptyBulletRegex = RegExp(
+    r'^([ \t]*)([-*+])([ \t]+)$',
+    multiLine: true,
+  );
+  static final RegExp _multiSpaceBulletRegex = RegExp(
+    r'^([ \t]*[-*+])[ \t]{2,}',
+    multiLine: true,
+  );
   static final RegExp _codeMaskRegex = RegExp(r'(```[\s\S]*?```|`[^`\n]+`)');
   static final RegExp _codeUnmaskRegex = RegExp(r'%%CODE_BLOCK_(\d+)%%');
-  static final RegExp _imgTagRegex =
-      RegExp(r'<img\s+([^>]*?)\/?>', caseSensitive: false);
-  static final RegExp _srcAttrRegex =
-      RegExp(r'''src=["']([^"']+)["']''', caseSensitive: false);
-  static final RegExp _altAttrRegex =
-      RegExp(r'''alt=["']([^"']*)["']''', caseSensitive: false);
-  static final RegExp _titleAttrRegex =
-      RegExp(r'''title=["']([^"']*)["']''', caseSensitive: false);
-  static final RegExp _widthAttrRegex =
-      RegExp(r'''width=["']?([0-9]+)["']?''', caseSensitive: false);
-  static final RegExp _heightAttrRegex =
-      RegExp(r'''height=["']?([0-9]+)["']?''', caseSensitive: false);
+  static final RegExp _imgTagRegex = RegExp(
+    r'<img\s+([^>]*?)\/?>',
+    caseSensitive: false,
+  );
+  static final RegExp _srcAttrRegex = RegExp(
+    r'''src=["']([^"']+)["']''',
+    caseSensitive: false,
+  );
+  static final RegExp _altAttrRegex = RegExp(
+    r'''alt=["']([^"']*)["']''',
+    caseSensitive: false,
+  );
+  static final RegExp _titleAttrRegex = RegExp(
+    r'''title=["']([^"']*)["']''',
+    caseSensitive: false,
+  );
+  static final RegExp _widthAttrRegex = RegExp(
+    r'''width=["']?([0-9]+)["']?''',
+    caseSensitive: false,
+  );
+  static final RegExp _heightAttrRegex = RegExp(
+    r'''height=["']?([0-9]+)["']?''',
+    caseSensitive: false,
+  );
   static final RegExp _citeRegex = RegExp(
     r'(?:\[(?:-?@[a-zA-Z0-9_\-:#\/]+(?:[^\n\]]*))\]|(?<![\w@])@([a-zA-Z0-9_\-:#\/]+))',
   );
@@ -181,7 +197,7 @@ class MarkdownRenderService {
   final MarkdownIsolateRunner _runner;
 
   MarkdownRenderService({MarkdownIsolateRunner? runner})
-      : _runner = runner ?? _defaultIsolateRunner;
+    : _runner = runner ?? _defaultIsolateRunner;
 
   static Future<MarkdownRenderResult> _defaultIsolateRunner(
     MarkdownRenderPayload payload,
@@ -246,66 +262,55 @@ class MarkdownRenderService {
     );
 
     // Handle incomplete list markers (e.g. line with only "* " or "*   ")
-    processed = processed.replaceAllMapped(
-      _emptyBulletRegex,
-      (m) {
-        final indent = m[1] ?? '';
-        final marker = m[2] ?? '*';
-        final spaces = m[3] ?? '';
-        final visibleSpaces = '\u00A0' * spaces.length;
-        return '$indent\\$marker$visibleSpaces';
-      },
-    );
+    processed = processed.replaceAllMapped(_emptyBulletRegex, (m) {
+      final indent = m[1] ?? '';
+      final marker = m[2] ?? '*';
+      final spaces = m[3] ?? '';
+      final visibleSpaces = '\u00A0' * spaces.length;
+      return '$indent\\$marker$visibleSpaces';
+    });
 
     // Preserve multiple spaces after list markers on lines with content
-    processed = processed.replaceAllMapped(
-      _multiSpaceBulletRegex,
-      (m) {
-        final marker = m[1]!;
-        final totalMatch = m.group(0)!;
-        final spaceCount = totalMatch.length - marker.length;
-        final extraSpaces = '\u00A0' * (spaceCount - 1);
-        return '$marker $extraSpaces';
-      },
-    );
+    processed = processed.replaceAllMapped(_multiSpaceBulletRegex, (m) {
+      final marker = m[1]!;
+      final totalMatch = m.group(0)!;
+      final spaceCount = totalMatch.length - marker.length;
+      final extraSpaces = '\u00A0' * (spaceCount - 1);
+      return '$marker $extraSpaces';
+    });
 
     // 1. Convert HTML <img> tags outside fenced code blocks into Markdown image syntax
     if (processed.contains('<img') ||
         processed.contains('<IMG') ||
         processed.contains('<Img')) {
       final codeTokens = <String>[];
-      processed = processed.replaceAllMapped(
-        _codeMaskRegex,
-        (m) {
-          codeTokens.add(m.group(0)!);
-          return '%%CODE_BLOCK_${codeTokens.length - 1}%%';
-        },
-      );
+      processed = processed.replaceAllMapped(_codeMaskRegex, (m) {
+        codeTokens.add(m.group(0)!);
+        return '%%CODE_BLOCK_${codeTokens.length - 1}%%';
+      });
 
-      processed = processed.replaceAllMapped(
-        _imgTagRegex,
-        (match) {
-          final attrs = match[1] ?? '';
-          final src = _srcAttrRegex.firstMatch(attrs)?.group(1);
-          if (src == null || src.isEmpty) return match.group(0)!;
+      processed = processed.replaceAllMapped(_imgTagRegex, (match) {
+        final attrs = match[1] ?? '';
+        final src = _srcAttrRegex.firstMatch(attrs)?.group(1);
+        if (src == null || src.isEmpty) return match.group(0)!;
 
-          final alt = _altAttrRegex.firstMatch(attrs)?.group(1) ?? '';
-          final title = _titleAttrRegex.firstMatch(attrs)?.group(1);
-          final width = _widthAttrRegex.firstMatch(attrs)?.group(1);
-          final height = _heightAttrRegex.firstMatch(attrs)?.group(1);
+        final alt = _altAttrRegex.firstMatch(attrs)?.group(1) ?? '';
+        final title = _titleAttrRegex.firstMatch(attrs)?.group(1);
+        final width = _widthAttrRegex.firstMatch(attrs)?.group(1);
+        final height = _heightAttrRegex.firstMatch(attrs)?.group(1);
 
-          String dim = '';
-          if (width != null && height != null) {
-            dim = '#${width}x$height';
-          } else if (width != null) {
-            dim = '#$width';
-          }
+        String dim = '';
+        if (width != null && height != null) {
+          dim = '#${width}x$height';
+        } else if (width != null) {
+          dim = '#$width';
+        }
 
-          final titlePart =
-              (title != null && title.isNotEmpty) ? ' "$title"' : '';
-          return '![$alt]($src$dim$titlePart)';
-        },
-      );
+        final titlePart = (title != null && title.isNotEmpty)
+            ? ' "$title"'
+            : '';
+        return '![$alt]($src$dim$titlePart)';
+      });
 
       if (codeTokens.isNotEmpty) {
         processed = processed.replaceAllMapped(
@@ -394,15 +399,16 @@ class MarkdownRenderService {
       for (int i = 0; i < citedKeysInOrder.length; i++) {
         final key = citedKeysInOrder[i];
         final num = i + 1;
-        final clean = key.trim().replaceFirst(_leadingAtOrHyphenRegex, '').toLowerCase();
+        final clean = key
+            .trim()
+            .replaceFirst(_leadingAtOrHyphenRegex, '')
+            .toLowerCase();
         final item = citationLookup[clean];
         if (item != null) {
           final authors = item.bibliographyAuthorsSummary;
           final yearStr = item.effectiveYear != 'n.d.'
               ? item.effectiveYear
-              : (item.year != null && item.year!.isNotEmpty
-                  ? item.year!
-                  : '');
+              : (item.year != null && item.year!.isNotEmpty ? item.year! : '');
           final yearDisplay = yearStr.isNotEmpty ? ' ($yearStr)' : '';
           final title = item.title;
           final venue = (item.venue != null && item.venue!.trim().isNotEmpty)
@@ -411,12 +417,15 @@ class MarkdownRenderService {
           final doi = (item.doi != null && item.doi!.trim().isNotEmpty)
               ? ' DOI: ${item.doi}.'
               : '';
-          final url = (item.url != null &&
+          final url =
+              (item.url != null &&
                   item.url!.trim().isNotEmpty &&
                   item.doi == null)
               ? ' Available at: ${item.url}.'
               : '';
-          buffer.writeln('$num. **$authors**$yearDisplay. *$title*.$venue$doi$url');
+          buffer.writeln(
+            '$num. **$authors**$yearDisplay. *$title*.$venue$doi$url',
+          );
         } else {
           buffer.writeln('$num. **@$key**. Citekey: `@$key`');
         }
@@ -425,8 +434,14 @@ class MarkdownRenderService {
       // In Author-Year mode: sort alphabetically by first author surname
       final sortedKeys = List<String>.from(citedKeysInOrder);
       sortedKeys.sort((keyA, keyB) {
-        final cleanA = keyA.trim().replaceFirst(_leadingAtOrHyphenRegex, '').toLowerCase();
-        final cleanB = keyB.trim().replaceFirst(_leadingAtOrHyphenRegex, '').toLowerCase();
+        final cleanA = keyA
+            .trim()
+            .replaceFirst(_leadingAtOrHyphenRegex, '')
+            .toLowerCase();
+        final cleanB = keyB
+            .trim()
+            .replaceFirst(_leadingAtOrHyphenRegex, '')
+            .toLowerCase();
         final itemA = citationLookup[cleanA];
         final itemB = citationLookup[cleanB];
         final surnameA = itemA?.authors.isNotEmpty == true
@@ -437,19 +452,22 @@ class MarkdownRenderService {
             : CitationItem.inferAuthorFromKey(keyB);
         final cmp = surnameA.toLowerCase().compareTo(surnameB.toLowerCase());
         if (cmp != 0) return cmp;
-        return (itemA?.effectiveYear ?? '').compareTo(itemB?.effectiveYear ?? '');
+        return (itemA?.effectiveYear ?? '').compareTo(
+          itemB?.effectiveYear ?? '',
+        );
       });
 
       for (final key in sortedKeys) {
-        final clean = key.trim().replaceFirst(_leadingAtOrHyphenRegex, '').toLowerCase();
+        final clean = key
+            .trim()
+            .replaceFirst(_leadingAtOrHyphenRegex, '')
+            .toLowerCase();
         final item = citationLookup[clean];
         if (item != null) {
           final authors = item.bibliographyAuthorsSummary;
           final yearStr = item.effectiveYear != 'n.d.'
               ? item.effectiveYear
-              : (item.year != null && item.year!.isNotEmpty
-                  ? item.year!
-                  : '');
+              : (item.year != null && item.year!.isNotEmpty ? item.year! : '');
           final yearDisplay = yearStr.isNotEmpty ? ' ($yearStr)' : '';
           final title = item.title;
           final venue = (item.venue != null && item.venue!.trim().isNotEmpty)
@@ -458,7 +476,8 @@ class MarkdownRenderService {
           final doi = (item.doi != null && item.doi!.trim().isNotEmpty)
               ? ' DOI: ${item.doi}.'
               : '';
-          final url = (item.url != null &&
+          final url =
+              (item.url != null &&
                   item.url!.trim().isNotEmpty &&
                   item.doi == null)
               ? ' Available at: ${item.url}.'

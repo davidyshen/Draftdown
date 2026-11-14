@@ -1,12 +1,14 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:flutter_math_fork/flutter_math.dart';
 import 'package:markdown/markdown.dart' as md;
 import 'package:path/path.dart' as p;
+
 import '../../controllers/editor_controller.dart';
 import '../../models/citation_item.dart';
 import '../theme/app_theme.dart';
@@ -17,8 +19,7 @@ import '../theme/app_theme.dart';
 
 /// Matches block/display formulas: $$...$$ or \[...\]
 class DisplayMathSyntax extends md.InlineSyntax {
-  DisplayMathSyntax()
-      : super(r'(?:\$\$([\s\S]+?)\$\$|\\\[([\s\S]+?)\\\])');
+  DisplayMathSyntax() : super(r'(?:\$\$([\s\S]+?)\$\$|\\\[([\s\S]+?)\\\])');
 
   @override
   bool onMatch(md.InlineParser parser, Match match) {
@@ -32,7 +33,7 @@ class DisplayMathSyntax extends md.InlineSyntax {
 /// Matches inline math formulas: $...$ or \(...\)
 class InlineMathSyntax extends md.InlineSyntax {
   InlineMathSyntax()
-      : super(r'(?:(?<!\\)\$(?!\$)(.+?)(?<!\\)\$|\\\((.+?)\\\))');
+    : super(r'(?:(?<!\\)\$(?!\$)(.+?)(?<!\\)\$|\\\((.+?)\\\))');
 
   @override
   bool onMatch(md.InlineParser parser, Match match) {
@@ -113,7 +114,7 @@ class MathElementBuilder extends MarkdownElementBuilder {
   }
 }
 
-/// Handles `<input>` tags (e.g. GFM task list checkboxes) so flutter_markdown
+/// Handles `<input>` tags (e.g. GFM task list checkboxes) so flutter_markdown_plus
 /// properly clears inline elements even when a checkbox has no following text.
 class InputElementBuilder extends MarkdownElementBuilder {
   @override
@@ -125,10 +126,10 @@ class InputElementBuilder extends MarkdownElementBuilder {
 /// Matches Pandoc `^content^` or HTML `<sup>content</sup>` inline tags
 class SuperscriptSyntax extends md.InlineSyntax {
   SuperscriptSyntax()
-      : super(
-          r'(?:<sup\b[^>]*>(.*?)<\/sup>|(?<!\^)\^([^\^\s]+)\^(?!\^))',
-          caseSensitive: false,
-        );
+    : super(
+        r'(?:<sup\b[^>]*>(.*?)<\/sup>|(?<!\^)\^([^\^\s]+)\^(?!\^))',
+        caseSensitive: false,
+      );
 
   @override
   bool onMatch(md.InlineParser parser, Match match) {
@@ -142,10 +143,10 @@ class SuperscriptSyntax extends md.InlineSyntax {
 /// Matches Pandoc `~content~` or HTML `<sub>content</sub>` inline tags
 class SubscriptSyntax extends md.InlineSyntax {
   SubscriptSyntax()
-      : super(
-          r'(?:<sub\b[^>]*>(.*?)<\/sub>|(?<!~)~([^~\s]+)~(?!~))',
-          caseSensitive: false,
-        );
+    : super(
+        r'(?:<sub\b[^>]*>(.*?)<\/sub>|(?<!~)~([^~\s]+)~(?!~))',
+        caseSensitive: false,
+      );
 
   @override
   bool onMatch(md.InlineParser parser, Match match) {
@@ -235,7 +236,7 @@ class SubscriptElementBuilder extends MarkdownElementBuilder {
 /// Matches bracketed citations: [@key], [@key, locator], [-@key], [@key1; @key2]
 class BracketedCitationSyntax extends md.InlineSyntax {
   BracketedCitationSyntax()
-      : super(r'\[(-?@[a-zA-Z0-9_\-:#\/]+(?:[^\n\]]*))\]');
+    : super(r'\[(-?@[a-zA-Z0-9_\-:#\/]+(?:[^\n\]]*))\]');
 
   @override
   bool onMatch(md.InlineParser parser, Match match) {
@@ -250,7 +251,7 @@ class BracketedCitationSyntax extends md.InlineSyntax {
 /// Matches in-text citations: @key or @key [p. 42]
 class InTextCitationSyntax extends md.InlineSyntax {
   InTextCitationSyntax()
-      : super(r'(?<![\w@])@([a-zA-Z0-9_\-:#\/]+)(?:\[([^\]]+)\])?');
+    : super(r'(?<![\w@])@([a-zA-Z0-9_\-:#\/]+)(?:\[([^\]]+)\])?');
 
   @override
   bool onMatch(md.InlineParser parser, Match match) {
@@ -340,8 +341,9 @@ class CitationHelper {
     final isNumeric = controller?.citationStyle == CitationStyle.numeric;
     final num = isNumeric ? (numericIndices[key.toLowerCase()] ?? 1) : null;
     final yearDisplay = yearStr.isNotEmpty ? yearStr : 'n.d.';
-    final locatorDisplay =
-        (locator != null && locator.isNotEmpty) ? ', $locator' : '';
+    final locatorDisplay = (locator != null && locator.isNotEmpty)
+        ? ', $locator'
+        : '';
 
     String rendered;
     if (isNumeric) {
@@ -368,11 +370,11 @@ class CitationHelper {
 
     final tooltip = item != null
         ? (isNumeric
-            ? '[$num] ${item.title}\n${item.bibliographyAuthorsSummary} (${item.year ?? "n.d."})\nCitekey: @${item.key}'
-            : '${item.title}\n${item.authorsSummary} (${item.year ?? "n.d."})\nCitekey: @${item.key}')
+              ? '[$num] ${item.title}\n${item.bibliographyAuthorsSummary} (${item.year ?? "n.d."})\nCitekey: @${item.key}'
+              : '${item.title}\n${item.authorsSummary} (${item.year ?? "n.d."})\nCitekey: @${item.key}')
         : (isNumeric
-            ? '[$num] $authorsStr ($yearDisplay)\nCitekey: @$key'
-            : '$authorsStr ($yearDisplay)\nCitekey: @$key');
+              ? '[$num] $authorsStr ($yearDisplay)\nCitekey: @$key'
+              : '$authorsStr ($yearDisplay)\nCitekey: @$key');
 
     return FormattedCitationSegment(
       rendered: rendered,
@@ -388,10 +390,7 @@ class CitationElementBuilder extends MarkdownElementBuilder {
   final CitationHelper helper;
   final bool isDark;
 
-  CitationElementBuilder({
-    required this.helper,
-    required this.isDark,
-  });
+  CitationElementBuilder({required this.helper, required this.isDark});
 
   @override
   Widget? visitElementAfter(md.Element element, TextStyle? preferredStyle) {
@@ -401,22 +400,21 @@ class CitationElementBuilder extends MarkdownElementBuilder {
     // Handle multiple citations in brackets e.g. [@smith2020; @doe2021]
     final segments = raw.split(';').map((s) => s.trim()).toList();
     final formattedSegments = segments
-        .map((s) => helper.formatSegment(
-              segmentText: s,
-              bracketed: isBracketed,
-            ))
+        .map(
+          (s) => helper.formatSegment(segmentText: s, bracketed: isBracketed),
+        )
         .toList();
 
-    final linkColor =
-        isDark ? AppTheme.darkAccent : AppTheme.lightAccent;
+    final linkColor = isDark ? AppTheme.darkAccent : AppTheme.lightAccent;
     final isNumeric = helper.controller?.citationStyle == CitationStyle.numeric;
 
     if (isBracketed) {
       final combined = isNumeric
           ? formattedSegments.map((s) => s.rendered).join(', ')
           : formattedSegments.map((s) => s.rendered).join('; ');
-      final tooltipCombined =
-          formattedSegments.map((s) => s.tooltip).join('\n---\n');
+      final tooltipCombined = formattedSegments
+          .map((s) => s.tooltip)
+          .join('\n---\n');
       final displayText = isNumeric ? '[$combined]' : '($combined)';
 
       return Tooltip(
@@ -464,10 +462,7 @@ class MathCodeBlockBuilder extends MarkdownElementBuilder {
   final Color textColor;
   final String codeFont;
 
-  MathCodeBlockBuilder({
-    required this.textColor,
-    required this.codeFont,
-  });
+  MathCodeBlockBuilder({required this.textColor, required this.codeFont});
 
   @override
   Widget? visitElementAfter(md.Element element, TextStyle? preferredStyle) {
@@ -596,15 +591,27 @@ class MarkdownImageElementBuilder extends MarkdownElementBuilder {
             height: height,
             fit: BoxFit.contain,
             errorBuilder: (ctx, err, stack) => _buildErrorWidget(
-                context, rawSrc, alt, 'Failed to decode image data'),
+              context,
+              rawSrc,
+              alt,
+              'Failed to decode image data',
+            ),
           );
         } catch (_) {
           imageWidget = _buildErrorWidget(
-              context, rawSrc, alt, 'Invalid base64 image data');
+            context,
+            rawSrc,
+            alt,
+            'Invalid base64 image data',
+          );
         }
       } else {
-        imageWidget =
-            _buildErrorWidget(context, rawSrc, alt, 'Malformed data URI');
+        imageWidget = _buildErrorWidget(
+          context,
+          rawSrc,
+          alt,
+          'Malformed data URI',
+        );
       }
     }
     // 2. Remote network image (http:// or https://)
@@ -624,15 +631,15 @@ class MarkdownImageElementBuilder extends MarkdownElementBuilder {
               color: isDark ? AppTheme.darkSurface : AppTheme.lightSidebar,
               borderRadius: BorderRadius.circular(4),
             ),
-            child: Icon(
-              Icons.image_outlined,
-              color: mutedColor,
-              size: 24,
-            ),
+            child: Icon(Icons.image_outlined, color: mutedColor, size: 24),
           );
         },
         errorBuilder: (ctx, err, stack) => _buildErrorWidget(
-            context, rawSrc, alt, 'Unable to load network image'),
+          context,
+          rawSrc,
+          alt,
+          'Unable to load network image',
+        ),
       );
     }
     // 3. Local filesystem image / Asset
@@ -645,18 +652,27 @@ class MarkdownImageElementBuilder extends MarkdownElementBuilder {
           height: height,
           fit: BoxFit.contain,
           errorBuilder: (ctx, err, stack) => _buildErrorWidget(
-              context, rawSrc, alt, 'Unable to decode image file'),
+            context,
+            rawSrc,
+            alt,
+            'Unable to decode image file',
+          ),
         );
       } else if (rawSrc.startsWith('asset:') || rawSrc.startsWith('assets/')) {
-        final assetPath =
-            rawSrc.startsWith('asset:') ? rawSrc.substring(6) : rawSrc;
+        final assetPath = rawSrc.startsWith('asset:')
+            ? rawSrc.substring(6)
+            : rawSrc;
         imageWidget = Image.asset(
           assetPath,
           width: width,
           height: height,
           fit: BoxFit.contain,
           errorBuilder: (ctx, err, stack) => _buildErrorWidget(
-              context, rawSrc, alt, 'Asset not found: $assetPath'),
+            context,
+            rawSrc,
+            alt,
+            'Asset not found: $assetPath',
+          ),
         );
       } else {
         imageWidget = _buildErrorWidget(
@@ -721,8 +737,9 @@ class MarkdownImageElementBuilder extends MarkdownElementBuilder {
     }
 
     // 3. Try relative to current working directory
-    final cwdCandidate =
-        File(p.normalize(p.join(Directory.current.path, clean)));
+    final cwdCandidate = File(
+      p.normalize(p.join(Directory.current.path, clean)),
+    );
     if (cwdCandidate.existsSync()) {
       return cwdCandidate;
     }
@@ -750,8 +767,8 @@ class MarkdownImageElementBuilder extends MarkdownElementBuilder {
     final caption = (title != null && title.trim().isNotEmpty)
         ? title.trim()
         : (alt != null && alt.trim().isNotEmpty && !alt.startsWith('http')
-            ? alt.trim()
-            : null);
+              ? alt.trim()
+              : null);
 
     Widget content = ClipRRect(
       borderRadius: BorderRadius.circular(4),
@@ -759,19 +776,12 @@ class MarkdownImageElementBuilder extends MarkdownElementBuilder {
     );
 
     if (width != null || height != null) {
-      content = SizedBox(
-        width: width,
-        height: height,
-        child: content,
-      );
+      content = SizedBox(width: width, height: height, child: content);
     }
 
     final tooltipMsg = title ?? alt ?? p.basename(rawSrc);
     if (tooltipMsg.isNotEmpty) {
-      content = Tooltip(
-        message: tooltipMsg,
-        child: content,
-      );
+      content = Tooltip(message: tooltipMsg, child: content);
     }
 
     return Container(
@@ -981,7 +991,7 @@ class _AstMarkdownBodyState extends State<AstMarkdownBody>
       selectable: widget.selectable,
       styleSheet: styleSheet,
       imageDirectory: widget.imageDirectory,
-      sizedImageBuilder: null,
+      imageBuilder: null,
       checkboxBuilder: widget.checkboxBuilder,
       bulletBuilder: null,
       builders: widget.builders,
@@ -1015,7 +1025,7 @@ class _AstMarkdownBodyState extends State<AstMarkdownBody>
 // Live Markdown Preview Widget
 // =============================================================================
 
-/// Live Markdown preview widget using flutter_markdown with customised
+/// Live Markdown preview widget using flutter_markdown_plus with customised
 /// GitHub-Flavoured styling, immediate KaTeX formula rendering,
 /// immediate in-place reference formatting, and auto-generated bibliography.
 class MarkdownPreviewView extends StatefulWidget {
@@ -1059,24 +1069,40 @@ class _MarkdownPreviewViewState extends State<MarkdownPreviewView> {
     r'^([ \t]*(?:>\s*)*(?:[-*+]|\d+\.)[ \t]+\[[ xX]\])[ \t]*$',
     multiLine: true,
   );
-  static final RegExp _emptyBulletRegex =
-      RegExp(r'^([ \t]*)([-*+])([ \t]+)$', multiLine: true);
-  static final RegExp _multiSpaceBulletRegex =
-      RegExp(r'^([ \t]*[-*+])[ \t]{2,}', multiLine: true);
+  static final RegExp _emptyBulletRegex = RegExp(
+    r'^([ \t]*)([-*+])([ \t]+)$',
+    multiLine: true,
+  );
+  static final RegExp _multiSpaceBulletRegex = RegExp(
+    r'^([ \t]*[-*+])[ \t]{2,}',
+    multiLine: true,
+  );
   static final RegExp _codeMaskRegex = RegExp(r'(```[\s\S]*?```|`[^`\n]+`)');
   static final RegExp _codeUnmaskRegex = RegExp(r'%%CODE_BLOCK_(\d+)%%');
-  static final RegExp _imgTagRegex =
-      RegExp(r'<img\s+([^>]*?)\/?>', caseSensitive: false);
-  static final RegExp _srcAttrRegex =
-      RegExp(r'''src=["']([^"']+)["']''', caseSensitive: false);
-  static final RegExp _altAttrRegex =
-      RegExp(r'''alt=["']([^"']*)["']''', caseSensitive: false);
-  static final RegExp _titleAttrRegex =
-      RegExp(r'''title=["']([^"']*)["']''', caseSensitive: false);
-  static final RegExp _widthAttrRegex =
-      RegExp(r'''width=["']?([0-9]+)["']?''', caseSensitive: false);
-  static final RegExp _heightAttrRegex =
-      RegExp(r'''height=["']?([0-9]+)["']?''', caseSensitive: false);
+  static final RegExp _imgTagRegex = RegExp(
+    r'<img\s+([^>]*?)\/?>',
+    caseSensitive: false,
+  );
+  static final RegExp _srcAttrRegex = RegExp(
+    r'''src=["']([^"']+)["']''',
+    caseSensitive: false,
+  );
+  static final RegExp _altAttrRegex = RegExp(
+    r'''alt=["']([^"']*)["']''',
+    caseSensitive: false,
+  );
+  static final RegExp _titleAttrRegex = RegExp(
+    r'''title=["']([^"']*)["']''',
+    caseSensitive: false,
+  );
+  static final RegExp _widthAttrRegex = RegExp(
+    r'''width=["']?([0-9]+)["']?''',
+    caseSensitive: false,
+  );
+  static final RegExp _heightAttrRegex = RegExp(
+    r'''height=["']?([0-9]+)["']?''',
+    caseSensitive: false,
+  );
   static final RegExp _citeRegex = RegExp(
     r'(?:\[(?:-?@[a-zA-Z0-9_\-:#\/]+(?:[^\n\]]*))\]|(?<![\w@])@([a-zA-Z0-9_\-:#\/]+))',
   );
@@ -1135,7 +1161,8 @@ class _MarkdownPreviewViewState extends State<MarkdownPreviewView> {
       return widget.markdown;
     }
 
-    final citationCount = (helper.controller?.citations.length ?? 0) +
+    final citationCount =
+        (helper.controller?.citations.length ?? 0) +
         (helper.controller?.zoteroCitations.length ?? 0);
     final citationStyle =
         helper.controller?.citationStyle ?? CitationStyle.authorYear;
@@ -1156,7 +1183,7 @@ class _MarkdownPreviewViewState extends State<MarkdownPreviewView> {
 
   String _computeMarkdownWithReferences(CitationHelper helper) {
     // 0. Handle empty task list checkboxes (e.g. "- [ ] " or "- [x] ")
-    // In flutter_markdown, an empty task list item causes `_inlines.isEmpty` assertion to fail
+    // In flutter_markdown_plus, an empty task list item causes `_inlines.isEmpty` assertion to fail
     // because <input type="checkbox"> has no children and no text node is generated.
     // Appending a non-breaking space ensures a text child exists, safely clearing inlines.
     var processed = widget.markdown.replaceAllMapped(
@@ -1169,29 +1196,23 @@ class _MarkdownPreviewViewState extends State<MarkdownPreviewView> {
     // which renders as a bullet with zero-width whitespace, hiding all spaces until text is entered.
     // By escaping the marker on lines with no text and converting spaces to non-breaking spaces,
     // spaces entered after "*" are always visibly rendered in the preview.
-    processed = processed.replaceAllMapped(
-      _emptyBulletRegex,
-      (m) {
-        final indent = m[1] ?? '';
-        final marker = m[2] ?? '*';
-        final spaces = m[3] ?? '';
-        final visibleSpaces = '\u00A0' * spaces.length;
-        return '$indent\\$marker$visibleSpaces';
-      },
-    );
+    processed = processed.replaceAllMapped(_emptyBulletRegex, (m) {
+      final indent = m[1] ?? '';
+      final marker = m[2] ?? '*';
+      final spaces = m[3] ?? '';
+      final visibleSpaces = '\u00A0' * spaces.length;
+      return '$indent\\$marker$visibleSpaces';
+    });
 
     // Also preserve multiple spaces after list markers on lines with content (e.g. "*   text")
     // so CommonMark does not collapse consecutive spaces into a single space
-    processed = processed.replaceAllMapped(
-      _multiSpaceBulletRegex,
-      (m) {
-        final marker = m[1]!;
-        final totalMatch = m.group(0)!;
-        final spaceCount = totalMatch.length - marker.length;
-        final extraSpaces = '\u00A0' * (spaceCount - 1);
-        return '$marker $extraSpaces';
-      },
-    );
+    processed = processed.replaceAllMapped(_multiSpaceBulletRegex, (m) {
+      final marker = m[1]!;
+      final totalMatch = m.group(0)!;
+      final spaceCount = totalMatch.length - marker.length;
+      final extraSpaces = '\u00A0' * (spaceCount - 1);
+      return '$marker $extraSpaces';
+    });
 
     // 1. Convert HTML <img> tags outside fenced code blocks into Markdown image syntax
     // Fast check: skip code-block masking and <img> replacement entirely if no '<img' is present.
@@ -1199,38 +1220,33 @@ class _MarkdownPreviewViewState extends State<MarkdownPreviewView> {
         processed.contains('<IMG') ||
         processed.contains('<Img')) {
       final codeTokens = <String>[];
-      processed = processed.replaceAllMapped(
-        _codeMaskRegex,
-        (m) {
-          codeTokens.add(m.group(0)!);
-          return '%%CODE_BLOCK_${codeTokens.length - 1}%%';
-        },
-      );
+      processed = processed.replaceAllMapped(_codeMaskRegex, (m) {
+        codeTokens.add(m.group(0)!);
+        return '%%CODE_BLOCK_${codeTokens.length - 1}%%';
+      });
 
-      processed = processed.replaceAllMapped(
-        _imgTagRegex,
-        (match) {
-          final attrs = match[1] ?? '';
-          final src = _srcAttrRegex.firstMatch(attrs)?.group(1);
-          if (src == null || src.isEmpty) return match.group(0)!;
+      processed = processed.replaceAllMapped(_imgTagRegex, (match) {
+        final attrs = match[1] ?? '';
+        final src = _srcAttrRegex.firstMatch(attrs)?.group(1);
+        if (src == null || src.isEmpty) return match.group(0)!;
 
-          final alt = _altAttrRegex.firstMatch(attrs)?.group(1) ?? '';
-          final title = _titleAttrRegex.firstMatch(attrs)?.group(1);
-          final width = _widthAttrRegex.firstMatch(attrs)?.group(1);
-          final height = _heightAttrRegex.firstMatch(attrs)?.group(1);
+        final alt = _altAttrRegex.firstMatch(attrs)?.group(1) ?? '';
+        final title = _titleAttrRegex.firstMatch(attrs)?.group(1);
+        final width = _widthAttrRegex.firstMatch(attrs)?.group(1);
+        final height = _heightAttrRegex.firstMatch(attrs)?.group(1);
 
-          String dim = '';
-          if (width != null && height != null) {
-            dim = '#${width}x$height';
-          } else if (width != null) {
-            dim = '#$width';
-          }
+        String dim = '';
+        if (width != null && height != null) {
+          dim = '#${width}x$height';
+        } else if (width != null) {
+          dim = '#$width';
+        }
 
-          final titlePart =
-              (title != null && title.isNotEmpty) ? ' "$title"' : '';
-          return '![$alt]($src$dim$titlePart)';
-        },
-      );
+        final titlePart = (title != null && title.isNotEmpty)
+            ? ' "$title"'
+            : '';
+        return '![$alt]($src$dim$titlePart)';
+      });
 
       if (codeTokens.isNotEmpty) {
         processed = processed.replaceAllMapped(
@@ -1279,8 +1295,7 @@ class _MarkdownPreviewViewState extends State<MarkdownPreviewView> {
     final buffer = StringBuffer(processed);
     buffer.writeln('\n\n---\n\n### References\n');
 
-    final isNumeric =
-        helper.controller?.citationStyle == CitationStyle.numeric;
+    final isNumeric = helper.controller?.citationStyle == CitationStyle.numeric;
 
     if (isNumeric) {
       // In numeric mode: order by appearance (index 1, 2, 3...)
@@ -1292,9 +1307,7 @@ class _MarkdownPreviewViewState extends State<MarkdownPreviewView> {
           final authors = item.bibliographyAuthorsSummary;
           final yearStr = item.effectiveYear != 'n.d.'
               ? item.effectiveYear
-              : (item.year != null && item.year!.isNotEmpty
-                  ? item.year!
-                  : '');
+              : (item.year != null && item.year!.isNotEmpty ? item.year! : '');
           final yearDisplay = yearStr.isNotEmpty ? ' ($yearStr)' : '';
           final title = item.title;
           final venue = (item.venue != null && item.venue!.trim().isNotEmpty)
@@ -1303,13 +1316,15 @@ class _MarkdownPreviewViewState extends State<MarkdownPreviewView> {
           final doi = (item.doi != null && item.doi!.trim().isNotEmpty)
               ? ' DOI: ${item.doi}.'
               : '';
-          final url = (item.url != null &&
+          final url =
+              (item.url != null &&
                   item.url!.trim().isNotEmpty &&
                   item.doi == null)
               ? ' Available at: ${item.url}.'
               : '';
-          buffer
-              .writeln('$num. **$authors**$yearDisplay. *$title*.$venue$doi$url');
+          buffer.writeln(
+            '$num. **$authors**$yearDisplay. *$title*.$venue$doi$url',
+          );
         } else {
           // Fallback reference listing
           buffer.writeln('$num. **@$key**. Citekey: `@$key`');
@@ -1329,8 +1344,9 @@ class _MarkdownPreviewViewState extends State<MarkdownPreviewView> {
             : CitationItem.inferAuthorFromKey(keyB);
         final cmp = surnameA.toLowerCase().compareTo(surnameB.toLowerCase());
         if (cmp != 0) return cmp;
-        return (itemA?.effectiveYear ?? '')
-            .compareTo(itemB?.effectiveYear ?? '');
+        return (itemA?.effectiveYear ?? '').compareTo(
+          itemB?.effectiveYear ?? '',
+        );
       });
 
       for (final key in sortedKeys) {
@@ -1339,9 +1355,7 @@ class _MarkdownPreviewViewState extends State<MarkdownPreviewView> {
           final authors = item.bibliographyAuthorsSummary;
           final yearStr = item.effectiveYear != 'n.d.'
               ? item.effectiveYear
-              : (item.year != null && item.year!.isNotEmpty
-                  ? item.year!
-                  : '');
+              : (item.year != null && item.year!.isNotEmpty ? item.year! : '');
           final yearDisplay = yearStr.isNotEmpty ? ' ($yearStr)' : '';
           final title = item.title;
           final venue = (item.venue != null && item.venue!.trim().isNotEmpty)
@@ -1350,17 +1364,19 @@ class _MarkdownPreviewViewState extends State<MarkdownPreviewView> {
           final doi = (item.doi != null && item.doi!.trim().isNotEmpty)
               ? ' DOI: ${item.doi}.'
               : '';
-          final url = (item.url != null &&
+          final url =
+              (item.url != null &&
                   item.url!.trim().isNotEmpty &&
                   item.doi == null)
               ? ' Available at: ${item.url}.'
               : '';
-          buffer
-              .writeln('- **$authors**$yearDisplay. *$title*.$venue$doi$url');
+          buffer.writeln('- **$authors**$yearDisplay. *$title*.$venue$doi$url');
         } else {
           // Fallback reference listing
-          final seg =
-              helper.formatSegment(segmentText: '@$key', bracketed: false);
+          final seg = helper.formatSegment(
+            segmentText: '@$key',
+            bracketed: false,
+          );
           buffer.writeln('- **${seg.rendered}**. Citekey: `@$key`');
         }
       }
@@ -1381,14 +1397,16 @@ class _MarkdownPreviewViewState extends State<MarkdownPreviewView> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final activeScheme = AppTheme.activeSchemeForBrightness(isDark);
-    final textColor =
-        isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary;
-    final mutedColor =
-        isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary;
-    final codeBg =
-        isDark ? AppTheme.darkSidebar : AppTheme.lightSidebar;
-    final blockquoteBorder =
-        isDark ? AppTheme.darkAccent : AppTheme.lightAccent;
+    final textColor = isDark
+        ? AppTheme.darkTextPrimary
+        : AppTheme.lightTextPrimary;
+    final mutedColor = isDark
+        ? AppTheme.darkTextSecondary
+        : AppTheme.lightTextSecondary;
+    final codeBg = isDark ? AppTheme.darkSidebar : AppTheme.lightSidebar;
+    final blockquoteBorder = isDark
+        ? AppTheme.darkAccent
+        : AppTheme.lightAccent;
 
     final helper = CitationHelper(controller);
     final String effectiveMarkdown;
@@ -1404,12 +1422,15 @@ class _MarkdownPreviewViewState extends State<MarkdownPreviewView> {
     final bool effectiveIsFullView =
         isFullView ?? (controller?.viewMode == EditorViewMode.preview);
 
-    final canvasBg =
-        isDark ? AppTheme.darkPreviewCanvas : AppTheme.lightPreviewCanvas;
-    final pageBg =
-        isDark ? AppTheme.darkPreviewPage : AppTheme.lightPreviewPage;
-    final pageBorder =
-        isDark ? AppTheme.darkPreviewBorder : AppTheme.lightPreviewBorder;
+    final canvasBg = isDark
+        ? AppTheme.darkPreviewCanvas
+        : AppTheme.lightPreviewCanvas;
+    final pageBg = isDark
+        ? AppTheme.darkPreviewPage
+        : AppTheme.lightPreviewPage;
+    final pageBorder = isDark
+        ? AppTheme.darkPreviewBorder
+        : AppTheme.lightPreviewBorder;
 
     final double deskHorizontalPadding = effectiveIsFullView ? 32.0 : 16.0;
     final double deskVerticalPadding = effectiveIsFullView ? 28.0 : 16.0;
@@ -1418,7 +1439,8 @@ class _MarkdownPreviewViewState extends State<MarkdownPreviewView> {
     final double maxPageWidth = effectiveIsFullView ? 850.0 : double.infinity;
 
     final imgDir = effectiveImageDirectory;
-    final citationCount = (controller?.citations.length ?? 0) +
+    final citationCount =
+        (controller?.citations.length ?? 0) +
         (controller?.zoteroCitations.length ?? 0);
 
     Widget markdownBody;
@@ -1526,16 +1548,19 @@ class _MarkdownPreviewViewState extends State<MarkdownPreviewView> {
           color: isDark ? AppTheme.darkBorder : AppTheme.lightBorder,
           width: 1,
         ),
-        tableCellsPadding:
-            const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        tableCellsPadding: const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 8,
+        ),
         checkbox: TextStyle(
           color: isDark ? activeScheme.accent : theme.colorScheme.primary,
           fontSize: 17,
         ),
       );
 
-      final totalCheckboxes =
-          EditorController.findTaskCheckboxes(effectiveMarkdown).length;
+      final totalCheckboxes = EditorController.findTaskCheckboxes(
+        effectiveMarkdown,
+      ).length;
       int checkboxCounter = 0;
 
       final astNodes = (controller?.previewMarkdown == effectiveMarkdown)
@@ -1543,9 +1568,7 @@ class _MarkdownPreviewViewState extends State<MarkdownPreviewView> {
           : null;
 
       markdownBody = AstMarkdownBody(
-        key: ValueKey(
-          'preview_body_${isDark}_${activeScheme.id}',
-        ),
+        key: ValueKey('preview_body_${isDark}_${activeScheme.id}'),
         astNodes: astNodes,
         data: effectiveMarkdown,
         selectable: false,
@@ -1561,8 +1584,8 @@ class _MarkdownPreviewViewState extends State<MarkdownPreviewView> {
           final Color iconColor = isChecked
               ? (isDark ? activeScheme.accent : theme.colorScheme.primary)
               : (isDark
-                  ? AppTheme.darkTextSecondary
-                  : AppTheme.lightTextSecondary);
+                    ? AppTheme.darkTextSecondary
+                    : AppTheme.lightTextSecondary);
 
           return MouseRegion(
             cursor: SystemMouseCursors.click,
@@ -1572,8 +1595,11 @@ class _MarkdownPreviewViewState extends State<MarkdownPreviewView> {
                 controller?.toggleCheckbox(targetIndex);
               },
               child: Padding(
-                padding:
-                    const EdgeInsets.only(right: 6.0, top: 1.0, bottom: 1.0),
+                padding: const EdgeInsets.only(
+                  right: 6.0,
+                  top: 1.0,
+                  bottom: 1.0,
+                ),
                 child: Icon(
                   isChecked ? Icons.check_box : Icons.check_box_outline_blank,
                   size: 17,
@@ -1633,8 +1659,10 @@ class _MarkdownPreviewViewState extends State<MarkdownPreviewView> {
         child: LayoutBuilder(
           builder: (context, constraints) {
             final double minPageHeight =
-                (constraints.maxHeight - (deskVerticalPadding * 2))
-                    .clamp(120.0, double.infinity);
+                (constraints.maxHeight - (deskVerticalPadding * 2)).clamp(
+                  120.0,
+                  double.infinity,
+                );
 
             return SelectionArea(
               child: SingleChildScrollView(
@@ -1643,44 +1671,46 @@ class _MarkdownPreviewViewState extends State<MarkdownPreviewView> {
                   vertical: deskVerticalPadding,
                 ),
                 child: Center(
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(
-                    maxWidth: maxPageWidth,
-                    minHeight: minPageHeight,
-                  ),
-                  child: Container(
-                    width: double.infinity,
-                    decoration: BoxDecoration(
-                      color: pageBg,
-                      borderRadius: BorderRadius.circular(2),
-                      border: Border.all(color: pageBorder, width: 1.0),
-                      boxShadow: [
-                        BoxShadow(
-                          color: isDark
-                              ? Colors.black.withValues(alpha: 0.40)
-                              : const Color(0xFF0F172A).withValues(alpha: 0.08),
-                          blurRadius: 16,
-                          spreadRadius: 1,
-                          offset: const Offset(0, 4),
-                        ),
-                        BoxShadow(
-                          color: isDark
-                              ? Colors.black.withValues(alpha: 0.20)
-                              : const Color(0xFF0F172A).withValues(alpha: 0.04),
-                          blurRadius: 4,
-                          spreadRadius: 0,
-                          offset: const Offset(0, 1),
-                        ),
-                      ],
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxWidth: maxPageWidth,
+                      minHeight: minPageHeight,
                     ),
-                    padding: EdgeInsets.symmetric(
-                      horizontal: innerHorizontalPadding,
-                      vertical: innerVerticalPadding,
+                    child: Container(
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        color: pageBg,
+                        borderRadius: BorderRadius.circular(2),
+                        border: Border.all(color: pageBorder, width: 1.0),
+                        boxShadow: [
+                          BoxShadow(
+                            color: isDark
+                                ? Colors.black.withValues(alpha: 0.40)
+                                : const Color(0xFF0F172A)
+                                      .withValues(alpha: 0.08),
+                            blurRadius: 16,
+                            spreadRadius: 1,
+                            offset: const Offset(0, 4),
+                          ),
+                          BoxShadow(
+                            color: isDark
+                                ? Colors.black.withValues(alpha: 0.20)
+                                : const Color(0xFF0F172A)
+                                      .withValues(alpha: 0.04),
+                            blurRadius: 4,
+                            spreadRadius: 0,
+                            offset: const Offset(0, 1),
+                          ),
+                        ],
+                      ),
+                      padding: EdgeInsets.symmetric(
+                        horizontal: innerHorizontalPadding,
+                        vertical: innerVerticalPadding,
+                      ),
+                      child: markdownBody,
                     ),
-                    child: markdownBody,
                   ),
                 ),
-              ),
               ),
             );
           },
