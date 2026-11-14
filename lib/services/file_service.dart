@@ -1,4 +1,5 @@
 import 'dart:io';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
@@ -22,7 +23,9 @@ class FileService {
   }
 
   /// Open file picker dialog for saving a Markdown file
-  Future<String?> pickSaveMarkdownLocation({String defaultName = 'Document.md'}) async {
+  Future<String?> pickSaveMarkdownLocation({
+    String defaultName = 'Document.md',
+  }) async {
     try {
       final uri = await FilePicker.saveFile(
         dialogTitle: 'Save Markdown Document',

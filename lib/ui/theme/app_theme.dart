@@ -72,7 +72,8 @@ class AppTheme {
   static const AppColorScheme slateDarkScheme = AppColorScheme(
     id: 'slate_dark',
     name: 'Slate Navy (Default Dark)',
-    description: 'Deep slate blue workspace with crisp sky and royal blue accents',
+    description:
+        'Deep slate blue workspace with crisp sky and royal blue accents',
     brightness: Brightness.dark,
     bg: Color(0xFF0F172A),
     surface: Color(0xFF1E293B),
@@ -99,7 +100,8 @@ class AppTheme {
   static const AppColorScheme tokyoNightScheme = AppColorScheme(
     id: 'tokyo_night',
     name: 'Tokyo Night (Dark)',
-    description: 'Storm indigo night palette inspired by neon lights of downtown Tokyo',
+    description:
+        'Storm indigo night palette inspired by neon lights of downtown Tokyo',
     brightness: Brightness.dark,
     bg: Color(0xFF16161E),
     surface: Color(0xFF1A1B26),
@@ -153,7 +155,8 @@ class AppTheme {
   static const AppColorScheme catppuccinMochaScheme = AppColorScheme(
     id: 'catppuccin_mocha',
     name: 'Catppuccin Mocha (Dark)',
-    description: 'Soothing pastel mocha dark theme with warm lavender and mauve tones',
+    description:
+        'Soothing pastel mocha dark theme with warm lavender and mauve tones',
     brightness: Brightness.dark,
     bg: Color(0xFF11111B),
     surface: Color(0xFF1E1E2E),
@@ -261,7 +264,8 @@ class AppTheme {
   static const AppColorScheme solarizedDarkScheme = AppColorScheme(
     id: 'solarized_dark',
     name: 'Solarized Dark',
-    description: 'Precision low-eye-strain deep teal dark palette by Ethan Schoonover',
+    description:
+        'Precision low-eye-strain deep teal dark palette by Ethan Schoonover',
     brightness: Brightness.dark,
     bg: Color(0xFF00212B),
     surface: Color(0xFF002B36),
@@ -346,7 +350,8 @@ class AppTheme {
   static const AppColorScheme slateLightScheme = AppColorScheme(
     id: 'slate_light',
     name: 'Slate Paper (Default Light)',
-    description: 'Clean white paper sheet over a neutral cool-slate desktop canvas',
+    description:
+        'Clean white paper sheet over a neutral cool-slate desktop canvas',
     brightness: Brightness.light,
     bg: Color(0xFFF8FAFC),
     surface: Color(0xFFFFFFFF),
@@ -400,7 +405,8 @@ class AppTheme {
   static const AppColorScheme catppuccinLatteScheme = AppColorScheme(
     id: 'catppuccin_latte',
     name: 'Catppuccin Latte (Light)',
-    description: 'Warm daylight pastel palette with soft lavender and berry accents',
+    description:
+        'Warm daylight pastel palette with soft lavender and berry accents',
     brightness: Brightness.light,
     bg: Color(0xFFE6E9EF),
     surface: Color(0xFFEFF1F5),
@@ -441,11 +447,13 @@ class AppTheme {
     catppuccinLatteScheme,
   ];
 
-  static final List<AppColorScheme> darkColorSchemes =
-      availableColorSchemes.where((s) => s.isDark).toList(growable: false);
+  static final List<AppColorScheme> darkColorSchemes = availableColorSchemes
+      .where((s) => s.isDark)
+      .toList(growable: false);
 
-  static final List<AppColorScheme> lightColorSchemes =
-      availableColorSchemes.where((s) => !s.isDark).toList(growable: false);
+  static final List<AppColorScheme> lightColorSchemes = availableColorSchemes
+      .where((s) => !s.isDark)
+      .toList(growable: false);
 
   static AppColorScheme _activeDarkScheme = slateDarkScheme;
   static AppColorScheme _activeLightScheme = slateLightScheme;
@@ -650,7 +658,10 @@ class AppTheme {
           color: _activeLightScheme.bg,
           borderRadius: BorderRadius.circular(6),
         ),
-        textStyle: TextStyle(color: _activeLightScheme.textPrimary, fontSize: 12),
+        textStyle: TextStyle(
+          color: _activeLightScheme.textPrimary,
+          fontSize: 12,
+        ),
         waitDuration: const Duration(milliseconds: 500),
       ),
     );

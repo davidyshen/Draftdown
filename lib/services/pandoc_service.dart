@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:path_provider/path_provider.dart';
+
 import '../models/export_format.dart';
 
 /// Result object describing the outcome of a Pandoc export execution.
@@ -96,18 +98,22 @@ class PandocService {
       final assetKey = 'assets/bin/$binaryName';
       final byteData = await rootBundle.load(assetKey);
       final appSupportDir = await getApplicationSupportDirectory();
-      final binDir =
-          Directory('${appSupportDir.path}${Platform.pathSeparator}bin');
+      final binDir = Directory(
+        '${appSupportDir.path}${Platform.pathSeparator}bin',
+      );
       if (!await binDir.exists()) {
         await binDir.create(recursive: true);
       }
-      final extractedFile =
-          File('${binDir.path}${Platform.pathSeparator}$binaryName');
+      final extractedFile = File(
+        '${binDir.path}${Platform.pathSeparator}$binaryName',
+      );
       if (!await extractedFile.exists() ||
           await extractedFile.length() != byteData.lengthInBytes) {
         await extractedFile.writeAsBytes(
-          byteData.buffer
-              .asUint8List(byteData.offsetInBytes, byteData.lengthInBytes),
+          byteData.buffer.asUint8List(
+            byteData.offsetInBytes,
+            byteData.lengthInBytes,
+          ),
           flush: true,
         );
         if (!Platform.isWindows) {
@@ -141,7 +147,8 @@ class PandocService {
       final programFiles =
           Platform.environment['ProgramFiles'] ?? r'C:\Program Files';
       final programFilesX86 =
-          Platform.environment['ProgramFiles(x86)'] ?? r'C:\Program Files (x86)';
+          Platform.environment['ProgramFiles(x86)'] ??
+          r'C:\Program Files (x86)';
 
       final candidatePaths = [
         '$programFiles\\Pandoc\\pandoc.exe',
@@ -188,8 +195,10 @@ class PandocService {
     try {
       final result = await Process.run(exe, ['--version']);
       if (result.exitCode == 0) {
-        final firstLine =
-            (result.stdout as String).split('\n').firstOrNull?.trim();
+        final firstLine = (result.stdout as String)
+            .split('\n')
+            .firstOrNull
+            ?.trim();
         _cachedVersion = firstLine ?? 'Pandoc';
         return _cachedVersion;
       }
@@ -223,8 +232,7 @@ class PandocService {
         stdout: '',
         stderr: 'Pandoc executable was not found on your system.',
         duration: stopwatch.elapsed,
-        errorMessage:
-            'Pandoc was not detected. Please ensure the bundled binary is intact or configure a custom binary path in Settings.',
+        errorMessage: 'Pandoc was not detected. Please ensure the bundled binary is intact or configure a custom binary path in Settings.',
       );
     }
 
@@ -236,8 +244,9 @@ class PandocService {
     // Output format/writer
     if (options.format.type == ExportFormatType.pdf) {
       args.addAll(['-o', options.targetPath]);
-      final paper =
-          options.pageSize.toLowerCase() == 'letter' ? 'letter' : 'a4';
+      final paper = options.pageSize.toLowerCase() == 'letter'
+          ? 'letter'
+          : 'a4';
       args.addAll(['-V', 'papersize=$paper']);
 
       switch (options.marginSize.toLowerCase()) {
@@ -245,7 +254,10 @@ class PandocService {
           args.addAll(['-V', 'geometry:margin=0.5in']);
           break;
         case 'thick':
-          args.addAll(['-V', 'geometry:top=1in,bottom=1in,left=1.25in,right=1.25in']);
+          args.addAll([
+            '-V',
+            'geometry:top=1in,bottom=1in,left=1.25in,right=1.25in',
+          ]);
           break;
         case 'medium':
         default:
@@ -284,8 +296,9 @@ class PandocService {
 
     // Custom user arguments
     if (options.customArguments.trim().isNotEmpty) {
-      final customArgs =
-          options.customArguments.trim().split(_whitespaceSplitRegex);
+      final customArgs = options.customArguments.trim().split(
+        _whitespaceSplitRegex,
+      );
       args.addAll(customArgs);
     }
 
@@ -296,12 +309,9 @@ class PandocService {
 
     try {
       debugPrint(
-          '[PandocService] Running $exe (${_isBundled ? "bundled" : "system"}) with args: ${args.join(" ")} in $cwd');
-      final processResult = await Process.run(
-        exe,
-        args,
-        workingDirectory: cwd,
+        '[PandocService] Running $exe (${_isBundled ? "bundled" : "system"}) with args: ${args.join(" ")} in $cwd',
       );
+      final processResult = await Process.run(exe, args, workingDirectory: cwd);
 
       stopwatch.stop();
       final isSuccess = processResult.exitCode == 0;
@@ -340,7 +350,8 @@ class PandocService {
     final stopwatch = Stopwatch()..start();
     try {
       final targetFile = File(targetPath);
-      final html = '''<!DOCTYPE html>
+      final html =
+          '''<!DOCTYPE html>
 <html lang="en-GB">
 <head>
   <meta charset="utf-8">

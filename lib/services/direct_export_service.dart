@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:markdown/markdown.dart' as md;
 import 'package:path_provider/path_provider.dart';
+
 import '../controllers/editor_controller.dart';
 import '../models/citation_item.dart';
 import 'pandoc_service.dart';
@@ -16,10 +18,12 @@ class DirectExportService {
 
   static final RegExp _cleanKeyRegex = RegExp(r'^[@\-]+');
   static final RegExp _yearRegex = RegExp(r'(19\d\d|20\d\d)');
-  static final RegExp _bracketRegex =
-      RegExp(r'\[(-?@[a-zA-Z0-9_\-:#\/]+(?:[^\n\]]*))\]');
-  static final RegExp _inTextRegex =
-      RegExp(r'(?<![\w@])@([a-zA-Z0-9_\-:#\/]+)(?:\[([^\]]+)\])?');
+  static final RegExp _bracketRegex = RegExp(
+    r'\[(-?@[a-zA-Z0-9_\-:#\/]+(?:[^\n\]]*))\]',
+  );
+  static final RegExp _inTextRegex = RegExp(
+    r'(?<![\w@])@([a-zA-Z0-9_\-:#\/]+)(?:\[([^\]]+)\])?',
+  );
   static final RegExp _existingReferencesRegex = RegExp(
     r'^(?:#{1,6}\s*(?:References|Bibliography)|<a\s+name="references">)',
     caseSensitive: false,
@@ -143,8 +147,9 @@ class DirectExportService {
     final isNumeric = controller.citationStyle == CitationStyle.numeric;
     final num = isNumeric ? (keyToNumber?[key.toLowerCase()] ?? 1) : null;
     final yearDisplay = yearStr.isNotEmpty ? yearStr : 'n.d.';
-    final locatorDisplay =
-        (locator != null && locator.isNotEmpty) ? ', $locator' : '';
+    final locatorDisplay = (locator != null && locator.isNotEmpty)
+        ? ', $locator'
+        : '';
 
     if (isNumeric) {
       if (bracketed) {
@@ -211,12 +216,14 @@ class DirectExportService {
       final inner = match.group(1)!;
       final segments = inner.split(';').map((s) => s.trim()).toList();
       final formatted = segments
-          .map((s) => _formatCitationSegment(
-                s,
-                bracketed: true,
-                controller: controller,
-                keyToNumber: keyToNumber,
-              ))
+          .map(
+            (s) => _formatCitationSegment(
+              s,
+              bracketed: true,
+              controller: controller,
+              keyToNumber: keyToNumber,
+            ),
+          )
           .join(isNumeric ? ', ' : '; ');
       final display = isNumeric ? '[$formatted]' : '($formatted)';
       return '<span class="citation">$display</span>';
@@ -254,23 +261,26 @@ class DirectExportService {
               final yearStr = item.effectiveYear != 'n.d.'
                   ? item.effectiveYear
                   : (item.year != null && item.year!.isNotEmpty
-                      ? item.year!
-                      : '');
+                        ? item.year!
+                        : '');
               final yearDisplay = yearStr.isNotEmpty ? ' ($yearStr)' : '';
               final title = item.title;
-              final venue = (item.venue != null && item.venue!.trim().isNotEmpty)
+              final venue =
+                  (item.venue != null && item.venue!.trim().isNotEmpty)
                   ? ' *${item.venue}*.'
                   : '';
               final doi = (item.doi != null && item.doi!.trim().isNotEmpty)
                   ? ' DOI: ${item.doi}.'
                   : '';
-              final url = (item.url != null &&
+              final url =
+                  (item.url != null &&
                       item.url!.trim().isNotEmpty &&
                       item.doi == null)
                   ? ' Available at: ${item.url}.'
                   : '';
               buffer.writeln(
-                  '$num. **$authors**$yearDisplay. *$title*.$venue$doi$url');
+                '$num. **$authors**$yearDisplay. *$title*.$venue$doi$url',
+              );
             } else {
               buffer.writeln('$num. **@$key**. Citekey: `$key`');
             }
@@ -286,10 +296,13 @@ class DirectExportService {
             final surnameB = itemB?.authors.isNotEmpty == true
                 ? CitationItem.extractSurname(itemB!.authors.first)
                 : CitationItem.inferAuthorFromKey(keyB);
-            final cmp = surnameA.toLowerCase().compareTo(surnameB.toLowerCase());
+            final cmp = surnameA.toLowerCase().compareTo(
+              surnameB.toLowerCase(),
+            );
             if (cmp != 0) return cmp;
-            return (itemA?.effectiveYear ?? '')
-                .compareTo(itemB?.effectiveYear ?? '');
+            return (itemA?.effectiveYear ?? '').compareTo(
+              itemB?.effectiveYear ?? '',
+            );
           });
 
           for (final key in sortedKeys) {
@@ -299,23 +312,26 @@ class DirectExportService {
               final yearStr = item.effectiveYear != 'n.d.'
                   ? item.effectiveYear
                   : (item.year != null && item.year!.isNotEmpty
-                      ? item.year!
-                      : '');
+                        ? item.year!
+                        : '');
               final yearDisplay = yearStr.isNotEmpty ? ' ($yearStr)' : '';
               final title = item.title;
-              final venue = (item.venue != null && item.venue!.trim().isNotEmpty)
+              final venue =
+                  (item.venue != null && item.venue!.trim().isNotEmpty)
                   ? ' *${item.venue}*.'
                   : '';
               final doi = (item.doi != null && item.doi!.trim().isNotEmpty)
                   ? ' DOI: ${item.doi}.'
                   : '';
-              final url = (item.url != null &&
+              final url =
+                  (item.url != null &&
                       item.url!.trim().isNotEmpty &&
                       item.doi == null)
                   ? ' Available at: ${item.url}.'
                   : '';
               buffer.writeln(
-                  '- **$authors**$yearDisplay. *$title*.$venue$doi$url');
+                '- **$authors**$yearDisplay. *$title*.$venue$doi$url',
+              );
             } else {
               final seg = _formatCitationSegment(
                 '@$key',
@@ -357,8 +373,9 @@ class DirectExportService {
     final bodyFont = controller.renderBodyFont;
     final headerFont = controller.effectiveRenderHeaderFont;
     final codeFont = controller.editorFontFamily;
-    final effectivePageSize =
-        pageSize.toLowerCase() == 'letter' ? 'letter' : 'A4';
+    final effectivePageSize = pageSize.toLowerCase() == 'letter'
+        ? 'letter'
+        : 'A4';
     final effectiveMargin = resolvePageMargin(marginSize);
 
     return '''<!DOCTYPE html>
@@ -608,7 +625,8 @@ class DirectExportService {
         success: true,
         exitCode: 0,
         targetFile: targetPath,
-        stdout: 'HTML document exported successfully matching preview typography',
+        stdout:
+            'HTML document exported successfully matching preview typography',
         stderr: '',
         duration: stopwatch.elapsed,
       );
@@ -647,8 +665,7 @@ class DirectExportService {
         stdout: '',
         stderr: 'No compatible browser executable found for direct PDF export.',
         duration: stopwatch.elapsed,
-        errorMessage:
-            'A compatible browser (Microsoft Edge or Google Chrome) was not detected. Please install Microsoft Edge or Google Chrome to enable direct PDF export.',
+        errorMessage: 'A compatible browser (Microsoft Edge or Google Chrome) was not detected. Please install Microsoft Edge or Google Chrome to enable direct PDF export.',
       );
     }
 
@@ -668,11 +685,13 @@ class DirectExportService {
       final tempDir = await getTemporaryDirectory();
       final tempTimestamp = DateTime.now().millisecondsSinceEpoch;
       tempHtmlFile = File(
-          '${tempDir.path}${Platform.pathSeparator}draftdown_pdf_$tempTimestamp.html');
+        '${tempDir.path}${Platform.pathSeparator}draftdown_pdf_$tempTimestamp.html',
+      );
       await tempHtmlFile.writeAsString(html);
 
       tempProfileDir = Directory(
-          '${tempDir.path}${Platform.pathSeparator}draftdown_pdf_profile_$tempTimestamp');
+        '${tempDir.path}${Platform.pathSeparator}draftdown_pdf_profile_$tempTimestamp',
+      );
       if (!await tempProfileDir.exists()) {
         await tempProfileDir.create(recursive: true);
       }
@@ -697,7 +716,8 @@ class DirectExportService {
       ];
 
       debugPrint(
-          '[DirectExportService] Running $browserExe to print PDF: ${args.join(" ")}');
+        '[DirectExportService] Running $browserExe to print PDF: ${args.join(" ")}',
+      );
 
       final processResult = await Process.run(browserExe, args);
       stopwatch.stop();

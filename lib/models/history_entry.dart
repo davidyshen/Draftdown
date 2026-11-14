@@ -50,7 +50,8 @@ class HistoryEntry {
     return HistoryEntry(
       path: json['path'] as String,
       fileName: json['fileName'] as String? ?? 'Untitled.md',
-      lastOpened: DateTime.tryParse(json['lastOpened'] as String? ?? '') ??
+      lastOpened:
+          DateTime.tryParse(json['lastOpened'] as String? ?? '') ??
           DateTime.now(),
       fileSize: json['fileSize'] as int?,
     );

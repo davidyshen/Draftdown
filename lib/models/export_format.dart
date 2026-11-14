@@ -1,16 +1,7 @@
 import 'package:flutter/material.dart';
 
 /// Supported Pandoc export formats
-enum ExportFormatType {
-  pdf,
-  docx,
-  html5,
-  rtf,
-  odt,
-  epub,
-  latex,
-  plainText,
-}
+enum ExportFormatType { pdf, docx, html5, rtf, odt, epub, latex, plainText }
 
 class ExportFormat {
   final ExportFormatType type;
@@ -47,7 +38,8 @@ class ExportFormat {
       name: 'Microsoft Word',
       extension: 'docx',
       pandocWriter: 'docx',
-      description: 'Editable Word (.docx) file with native headings and references',
+      description:
+          'Editable Word (.docx) file with native headings and references',
       icon: Icons.description,
     ),
     ExportFormat(
@@ -56,7 +48,8 @@ class ExportFormat {
       name: 'HTML 5 Webpage',
       extension: 'html',
       pandocWriter: 'html5',
-      description: 'Standalone HTML document matching preview typography and layout',
+      description:
+          'Standalone HTML document matching preview typography and layout',
       icon: Icons.html,
     ),
     ExportFormat(
