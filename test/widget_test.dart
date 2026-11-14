@@ -9,6 +9,7 @@ import 'package:mdwriter/ui/widgets/citation_dialog.dart';
 import 'package:mdwriter/ui/widgets/editor_view.dart';
 import 'package:mdwriter/ui/widgets/export_dialog.dart';
 import 'package:mdwriter/ui/widgets/settings_dialog.dart';
+import 'package:mdwriter/ui/widgets/toolbar.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -498,7 +499,7 @@ void main() {
   });
 
   testWidgets(
-      'Editor waits 1.5 seconds of typing inactivity and shows Update Render button when modified',
+      'Editor waits 1.5 seconds of typing inactivity before automatically updating the render, with centred views and right-aligned export',
       (WidgetTester tester) async {
     tester.view.physicalSize = const Size(1400, 900);
     tester.view.devicePixelRatio = 1.0;
@@ -515,7 +516,7 @@ void main() {
     ));
     await tester.pump();
 
-    // Initially unmodified: Update Render button is not shown
+    // Initially unmodified: no manual update render button
     expect(controller.isModified, isFalse);
     expect(find.byKey(const ValueKey('update-render-button')), findsNothing);
 
@@ -528,9 +529,9 @@ void main() {
     await tester.enterText(editorTextFieldFinder, '# Initial Heading\n\nFirst typed line.');
     await tester.pump();
 
-    // File is now modified: Update Render button appears immediately
+    // File is now modified: update render button is completely removed
     expect(controller.isModified, isTrue);
-    expect(find.byKey(const ValueKey('update-render-button')), findsOneWidget);
+    expect(find.byKey(const ValueKey('update-render-button')), findsNothing);
 
     await tester.pump(const Duration(milliseconds: 1000));
 
@@ -550,7 +551,7 @@ void main() {
     expect(controller.previewMarkdown, isEmpty);
     expect(controller.isRenderPending, isTrue);
 
-    // Complete the remaining 0.5s of the 1.5s inactivity period
+    // Complete the remaining 0.5s of the 1.5s inactivity period: automatically updates
     await tester.pump(const Duration(milliseconds: 500));
     expect(controller.isRenderPending, isFalse);
     expect(
@@ -558,22 +559,44 @@ void main() {
       equals('# Initial Heading\n\nFirst typed line. Second typed sentence.'),
     );
 
-    // Type a third time and click "Update Render" manually before 1.5s elapses
-    await tester.enterText(
-      editorTextFieldFinder,
-      '# Initial Heading\n\nManually updated paragraph.',
-    );
-    await tester.pump(const Duration(milliseconds: 200));
-    expect(controller.isRenderPending, isTrue);
+    // Verify top bar layout: 3 view modes centred in toolbar, export on the far right
+    expect(find.byType(SegmentedButton<EditorViewMode>), findsOneWidget);
+    final toolbarCenter = tester.getCenter(find.byType(AppToolbar));
+    final segmentedCenter = tester.getCenter(find.byType(SegmentedButton<EditorViewMode>));
+    expect(segmentedCenter.dx, closeTo(toolbarCenter.dx, 1.0));
 
-    await tester.tap(find.byKey(const ValueKey('update-render-button')));
+    // Settings and colour mode are to the left of the export button, collectively right-aligned
+    expect(find.byIcon(Icons.settings_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.dark_mode_outlined), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Export'), findsOneWidget);
+
+    final settingsRight = tester.getTopRight(find.byIcon(Icons.settings_outlined)).dx;
+    final themeRight = tester.getTopRight(find.byIcon(Icons.dark_mode_outlined)).dx;
+    final exportLeft = tester.getTopLeft(find.widgetWithText(FilledButton, 'Export')).dx;
+
+    expect(settingsRight, lessThan(themeRight));
+    expect(themeRight, lessThan(exportLeft));
+
+    // Top bar does not have redundant citation button
+    expect(find.widgetWithText(FilledButton, 'Citation'), findsNothing);
+
+    // 2nd row formatting bar contains the highlighted @ citation button and super/subscript buttons
+    expect(find.byIcon(Icons.alternate_email), findsOneWidget);
+    expect(find.byIcon(Icons.superscript), findsOneWidget);
+    expect(find.byIcon(Icons.subscript), findsOneWidget);
+
+    // Test superscript button insertion (Pandoc ^text^ style)
+    await tester.tap(find.byIcon(Icons.superscript));
     await tester.pump();
+    expect(controller.content, contains('^^'));
 
-    expect(controller.isRenderPending, isFalse);
-    expect(
-      controller.previewMarkdown,
-      equals('# Initial Heading\n\nManually updated paragraph.'),
-    );
+    // Test subscript button insertion (Pandoc ~text~ style)
+    await tester.tap(find.byIcon(Icons.subscript));
+    await tester.pump();
+    expect(controller.content, contains('~~'));
+
+    // Flush debounce timer before teardown
+    await tester.pump(const Duration(milliseconds: 1500));
   });
 
   testWidgets(
@@ -621,5 +644,56 @@ void main() {
     expect(controller.darkSchemeId, equals('dracula'));
     expect(controller.isDarkMode, isTrue);
     expect(AppTheme.activeDarkScheme.id, equals('dracula'));
+  });
+
+  testWidgets(
+      'Editor scrolling is preserved and seamless while background rendering occurs',
+      (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(1400, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+
+    SharedPreferences.setMockInitialValues({});
+    final controller = EditorController();
+    addTearDown(controller.dispose);
+    controller.newFile();
+
+    await tester.pumpWidget(MDWriterApp(
+      controller: controller,
+      initialDarkMode: false,
+    ));
+    await tester.pump();
+
+    final editorTextFieldFinder = find.descendant(
+      of: find.byType(EditorView),
+      matching: find.byType(TextField),
+    );
+
+    // Enter a long multi-line text to allow scrolling
+    final buffer = StringBuffer();
+    for (int i = 1; i <= 200; i++) {
+      buffer.writeln('Line $i: Content for testing smooth scrolling during background renders.');
+    }
+    await tester.enterText(editorTextFieldFinder, buffer.toString());
+    await tester.pump();
+
+    // Scroll down in the editor
+    await tester.drag(editorTextFieldFinder, const Offset(0, -300));
+    await tester.pump();
+
+    final scrollOffsetBeforeRender = controller.scrollController.offset;
+    expect(scrollOffsetBeforeRender, greaterThan(100.0));
+
+    // Advance clock past the 1.5-second debounce window to trigger background render
+    await tester.pump(const Duration(milliseconds: 1600));
+
+    // The scroll offset in the editor is completely preserved!
+    expect(controller.scrollController.offset, equals(scrollOffsetBeforeRender));
+
+    // Scrolling down further continues seamlessly without jumping or resetting
+    await tester.drag(editorTextFieldFinder, const Offset(0, -200));
+    await tester.pump();
+
+    expect(controller.scrollController.offset, greaterThan(scrollOffsetBeforeRender));
   });
 }

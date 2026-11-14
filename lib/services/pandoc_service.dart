@@ -29,6 +29,8 @@ class PandocResult {
 /// Service managing Pandoc discovery, version inspection, and document conversion.
 /// Supports both bundled binaries and system-installed Pandoc.
 class PandocService {
+  static final RegExp _whitespaceSplitRegex = RegExp(r'\s+');
+
   String? _customExecutablePath;
   String? _resolvedExecutablePath;
   String? _cachedVersion;
@@ -282,7 +284,8 @@ class PandocService {
 
     // Custom user arguments
     if (options.customArguments.trim().isNotEmpty) {
-      final customArgs = options.customArguments.trim().split(RegExp(r'\s+'));
+      final customArgs =
+          options.customArguments.trim().split(_whitespaceSplitRegex);
       args.addAll(customArgs);
     }
 

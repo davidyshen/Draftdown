@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'controllers/editor_controller.dart';
 import 'ui/screens/main_screen.dart';
 import 'ui/theme/app_theme.dart';
@@ -10,13 +9,9 @@ void main() async {
   final editorController = EditorController();
   await editorController.initialise();
 
-  // Load saved theme mode
-  final prefs = await SharedPreferences.getInstance();
-  final isDark = prefs.getBool('mdwriter_dark_mode') ?? false;
-
   runApp(MDWriterApp(
     controller: editorController,
-    initialDarkMode: isDark,
+    initialDarkMode: editorController.isDarkMode,
   ));
 }
 
@@ -35,6 +30,11 @@ class MDWriterApp extends StatefulWidget {
 }
 
 class _MDWriterAppState extends State<MDWriterApp> {
+  Widget? _cachedMaterialApp;
+  bool? _lastIsDarkMode;
+  String? _lastDarkSchemeId;
+  String? _lastLightSchemeId;
+
   @override
   void initState() {
     super.initState();
@@ -51,7 +51,20 @@ class _MDWriterAppState extends State<MDWriterApp> {
       listenable: widget.controller,
       builder: (context, _) {
         final isDarkMode = widget.controller.isDarkMode;
-        return MaterialApp(
+        final darkId = widget.controller.darkSchemeId;
+        final lightId = widget.controller.lightSchemeId;
+
+        if (_cachedMaterialApp != null &&
+            _lastIsDarkMode == isDarkMode &&
+            _lastDarkSchemeId == darkId &&
+            _lastLightSchemeId == lightId) {
+          return _cachedMaterialApp!;
+        }
+
+        _lastIsDarkMode = isDarkMode;
+        _lastDarkSchemeId = darkId;
+        _lastLightSchemeId = lightId;
+        _cachedMaterialApp = MaterialApp(
           title: 'MDWriter',
           debugShowCheckedModeBanner: false,
           themeAnimationDuration: Duration.zero,
@@ -64,6 +77,7 @@ class _MDWriterAppState extends State<MDWriterApp> {
             isDarkMode: isDarkMode,
           ),
         );
+        return _cachedMaterialApp!;
       },
     );
   }

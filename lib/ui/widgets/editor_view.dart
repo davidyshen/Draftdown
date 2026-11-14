@@ -44,8 +44,30 @@ class _EditorViewState extends State<EditorView> {
 
   String? _lastOffsetText;
   List<int>? _cachedLineStartOffsets;
+  RenderEditable? _cachedRenderEditable;
+
+  // Cached gutter subtree to avoid rebuilding CustomPaint on cursor-only / selection-only notifications
+  Widget? _cachedGutterSubtree;
+  String? _lastGutterText;
+  double? _lastGutterScrollOffset;
+  double? _lastGutterEditorWidth;
+  double? _lastGutterViewportHeight;
+  Color? _lastGutterTextColor;
+  String? _lastGutterFontFamily;
+
+  @override
+  void reassemble() {
+    super.reassemble();
+    _cachedRenderEditable = null;
+    _cachedGutterSubtree = null;
+    _LineNumberPainter._painterCache.clear();
+  }
 
   RenderEditable? _findRenderEditable() {
+    final cached = _cachedRenderEditable;
+    if (cached != null && cached.attached) {
+      return cached;
+    }
     final ctx = _textFieldKey.currentContext;
     if (ctx == null) return null;
     RenderEditable? result;
@@ -60,6 +82,7 @@ class _EditorViewState extends State<EditorView> {
     }
 
     ctx.visitChildElements(visitor);
+    _cachedRenderEditable = result;
     return result;
   }
 
@@ -190,10 +213,23 @@ class _EditorViewState extends State<EditorView> {
                               : 0.0;
                           final currentText =
                               widget.controller.textController.text;
+                          final fontFamily =
+                              widget.controller.editorFontFamily;
+
+                          if (_cachedGutterSubtree != null &&
+                              _lastGutterText == currentText &&
+                              _lastGutterScrollOffset == scrollOffset &&
+                              _lastGutterEditorWidth == editorWidth &&
+                              _lastGutterViewportHeight == viewportHeight &&
+                              _lastGutterTextColor == gutterTextColor &&
+                              _lastGutterFontFamily == fontFamily) {
+                            return _cachedGutterSubtree!;
+                          }
+
                           final lineStartOffsets =
                               _getLineStartOffsets(currentText);
 
-                          return RepaintBoundary(
+                          final subtree = RepaintBoundary(
                             child: ClipRect(
                               child: CustomPaint(
                                 key: _gutterPaintKey,
@@ -207,7 +243,7 @@ class _EditorViewState extends State<EditorView> {
                                   lineBoxHeight: _lineBoxHeight,
                                   contentPaddingTop: _contentPaddingTop,
                                   gutterTextColor: gutterTextColor,
-                                  fontFamily: widget.controller.editorFontFamily,
+                                  fontFamily: fontFamily,
                                   fontFamilyFallback:
                                       AppTheme.editorFontFamilyFallback,
                                   editorStrutStyle: editorStrutStyle,
@@ -217,6 +253,15 @@ class _EditorViewState extends State<EditorView> {
                               ),
                             ),
                           );
+
+                          _lastGutterText = currentText;
+                          _lastGutterScrollOffset = scrollOffset;
+                          _lastGutterEditorWidth = editorWidth;
+                          _lastGutterViewportHeight = viewportHeight;
+                          _lastGutterTextColor = gutterTextColor;
+                          _lastGutterFontFamily = fontFamily;
+                          _cachedGutterSubtree = subtree;
+                          return subtree;
                         },
                       ),
                     ),
@@ -276,6 +321,15 @@ class _LineNumberPainter extends CustomPainter {
   final RenderEditable? Function() findRenderEditable;
   final GlobalKey gutterPaintKey;
 
+  // Shared pool of pre-laid-out line number TextPainters to eliminate
+  // per-frame native SkParagraph allocations and GC pressure during scrolling/typing.
+  static final Map<int, TextPainter> _painterCache = <int, TextPainter>{};
+  static const int _maxCachedPainters = 512;
+  static String? _cachedFontFamily;
+  static Color? _cachedColor;
+  static double? _cachedMaxWidth;
+  static TextStyle? _cachedTextStyle;
+
   _LineNumberPainter({
     required this.lineStartOffsets,
     required this.text,
@@ -292,17 +346,53 @@ class _LineNumberPainter extends CustomPainter {
     required this.gutterPaintKey,
   });
 
+  TextPainter _getOrLayoutPainter(int lineNumber, double maxWidth) {
+    if (_cachedFontFamily != fontFamily ||
+        _cachedColor != gutterTextColor ||
+        _cachedMaxWidth != maxWidth) {
+      for (final tp in _painterCache.values) {
+        tp.dispose();
+      }
+      _painterCache.clear();
+      _cachedFontFamily = fontFamily;
+      _cachedColor = gutterTextColor;
+      _cachedMaxWidth = maxWidth;
+      _cachedTextStyle = TextStyle(
+        fontFamily: fontFamily,
+        fontFamilyFallback: fontFamilyFallback,
+        fontSize: 12.0,
+        color: gutterTextColor,
+        height: 1.5,
+      );
+    }
+
+    final existing = _painterCache[lineNumber];
+    if (existing != null) {
+      return existing;
+    }
+
+    if (_painterCache.length >= _maxCachedPainters) {
+      final oldestKey = _painterCache.keys.first;
+      _painterCache.remove(oldestKey)?.dispose();
+    }
+
+    final tp = TextPainter(
+      text: TextSpan(
+        text: '$lineNumber',
+        style: _cachedTextStyle,
+      ),
+      textAlign: TextAlign.right,
+      textDirection: TextDirection.ltr,
+      strutStyle: editorStrutStyle,
+    )..layout(maxWidth: maxWidth);
+
+    _painterCache[lineNumber] = tp;
+    return tp;
+  }
+
   @override
   void paint(Canvas canvas, Size size) {
     if (lineStartOffsets.isEmpty) return;
-
-    final textStyle = TextStyle(
-      fontFamily: fontFamily,
-      fontFamilyFallback: fontFamilyFallback,
-      fontSize: 12.0,
-      color: gutterTextColor,
-      height: 1.5,
-    );
 
     final renderEditable = findRenderEditable();
     final bool hasEditable = renderEditable != null && renderEditable.hasSize;
@@ -319,19 +409,41 @@ class _LineNumberPainter extends CustomPainter {
       }
     }
 
+    final yCache = <int, double>{};
+
     // Returns the exact Y coordinate in gutter coordinates of the first visual line of logical line [lineIndex]
     double getLineTopY(int lineIndex) {
+      final cachedY = yCache[lineIndex];
+      if (cachedY != null) return cachedY;
+
+      double y;
       if (hasEditable) {
+        // Fast path: if the previous line's Y is already known and the previous line is empty (just '\n'),
+        // it is guaranteed to occupy exactly 1 visual line, avoiding a native selection-endpoint query.
+        if (lineIndex > 0) {
+          final prevY = yCache[lineIndex - 1];
+          if (prevY != null &&
+              lineStartOffsets[lineIndex] - lineStartOffsets[lineIndex - 1] <=
+                  1) {
+            y = prevY + singleLineHeight;
+            yCache[lineIndex] = y;
+            return y;
+          }
+        }
         final charOffset = lineStartOffsets[lineIndex].clamp(0, text.length);
         final endpoints = renderEditable.getEndpointsForSelection(
           TextSelection.collapsed(offset: charOffset),
         );
         if (endpoints.isNotEmpty) {
-          return editableTopOffset +
+          y = editableTopOffset +
               (endpoints.first.point.dy - singleLineHeight);
+          yCache[lineIndex] = y;
+          return y;
         }
       }
-      return contentPaddingTop + (lineIndex * singleLineHeight) - scrollOffset;
+      y = contentPaddingTop + (lineIndex * singleLineHeight) - scrollOffset;
+      yCache[lineIndex] = y;
+      return y;
     }
 
     // Binary search in O(log N) to find the first logical line intersecting the viewport
@@ -351,6 +463,7 @@ class _LineNumberPainter extends CustomPainter {
     }
 
     final int startIdx = firstVisibleIndex > 0 ? firstVisibleIndex - 1 : 0;
+    final double maxLabelWidth = size.width - 12.0;
 
     for (int i = startIdx; i < lineStartOffsets.length; i++) {
       final y = getLineTopY(i);
@@ -359,18 +472,7 @@ class _LineNumberPainter extends CustomPainter {
       if (y > viewportHeight) break;
       if (y + singleLineHeight < 0) continue;
 
-      final textSpan = TextSpan(
-        text: '${i + 1}',
-        style: textStyle,
-      );
-
-      final textPainter = TextPainter(
-        text: textSpan,
-        textAlign: TextAlign.right,
-        textDirection: TextDirection.ltr,
-        strutStyle: editorStrutStyle,
-      )..layout(maxWidth: size.width - 12);
-
+      final textPainter = _getOrLayoutPainter(i + 1, maxLabelWidth);
       final double x = size.width - textPainter.width - 12.0;
 
       // Because textPainter uses the exact same editorStrutStyle (with forceStrutHeight: true),

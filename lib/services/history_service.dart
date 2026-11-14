@@ -11,13 +11,19 @@ class HistoryService {
   static const int _maxHistoryCount = 30;
 
   List<HistoryEntry> _history = [];
+  List<HistoryEntry>? _unmodifiableHistory;
+  SharedPreferences? _prefs;
 
-  List<HistoryEntry> get history => List.unmodifiable(_history);
+  List<HistoryEntry> get history =>
+      _unmodifiableHistory ??= List.unmodifiable(_history);
+
+  Future<SharedPreferences> _getPrefs() async =>
+      _prefs ??= await SharedPreferences.getInstance();
 
   /// Load persisted history from SharedPreferences
   Future<List<HistoryEntry>> loadHistory() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
+      final prefs = await _getPrefs();
       final jsonString = prefs.getString(_storageKey);
       if (jsonString != null && jsonString.isNotEmpty) {
         final List<dynamic> decoded = jsonDecode(jsonString);
@@ -27,11 +33,12 @@ class HistoryService {
 
         // Sort descending by lastOpened timestamp
         _history.sort((a, b) => b.lastOpened.compareTo(a.lastOpened));
+        _unmodifiableHistory = null;
       }
     } catch (e) {
       debugPrint('[HistoryService] Failed to load history: $e');
     }
-    return _history;
+    return history;
   }
 
   /// Add or update a file in history
@@ -68,6 +75,7 @@ class HistoryService {
       if (_history.length > _maxHistoryCount) {
         _history = _history.sublist(0, _maxHistoryCount);
       }
+      _unmodifiableHistory = null;
 
       await _persist();
     } catch (e) {
@@ -78,19 +86,21 @@ class HistoryService {
   /// Remove an entry from history by file path
   Future<void> removeEntry(String filePath) async {
     _history.removeWhere((entry) => entry.path == filePath);
+    _unmodifiableHistory = null;
     await _persist();
   }
 
   /// Clear the entire file history
   Future<void> clearHistory() async {
     _history.clear();
+    _unmodifiableHistory = null;
     await _persist();
   }
 
   /// Persist current history list into SharedPreferences
   Future<void> _persist() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
+      final prefs = await _getPrefs();
       final jsonList = _history.map((e) => e.toJson()).toList();
       await prefs.setString(_storageKey, jsonEncode(jsonList));
     } catch (e) {

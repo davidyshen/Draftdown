@@ -1,3 +1,12 @@
+/// Academic citation formatting style for document in-text citations and bibliographies.
+enum CitationStyle {
+  /// Name-Year style, e.g. (Surname et al., 2026) or Surname et al. (2026).
+  authorYear,
+
+  /// Numeric style, e.g. [1] or [1, 2] in order of appearance.
+  numeric,
+}
+
 /// Model representing a bibliographic citation item, compatible with
 /// Zotero, Better BibTeX, and Pandoc citation keys.
 class CitationItem {
@@ -25,25 +34,54 @@ class CitationItem {
     this.rawBibtex,
   });
 
+  static final RegExp _whitespaceRegex = RegExp(r'\s+');
+  static final RegExp _leadingAtOrDashRegex = RegExp(r'^[@\-]');
+  static final RegExp _yearRegex = RegExp(r'(19\d\d|20\d\d)');
+  static final RegExp _camelBoundaryRegex = RegExp(r'[a-z](?=[A-Z]|_)');
+  static final RegExp _nonAlphaDashRegex = RegExp(r'[^a-zA-Z\-]');
+
+  // Expando caches for immutable CitationItem instances (compatible with const constructors
+  // and automatically garbage-collected when the instance is no longer reachable).
+  static final Expando<String> _normalizedKeyCache = Expando<String>();
+  static final Expando<String> _searchableTextCache = Expando<String>();
+  static final Expando<String> _shortAuthorCache = Expando<String>();
+  static final Expando<String> _effectiveYearCache = Expando<String>();
+  static final Expando<String> _authorsSummaryCache = Expando<String>();
+  static final Expando<String> _bibliographyAuthorsCache = Expando<String>();
+
+  /// Normalised lowercase citekey without leading `@` for O(1) comparisons and indexing.
+  String get normalizedKey {
+    final cached = _normalizedKeyCache[this];
+    if (cached != null) return cached;
+    final computed = key.trim().replaceAll('@', '').toLowerCase();
+    _normalizedKeyCache[this] = computed;
+    return computed;
+  }
+
   /// Extract the surname from a full author string (e.g. "David Moreno-Mateos" -> "Moreno-Mateos", "Turing, Alan" -> "Turing")
   static String extractSurname(String fullName) {
-    var trimmed = fullName.trim();
+    final trimmed = fullName.trim();
     if (trimmed.isEmpty) return '';
-    if (trimmed.contains(',')) {
-      return trimmed.split(',').first.trim();
+    final commaIdx = trimmed.indexOf(',');
+    if (commaIdx != -1) {
+      return trimmed.substring(0, commaIdx).trim();
     }
-    final parts = trimmed.split(RegExp(r'\s+'));
+    final lastSpaceIdx = trimmed.lastIndexOf(' ');
+    if (lastSpaceIdx != -1) {
+      return trimmed.substring(lastSpaceIdx + 1).trim();
+    }
+    final parts = trimmed.split(_whitespaceRegex);
     return parts.last.trim();
   }
 
   /// Infer author surname(s) from a citekey string e.g. "moreno-mateosLongtermRestorationEcosystem2020" -> "Moreno-Mateos et al."
   static String inferAuthorFromKey(String rawKey) {
-    var clean = rawKey.trim().replaceAll(RegExp(r'^[@\-]'), '');
-    final yearMatch = RegExp(r'(19\d\d|20\d\d)').firstMatch(clean);
+    final clean = rawKey.trim().replaceAll(_leadingAtOrDashRegex, '');
+    final yearMatch = _yearRegex.firstMatch(clean);
     if (yearMatch != null) {
       final prefix = clean.substring(0, yearMatch.start);
       String rawAuthor;
-      final boundaryMatch = RegExp(r'[a-z](?=[A-Z]|_)').firstMatch(prefix);
+      final boundaryMatch = _camelBoundaryRegex.firstMatch(prefix);
       if (boundaryMatch != null) {
         rawAuthor = prefix.substring(0, boundaryMatch.end);
       } else {
@@ -63,7 +101,7 @@ class CitationItem {
       }
     }
 
-    final cleanAlpha = clean.split(RegExp(r'[^a-zA-Z\-]')).firstWhere(
+    final cleanAlpha = clean.split(_nonAlphaDashRegex).firstWhere(
           (s) => s.isNotEmpty,
           orElse: () => clean,
         );
@@ -80,28 +118,39 @@ class CitationItem {
 
   /// Short author representation for in-text citations (e.g. "Turing", "Russell & Norvig", "Moreno-Mateos et al.")
   String get shortAuthorSummary {
+    final cached = _shortAuthorCache[this];
+    if (cached != null) return cached;
+    final String result;
     if (authors.isNotEmpty) {
       if (authors.length == 1) {
-        return extractSurname(authors.first);
+        result = extractSurname(authors.first);
       } else if (authors.length == 2) {
-        return '${extractSurname(authors[0])} & ${extractSurname(authors[1])}';
+        result = '${extractSurname(authors[0])} & ${extractSurname(authors[1])}';
       } else {
-        return '${extractSurname(authors.first)} et al.';
+        result = '${extractSurname(authors.first)} et al.';
       }
+    } else {
+      result = inferAuthorFromKey(key);
     }
-    return inferAuthorFromKey(key);
+    _shortAuthorCache[this] = result;
+    return result;
   }
 
   /// Effective year from item metadata or inferred from the citekey
   String get effectiveYear {
+    final cached = _effectiveYearCache[this];
+    if (cached != null) return cached;
+    String result = 'n.d.';
     if (year != null && year!.trim().isNotEmpty && year != 'n.d.') {
-      return year!.trim();
+      result = year!.trim();
+    } else {
+      final yearMatch = _yearRegex.firstMatch(key);
+      if (yearMatch != null) {
+        result = yearMatch.group(0)!;
+      }
     }
-    final yearMatch = RegExp(r'(19\d\d|20\d\d)').firstMatch(key);
-    if (yearMatch != null) {
-      return yearMatch.group(0)!;
-    }
-    return 'n.d.';
+    _effectiveYearCache[this] = result;
+    return result;
   }
 
   /// Formatted author and year string, e.g. "Moreno-Mateos et al., 2020" or "Turing, 1950"
@@ -113,12 +162,42 @@ class CitationItem {
 
   /// Single-line summary of authors, e.g. "Smith, J., Doe, A." or inferred from citekey
   String get authorsSummary {
+    final cached = _authorsSummaryCache[this];
+    if (cached != null) return cached;
+    final String result;
     if (authors.isNotEmpty) {
-      if (authors.length <= 3) return authors.join(', ');
-      return '${authors.take(2).join(', ')} et al.';
+      if (authors.length <= 3) {
+        result = authors.join(', ');
+      } else {
+        result = '${authors.take(2).join(', ')} et al.';
+      }
+    } else {
+      final inferred = inferAuthorFromKey(key);
+      result = inferred.isNotEmpty ? inferred : 'Unknown author';
     }
-    final inferred = inferAuthorFromKey(key);
-    return inferred.isNotEmpty ? inferred : 'Unknown author';
+    _authorsSummaryCache[this] = result;
+    return result;
+  }
+
+  /// Formatted author string for bibliographies:
+  /// If 10 or fewer authors, all authors are displayed.
+  /// If more than 10 authors, the first 6 authors are displayed followed by ", et al.".
+  String get bibliographyAuthorsSummary {
+    final cached = _bibliographyAuthorsCache[this];
+    if (cached != null) return cached;
+    final String result;
+    if (authors.isNotEmpty) {
+      if (authors.length <= 10) {
+        result = authors.join(', ');
+      } else {
+        result = '${authors.take(6).join(', ')}, et al.';
+      }
+    } else {
+      final inferred = inferAuthorFromKey(key);
+      result = inferred.isNotEmpty ? inferred : 'Unknown author';
+    }
+    _bibliographyAuthorsCache[this] = result;
+    return result;
   }
 
   /// Mapping of accented / diacritic characters and ligatures to their plain ASCII equivalents.
@@ -210,6 +289,18 @@ class CitationItem {
   /// (e.g. "Pärtel" -> "partel", "Schrödinger" -> "schrodinger", "García" -> "garcia").
   static String normalizeForSearch(String input) {
     if (input.isEmpty) return '';
+    // Fast-path pure ASCII strings to avoid regex and StringBuffer allocations
+    bool isPureAscii = true;
+    for (int i = 0; i < input.length; i++) {
+      if (input.codeUnitAt(i) >= 128) {
+        isPureAscii = false;
+        break;
+      }
+    }
+    if (isPureAscii) {
+      return input.toLowerCase();
+    }
+
     final lower = input.toLowerCase().replaceAll(_combiningDiacritics, '');
     final buffer = StringBuffer();
     for (int i = 0; i < lower.length; i++) {
@@ -226,8 +317,13 @@ class CitationItem {
 
   /// Searchable text index in lowercase with diacritics and accents normalised
   String get searchableText {
-    final raw = '$key $title ${authors.join(' ')} ${year ?? ''} ${venue ?? ''} ${itemType ?? ''}';
-    return normalizeForSearch(raw);
+    final cached = _searchableTextCache[this];
+    if (cached != null) return cached;
+    final raw =
+        '$key $title ${authors.join(' ')} ${year ?? ''} ${venue ?? ''} ${itemType ?? ''}';
+    final computed = normalizeForSearch(raw);
+    _searchableTextCache[this] = computed;
+    return computed;
   }
 
   /// Format citation for Pandoc Markdown
@@ -410,10 +506,10 @@ class CitationItem {
       identical(this, other) ||
       other is CitationItem &&
           runtimeType == other.runtimeType &&
-          key.trim().toLowerCase() == other.key.trim().toLowerCase();
+          normalizedKey == other.normalizedKey;
 
   @override
-  int get hashCode => key.trim().toLowerCase().hashCode;
+  int get hashCode => normalizedKey.hashCode;
 
   factory CitationItem.fromJson(Map<String, dynamic> json) {
     return CitationItem(
@@ -471,6 +567,18 @@ class DetectedCitation {
     this.locator,
   });
 
+  static final RegExp _bracketCiteKeyRegex =
+      RegExp(r'(-?@[a-zA-Z0-9_\-:#\/]+)');
+  static final RegExp _locatorInBracketRegex =
+      RegExp(r',\s*([^;@\]]+)(?:;|$)');
+  static final RegExp _inTextCitationLineRegex =
+      RegExp(r'(?<![\w@])@([a-zA-Z0-9_\-:#\/]+)(?:\s*\[([^\]]+)\])?');
+  static final RegExp _extractBracketRegex = RegExp(r'\[([^\]]*@[^\]]+)\]');
+  static final RegExp _extractKeyInBracketRegex =
+      RegExp(r'(-?@([a-zA-Z0-9_\-:#\/]+))');
+  static final RegExp _extractInTextRegex =
+      RegExp(r'(?<![\w@])@([a-zA-Z0-9_\-:#\/]+)');
+
   /// Scan the text around [cursor] to detect if it sits within a citation.
   static DetectedCitation? findAt(String text, int cursor) {
     if (text.isEmpty || cursor < 0 || cursor > text.length) return null;
@@ -480,15 +588,18 @@ class DetectedCitation {
     for (int i = (cursor < text.length ? cursor : text.length - 1);
         i >= 0 && i >= cursor - 500;
         i--) {
-      if (text[i] == '\n') break;
-      if (text[i] == ']') {
+      final code = text.codeUnitAt(i);
+      if (code == 10) break; // '\n'
+      if (code == 93) {
+        // ']'
         if (i == cursor - 1) {
           continue;
         } else {
           break;
         }
       }
-      if (text[i] == '[') {
+      if (code == 91) {
+        // '['
         openBracket = i;
         break;
       }
@@ -497,8 +608,10 @@ class DetectedCitation {
     if (openBracket != -1) {
       int closeBracket = -1;
       for (int i = openBracket; i < text.length && i <= openBracket + 500; i++) {
-        if (text[i] == '\n') break;
-        if (text[i] == ']') {
+        final code = text.codeUnitAt(i);
+        if (code == 10) break; // '\n'
+        if (code == 93) {
+          // ']'
           closeBracket = i;
           break;
         }
@@ -507,47 +620,47 @@ class DetectedCitation {
       if (closeBracket != -1 &&
           cursor >= openBracket &&
           cursor <= closeBracket + 1) {
-        final isLink =
-            closeBracket + 1 < text.length && text[closeBracket + 1] == '(';
+        final isLink = closeBracket + 1 < text.length &&
+            text.codeUnitAt(closeBracket + 1) == 40; // '('
         if (!isLink) {
           final content = text.substring(openBracket + 1, closeBracket);
-          final keyMatches =
-              RegExp(r'(-?@[a-zA-Z0-9_\-:#\/]+)').allMatches(content);
-          if (keyMatches.isNotEmpty) {
-            final keys = <String>[];
-            bool hasSuppress = false;
-            for (final m in keyMatches) {
-              final raw = m.group(0)!;
-              if (raw.startsWith('-@')) {
-                hasSuppress = true;
-                keys.add(raw.substring(2));
-              } else if (raw.startsWith('@')) {
-                keys.add(raw.substring(1));
+          if (content.contains('@')) {
+            final keyMatches = _bracketCiteKeyRegex.allMatches(content);
+            if (keyMatches.isNotEmpty) {
+              final keys = <String>[];
+              bool hasSuppress = false;
+              for (final m in keyMatches) {
+                final raw = m.group(0)!;
+                if (raw.startsWith('-@')) {
+                  hasSuppress = true;
+                  keys.add(raw.substring(2));
+                } else if (raw.startsWith('@')) {
+                  keys.add(raw.substring(1));
+                }
               }
-            }
 
-            // Extract locator if present e.g. [@key, p. 42] or [@key1; @key2, p. 42]
-            String? locator;
-            final locMatch =
-                RegExp(r',\s*([^;@\]]+)(?:;|$)').firstMatch(content);
-            if (locMatch != null) {
-              final candidate = locMatch.group(1)?.trim();
-              if (candidate != null &&
-                  !candidate.startsWith('@') &&
-                  candidate.isNotEmpty) {
-                locator = candidate;
+              // Extract locator if present e.g. [@key, p. 42] or [@key1; @key2, p. 42]
+              String? locator;
+              final locMatch = _locatorInBracketRegex.firstMatch(content);
+              if (locMatch != null) {
+                final candidate = locMatch.group(1)?.trim();
+                if (candidate != null &&
+                    !candidate.startsWith('@') &&
+                    candidate.isNotEmpty) {
+                  locator = candidate;
+                }
               }
-            }
 
-            return DetectedCitation(
-              startOffset: openBracket,
-              endOffset: closeBracket + 1,
-              rawText: text.substring(openBracket, closeBracket + 1),
-              keys: keys,
-              suppressAuthor: hasSuppress,
-              inText: false,
-              locator: locator,
-            );
+              return DetectedCitation(
+                startOffset: openBracket,
+                endOffset: closeBracket + 1,
+                rawText: text.substring(openBracket, closeBracket + 1),
+                keys: keys,
+                suppressAuthor: hasSuppress,
+                inText: false,
+                locator: locator,
+              );
+            }
           }
         }
       }
@@ -555,17 +668,17 @@ class DetectedCitation {
 
     // 2. Check if cursor is on an in-text citation: @key or @key [locator]
     int lineStart = cursor;
-    while (lineStart > 0 && text[lineStart - 1] != '\n') {
+    while (lineStart > 0 && text.codeUnitAt(lineStart - 1) != 10) {
       lineStart--;
     }
     int lineEnd = cursor;
-    while (lineEnd < text.length && text[lineEnd] != '\n') {
+    while (lineEnd < text.length && text.codeUnitAt(lineEnd) != 10) {
       lineEnd++;
     }
     final line = text.substring(lineStart, lineEnd);
-    final inTextMatches = RegExp(
-            r'(?<![\w@])@([a-zA-Z0-9_\-:#\/]+)(?:\s*\[([^\]]+)\])?')
-        .allMatches(line);
+    if (!line.contains('@')) return null;
+
+    final inTextMatches = _inTextCitationLineRegex.allMatches(line);
     for (final m in inTextMatches) {
       final matchStart = lineStart + m.start;
       final matchEnd = lineStart + m.end;
@@ -589,15 +702,13 @@ class DetectedCitation {
   /// Detects bracketed citations (e.g. `[@key]`, `[@k1; @k2, p. 5]`, `[-@k3]`)
   /// and in-text citations (e.g. `@key`, `@key [p. 10]`).
   static List<String> extractCitedKeys(String markdown) {
-    if (markdown.isEmpty) return const [];
+    if (markdown.isEmpty || !markdown.contains('@')) return const [];
     final keys = <String>{};
 
     // 1. Match bracketed citations: [...@key...]
-    final bracketRegex = RegExp(r'\[([^\]]*@[^\]]+)\]');
-    for (final match in bracketRegex.allMatches(markdown)) {
+    for (final match in _extractBracketRegex.allMatches(markdown)) {
       final inner = match.group(1)!;
-      final keyRegex = RegExp(r'(-?@([a-zA-Z0-9_\-:#\/]+))');
-      for (final km in keyRegex.allMatches(inner)) {
+      for (final km in _extractKeyInBracketRegex.allMatches(inner)) {
         final k = km.group(2);
         if (k != null && k.isNotEmpty) {
           keys.add(k);
@@ -606,14 +717,13 @@ class DetectedCitation {
     }
 
     // 2. Match in-text citations: (?<![\w@])@([a-zA-Z0-9_\-:#\/]+)
-    final inTextRegex = RegExp(r'(?<![\w@])@([a-zA-Z0-9_\-:#\/]+)');
-    for (final match in inTextRegex.allMatches(markdown)) {
+    for (final match in _extractInTextRegex.allMatches(markdown)) {
       final k = match.group(1);
       if (k != null && k.isNotEmpty) {
         keys.add(k);
       }
     }
 
-    return keys.toList();
+    return keys.toList(growable: false);
   }
 }

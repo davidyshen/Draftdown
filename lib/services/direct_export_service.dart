@@ -14,6 +14,20 @@ class DirectExportService {
   /// Deep green colour specified for code blocks and inline code
   static const String codeGreenColor = '#166534';
 
+  static final RegExp _cleanKeyRegex = RegExp(r'^[@\-]+');
+  static final RegExp _yearRegex = RegExp(r'(19\d\d|20\d\d)');
+  static final RegExp _bracketRegex =
+      RegExp(r'\[(-?@[a-zA-Z0-9_\-:#\/]+(?:[^\n\]]*))\]');
+  static final RegExp _inTextRegex =
+      RegExp(r'(?<![\w@])@([a-zA-Z0-9_\-:#\/]+)(?:\[([^\]]+)\])?');
+  static final RegExp _existingReferencesRegex = RegExp(
+    r'^(?:#{1,6}\s*(?:References|Bibliography)|<a\s+name="references">)',
+    caseSensitive: false,
+    multiLine: true,
+  );
+
+  String? _cachedBrowserExecutable;
+
   /// Resolve page margin stylesheet definition based on selected margin mode
   static String resolvePageMargin(String marginSize) {
     switch (marginSize.toLowerCase()) {
@@ -31,6 +45,11 @@ class DirectExportService {
 
   /// Locate the pre-installed system browser executable (Edge / Chrome) for headless PDF printing
   Future<String?> findBrowserExecutable() async {
+    if (_cachedBrowserExecutable != null &&
+        File(_cachedBrowserExecutable!).existsSync()) {
+      return _cachedBrowserExecutable;
+    }
+
     if (Platform.isWindows) {
       final localAppData = Platform.environment['LOCALAPPDATA'];
       final candidates = [
@@ -45,6 +64,7 @@ class DirectExportService {
       ];
       for (final candidate in candidates) {
         if (File(candidate).existsSync()) {
+          _cachedBrowserExecutable = candidate;
           return candidate;
         }
       }
@@ -56,6 +76,7 @@ class DirectExportService {
       ];
       for (final candidate in candidates) {
         if (File(candidate).existsSync()) {
+          _cachedBrowserExecutable = candidate;
           return candidate;
         }
       }
@@ -68,6 +89,7 @@ class DirectExportService {
       ];
       for (final candidate in candidates) {
         if (File(candidate).existsSync()) {
+          _cachedBrowserExecutable = candidate;
           return candidate;
         }
       }
@@ -77,18 +99,10 @@ class DirectExportService {
 
   /// Resolve citation item from controller bibliographies
   CitationItem? _resolveCitation(String key, EditorController controller) {
-    final clean = key.trim().replaceAll(RegExp(r'^[@\-]'), '').toLowerCase();
-    for (final item in controller.citations) {
-      if (item.key.trim().replaceAll('@', '').toLowerCase() == clean) {
-        return item;
-      }
-    }
-    for (final item in controller.zoteroCitations) {
-      if (item.key.trim().replaceAll('@', '').toLowerCase() == clean) {
-        return item;
-      }
-    }
-    return null;
+    final clean = key.trim().replaceFirst(_cleanKeyRegex, '');
+    if (clean.isEmpty) return null;
+    return controller.bibliographyService.findByKey(clean) ??
+        controller.zoteroService.findByKey(clean);
   }
 
   /// Format an individual citation segment in normal weight and colour
@@ -96,6 +110,7 @@ class DirectExportService {
     String segment, {
     required bool bracketed,
     required EditorController controller,
+    Map<String, int>? keyToNumber,
   }) {
     var raw = segment.trim();
     bool suppressAuthor = raw.startsWith('-');
@@ -121,22 +136,36 @@ class DirectExportService {
       yearStr = item.effectiveYear;
     } else {
       authorsStr = CitationItem.inferAuthorFromKey(key);
-      final yearMatch = RegExp(r'(19\d\d|20\d\d)').firstMatch(key);
+      final yearMatch = _yearRegex.firstMatch(key);
       yearStr = yearMatch?.group(0) ?? 'n.d.';
     }
 
+    final isNumeric = controller.citationStyle == CitationStyle.numeric;
+    final num = isNumeric ? (keyToNumber?[key.toLowerCase()] ?? 1) : null;
     final yearDisplay = yearStr.isNotEmpty ? yearStr : 'n.d.';
     final locatorDisplay =
         (locator != null && locator.isNotEmpty) ? ', $locator' : '';
 
-    if (bracketed) {
-      if (suppressAuthor) {
-        return '$yearDisplay$locatorDisplay';
+    if (isNumeric) {
+      if (bracketed) {
+        return '$num$locatorDisplay';
       } else {
-        return '$authorsStr, $yearDisplay$locatorDisplay';
+        if (suppressAuthor) {
+          return '[$num$locatorDisplay]';
+        } else {
+          return '$authorsStr [$num$locatorDisplay]';
+        }
       }
     } else {
-      return '$authorsStr ($yearDisplay$locatorDisplay)';
+      if (bracketed) {
+        if (suppressAuthor) {
+          return '$yearDisplay$locatorDisplay';
+        } else {
+          return '$authorsStr, $yearDisplay$locatorDisplay';
+        }
+      } else {
+        return '$authorsStr ($yearDisplay$locatorDisplay)';
+      }
     }
   }
 
@@ -145,11 +174,40 @@ class DirectExportService {
     required String markdown,
     required EditorController controller,
   }) {
+    if (!markdown.contains('@')) return markdown;
+
+    final isNumeric = controller.citationStyle == CitationStyle.numeric;
+    final citedKeysInOrder = <String>[];
+    final citedKeysSet = <String>{};
+    final Map<String, int> keyToNumber = {};
+
+    // 1. Collect cited keys in order of appearance
+    for (final match in _bracketRegex.allMatches(markdown)) {
+      final inner = match.group(1)!;
+      for (final s in inner.split(';')) {
+        var clean = s.trim();
+        if (clean.startsWith('-')) clean = clean.substring(1).trim();
+        if (clean.startsWith('@')) clean = clean.substring(1).trim();
+        final comma = clean.indexOf(',');
+        final k = comma != -1 ? clean.substring(0, comma).trim() : clean;
+        if (k.isNotEmpty && citedKeysSet.add(k.toLowerCase())) {
+          citedKeysInOrder.add(k);
+          keyToNumber[k.toLowerCase()] = citedKeysInOrder.length;
+        }
+      }
+    }
+    for (final match in _inTextRegex.allMatches(markdown)) {
+      final k = match.group(1)!;
+      if (k.isNotEmpty && citedKeysSet.add(k.toLowerCase())) {
+        citedKeysInOrder.add(k);
+        keyToNumber[k.toLowerCase()] = citedKeysInOrder.length;
+      }
+    }
+
     var processed = markdown;
 
-    // 1. Replace bracketed citations: [@key1; @key2, p. 5]
-    final bracketRegex = RegExp(r'\[(-?@[a-zA-Z0-9_\-:#\/]+(?:[^\n\]]*))\]');
-    processed = processed.replaceAllMapped(bracketRegex, (match) {
+    // 2. Replace bracketed citations: [@key1; @key2, p. 5]
+    processed = processed.replaceAllMapped(_bracketRegex, (match) {
       final inner = match.group(1)!;
       final segments = inner.split(';').map((s) => s.trim()).toList();
       final formatted = segments
@@ -157,15 +215,15 @@ class DirectExportService {
                 s,
                 bracketed: true,
                 controller: controller,
+                keyToNumber: keyToNumber,
               ))
-          .join('; ');
-      return '<span class="citation">($formatted)</span>';
+          .join(isNumeric ? ', ' : '; ');
+      final display = isNumeric ? '[$formatted]' : '($formatted)';
+      return '<span class="citation">$display</span>';
     });
 
-    // 2. Replace in-text citations: @key or @key [p. 10]
-    final inTextRegex =
-        RegExp(r'(?<![\w@])@([a-zA-Z0-9_\-:#\/]+)(?:\[([^\]]+)\])?');
-    processed = processed.replaceAllMapped(inTextRegex, (match) {
+    // 3. Replace in-text citations: @key or @key [p. 10]
+    processed = processed.replaceAllMapped(_inTextRegex, (match) {
       final key = match.group(1)!;
       final loc = match.group(2);
       final segmentText = loc != null ? '@$key, $loc' : '@$key';
@@ -173,57 +231,102 @@ class DirectExportService {
         segmentText,
         bracketed: false,
         controller: controller,
+        keyToNumber: keyToNumber,
       );
       return '<span class="citation">$formatted</span>';
     });
 
-    // 3. Append References section if citations were present and no heading exists
-    final citedKeys = CitationItem.extractCitedKeys(markdown);
-    if (citedKeys.isNotEmpty) {
-      final hasExistingReferences = RegExp(
-        r'^(?:#{1,6}\s*(?:References|Bibliography)|<a\s+name="references">)',
-        caseSensitive: false,
-        multiLine: true,
-      ).hasMatch(markdown);
+    // 4. Append References section if citations were present and no heading exists
+    if (citedKeysInOrder.isNotEmpty) {
+      final hasExistingReferences = _existingReferencesRegex.hasMatch(markdown);
 
       if (!hasExistingReferences) {
         final buffer = StringBuffer(processed);
         buffer.writeln('\n\n---\n\n## References\n');
 
-        final sortedKeys = citedKeys.toList()..sort();
-        for (final key in sortedKeys) {
-          final item = _resolveCitation(key, controller);
-          if (item != null) {
-            final authors = item.authorsSummary;
-            final yearStr = item.effectiveYear != 'n.d.'
-                ? item.effectiveYear
-                : (item.year != null && item.year!.isNotEmpty
-                    ? item.year!
-                    : '');
-            final yearDisplay = yearStr.isNotEmpty ? ' ($yearStr)' : '';
-            final title = item.title;
-            final venue = (item.venue != null && item.venue!.trim().isNotEmpty)
-                ? ' *${item.venue}*.'
-                : '';
-            final doi = (item.doi != null && item.doi!.trim().isNotEmpty)
-                ? ' DOI: ${item.doi}.'
-                : '';
-            final url = (item.url != null &&
-                    item.url!.trim().isNotEmpty &&
-                    item.doi == null)
-                ? ' Available at: ${item.url}.'
-                : '';
-            buffer.writeln(
-                '- **$authors**$yearDisplay. *$title*.$venue$doi$url');
-          } else {
-            final seg = _formatCitationSegment(
-              '@$key',
-              bracketed: false,
-              controller: controller,
-            );
-            buffer.writeln('- **$seg**. Citekey: `$key`');
+        if (isNumeric) {
+          for (int i = 0; i < citedKeysInOrder.length; i++) {
+            final key = citedKeysInOrder[i];
+            final num = i + 1;
+            final item = _resolveCitation(key, controller);
+            if (item != null) {
+              final authors = item.bibliographyAuthorsSummary;
+              final yearStr = item.effectiveYear != 'n.d.'
+                  ? item.effectiveYear
+                  : (item.year != null && item.year!.isNotEmpty
+                      ? item.year!
+                      : '');
+              final yearDisplay = yearStr.isNotEmpty ? ' ($yearStr)' : '';
+              final title = item.title;
+              final venue = (item.venue != null && item.venue!.trim().isNotEmpty)
+                  ? ' *${item.venue}*.'
+                  : '';
+              final doi = (item.doi != null && item.doi!.trim().isNotEmpty)
+                  ? ' DOI: ${item.doi}.'
+                  : '';
+              final url = (item.url != null &&
+                      item.url!.trim().isNotEmpty &&
+                      item.doi == null)
+                  ? ' Available at: ${item.url}.'
+                  : '';
+              buffer.writeln(
+                  '$num. **$authors**$yearDisplay. *$title*.$venue$doi$url');
+            } else {
+              buffer.writeln('$num. **@$key**. Citekey: `$key`');
+            }
+          }
+        } else {
+          final sortedKeys = List<String>.from(citedKeysInOrder);
+          sortedKeys.sort((keyA, keyB) {
+            final itemA = _resolveCitation(keyA, controller);
+            final itemB = _resolveCitation(keyB, controller);
+            final surnameA = itemA?.authors.isNotEmpty == true
+                ? CitationItem.extractSurname(itemA!.authors.first)
+                : CitationItem.inferAuthorFromKey(keyA);
+            final surnameB = itemB?.authors.isNotEmpty == true
+                ? CitationItem.extractSurname(itemB!.authors.first)
+                : CitationItem.inferAuthorFromKey(keyB);
+            final cmp = surnameA.toLowerCase().compareTo(surnameB.toLowerCase());
+            if (cmp != 0) return cmp;
+            return (itemA?.effectiveYear ?? '')
+                .compareTo(itemB?.effectiveYear ?? '');
+          });
+
+          for (final key in sortedKeys) {
+            final item = _resolveCitation(key, controller);
+            if (item != null) {
+              final authors = item.bibliographyAuthorsSummary;
+              final yearStr = item.effectiveYear != 'n.d.'
+                  ? item.effectiveYear
+                  : (item.year != null && item.year!.isNotEmpty
+                      ? item.year!
+                      : '');
+              final yearDisplay = yearStr.isNotEmpty ? ' ($yearStr)' : '';
+              final title = item.title;
+              final venue = (item.venue != null && item.venue!.trim().isNotEmpty)
+                  ? ' *${item.venue}*.'
+                  : '';
+              final doi = (item.doi != null && item.doi!.trim().isNotEmpty)
+                  ? ' DOI: ${item.doi}.'
+                  : '';
+              final url = (item.url != null &&
+                      item.url!.trim().isNotEmpty &&
+                      item.doi == null)
+                  ? ' Available at: ${item.url}.'
+                  : '';
+              buffer.writeln(
+                  '- **$authors**$yearDisplay. *$title*.$venue$doi$url');
+            } else {
+              final seg = _formatCitationSegment(
+                '@$key',
+                bracketed: false,
+                controller: controller,
+              );
+              buffer.writeln('- **$seg**. Citekey: `$key`');
+            }
           }
         }
+
         processed = buffer.toString();
       }
     }

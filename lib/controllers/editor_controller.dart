@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:markdown/markdown.dart' as md;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/citation_item.dart';
 import '../models/export_format.dart';
@@ -9,6 +10,7 @@ import '../services/bibliography_service.dart';
 import '../services/direct_export_service.dart';
 import '../services/file_service.dart';
 import '../services/history_service.dart';
+import '../services/markdown_render_service.dart';
 import '../services/pandoc_service.dart';
 import '../services/zotero_service.dart';
 import '../ui/theme/app_theme.dart';
@@ -25,14 +27,33 @@ enum CitationSource {
   zotero,
 }
 
+/// Represents information about a task list checkbox in markdown source.
+class MarkdownCheckboxInfo {
+  final int charOffset;
+  final bool isChecked;
+
+  const MarkdownCheckboxInfo({
+    required this.charOffset,
+    required this.isChecked,
+  });
+}
+
 /// Main application state controller for MDWriter.
 class EditorController extends ChangeNotifier {
+  static final RegExp _bibEntryKeyRegex = RegExp(
+    r'@([a-zA-Z]+)\s*\{\s*([a-zA-Z0-9_:.+-]+)\s*,',
+  );
+
   final FileService fileService;
   final HistoryService historyService;
   final BibliographyService bibliographyService;
   final PandocService pandocService;
   final ZoteroService zoteroService;
   final DirectExportService directExportService;
+
+  SharedPreferences? _prefs;
+  Future<SharedPreferences> _getPrefs() async =>
+      _prefs ??= await SharedPreferences.getInstance();
 
   // Document state
   String? _currentFilePath;
@@ -58,6 +79,7 @@ class EditorController extends ChangeNotifier {
   bool _isZoteroConnected = false;
   String _bibliographyStatus = 'Initialised with sample bibliography';
   CitationSource _citationSource = CitationSource.bibtex;
+  CitationStyle _citationStyle = CitationStyle.authorYear;
 
   // Pandoc state
   bool _isPandocAvailable = false;
@@ -75,8 +97,15 @@ class EditorController extends ChangeNotifier {
   // Preview state & Debouncing (1.5s idle window after typing stops)
   static const Duration defaultRenderDebounce = Duration(milliseconds: 1500);
   final Duration? _customRenderDebounce;
+  final MarkdownRenderService _renderService;
+  final ValueNotifier<String> previewNotifier = ValueNotifier<String>('');
   String _previewMarkdown = '';
+  Map<String, int> _numericIndices = const {};
+  List<md.Node>? _astNodes;
   Timer? _debounceTimer;
+  int _activeRenderSequence = 0;
+  int _completedRenderSequence = 0;
+  bool _isBackgroundRendering = false;
   bool? _isProgrammaticUpdate;
   String? _lastObservedText;
 
@@ -86,7 +115,11 @@ class EditorController extends ChangeNotifier {
   String? get currentFilePath => _currentFilePath;
   String get currentFileName => _currentFileName;
   bool get isModified => _isModified;
-  bool get isRenderPending => _debounceTimer?.isActive ?? false;
+  bool get isBackgroundRendering => _isBackgroundRendering;
+  bool get isRenderPending =>
+      (_debounceTimer?.isActive ?? false) || _isBackgroundRendering;
+  Map<String, int> get numericIndices => _numericIndices;
+  List<md.Node>? get astNodes => _astNodes;
   EditorViewMode get viewMode => _viewMode;
   bool get isSidebarOpen => _isSidebarOpen;
   int get wordCount => _wordCount;
@@ -96,6 +129,7 @@ class EditorController extends ChangeNotifier {
   List<HistoryEntry> get history => historyService.history;
   List<CitationItem> get citations => bibliographyService.items;
   CitationSource get citationSource => _citationSource;
+  CitationStyle get citationStyle => _citationStyle;
   List<CitationItem> get zoteroCitations => zoteroService.cachedItems;
   String? get bibliographyPath => _bibliographyPath;
   bool get isZoteroConnected => _isZoteroConnected;
@@ -126,6 +160,7 @@ class EditorController extends ChangeNotifier {
     PandocService? pandocService,
     ZoteroService? zoteroService,
     DirectExportService? directExportService,
+    MarkdownRenderService? renderService,
     Duration? renderDebounceDuration,
   })  : fileService = fileService ?? FileService(),
         historyService = historyService ?? HistoryService(),
@@ -133,6 +168,7 @@ class EditorController extends ChangeNotifier {
         pandocService = pandocService ?? PandocService(),
         zoteroService = zoteroService ?? ZoteroService(),
         directExportService = directExportService ?? DirectExportService(),
+        _renderService = renderService ?? MarkdownRenderService(),
         _customRenderDebounce = renderDebounceDuration {
     _lastObservedText = textController.text;
     textController.addListener(_onTextChanged);
@@ -140,10 +176,14 @@ class EditorController extends ChangeNotifier {
 
   /// Initialise controller, check Pandoc & Zotero, load history and preferences
   Future<void> initialise() async {
-    await historyService.loadHistory();
-    await _loadPreferences();
-    await checkPandocAvailability();
-    await checkZoteroConnection();
+    await Future.wait([
+      historyService.loadHistory(),
+      _loadPreferences(),
+    ]);
+    await Future.wait([
+      checkPandocAvailability(),
+      checkZoteroConnection(),
+    ]);
 
     // Check if there is an active history entry or load welcome document
     if (history.isNotEmpty && File(history.first.path).existsSync()) {
@@ -155,7 +195,7 @@ class EditorController extends ChangeNotifier {
 
   Future<void> _loadPreferences() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
+      final prefs = await _getPrefs();
       _bibliographyPath = prefs.getString('mdwriter_bibliography_path');
       final customPandoc = prefs.getString('mdwriter_custom_pandoc_path');
       if (customPandoc != null && customPandoc.isNotEmpty) {
@@ -188,6 +228,12 @@ class EditorController extends ChangeNotifier {
       if (savedSource == 'zotero') {
         _citationSource = CitationSource.zotero;
       }
+      final savedStyle = prefs.getString('mdwriter_citation_style');
+      if (savedStyle == 'numeric') {
+        _citationStyle = CitationStyle.numeric;
+      } else if (savedStyle == 'authorYear') {
+        _citationStyle = CitationStyle.authorYear;
+      }
     } catch (_) {}
   }
 
@@ -196,8 +242,19 @@ class EditorController extends ChangeNotifier {
     _citationSource = source;
     notifyListeners();
     try {
-      final prefs = await SharedPreferences.getInstance();
+      final prefs = await _getPrefs();
       await prefs.setString('mdwriter_citation_source', source.name);
+    } catch (_) {}
+  }
+
+  /// Change active document citation style (Author-Year vs Numeric)
+  Future<void> setCitationStyle(CitationStyle style) async {
+    if (_citationStyle == style) return;
+    _citationStyle = style;
+    notifyListeners();
+    try {
+      final prefs = await _getPrefs();
+      await prefs.setString('mdwriter_citation_style', style.name);
     } catch (_) {}
   }
 
@@ -216,7 +273,7 @@ class EditorController extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final prefs = await SharedPreferences.getInstance();
+      final prefs = await _getPrefs();
       await prefs.setString('mdwriter_editor_font', _editorFontFamily);
       await prefs.setBool('mdwriter_is_dual_render_font', _isDualRenderFont);
       await prefs.setString('mdwriter_render_body_font', _renderBodyFont);
@@ -238,7 +295,7 @@ class EditorController extends ChangeNotifier {
     AppTheme.setActiveScheme(AppTheme.schemeById(lightSchemeId));
     notifyListeners();
     try {
-      final prefs = await SharedPreferences.getInstance();
+      final prefs = await _getPrefs();
       await prefs.setBool('mdwriter_dark_mode', isDarkMode);
     } catch (_) {}
   }
@@ -260,7 +317,7 @@ class EditorController extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final prefs = await SharedPreferences.getInstance();
+      final prefs = await _getPrefs();
       await prefs.setString('mdwriter_color_scheme', scheme.id);
       await prefs.setString('mdwriter_dark_scheme', darkSchemeId);
       await prefs.setString('mdwriter_light_scheme', lightSchemeId);
@@ -288,15 +345,91 @@ class EditorController extends ChangeNotifier {
     }
 
     // Decouple Markdown entry from expensive rendering on large files:
-    // Wait until a 1.5-second period of typing inactivity before updating the render.
+    // Wait until a 1.5-second period of typing inactivity before taking a snapshot
+    // and rendering in a separate thread.
     textController.isActivelyTyping = true;
     _debounceTimer?.cancel();
-    _debounceTimer = Timer(renderDebounceDuration, flushPendingRenderUpdate);
+    _debounceTimer = Timer(renderDebounceDuration, _onDebounceTimerFired);
 
     if (!_isModified) {
       _isModified = true;
       notifyListeners();
     }
+  }
+
+  /// Triggered after the 1.5-second debounce window has elapsed with no new typing.
+  /// Takes a snapshot of the Markdown code and runs rendering in a separate thread.
+  void _onDebounceTimerFired() {
+    _debounceTimer?.cancel();
+    _debounceTimer = null;
+    _lastObservedText = textController.text;
+
+    final snapshotText = textController.text;
+    final renderSeq = ++_activeRenderSequence;
+    _isBackgroundRendering = true;
+
+    final allCitations = [...citations, ...zoteroCitations];
+    final payload = MarkdownRenderPayload(
+      renderId: renderSeq,
+      rawMarkdown: snapshotText,
+      citations: allCitations,
+      citationStyle: _citationStyle,
+    );
+
+    _renderService.render(payload).then((result) {
+      // Discard if a newer render has already completed
+      if (result.renderId < _completedRenderSequence) {
+        return;
+      }
+
+      void applyResult() {
+        if (result.renderId >= _completedRenderSequence) {
+          _completedRenderSequence = result.renderId;
+          _numericIndices = result.numericIndices;
+          _astNodes = result.astNodes;
+          _previewMarkdown = result.processedMarkdown;
+          _wordCount = result.wordCount;
+          _lineCount = result.lineCount;
+          _readingTimeMinutes = result.readingTimeMinutes;
+          _isBackgroundRendering = false;
+          previewNotifier.value = result.processedMarkdown;
+          notifyListeners();
+        }
+      }
+
+      // If user typed new text while background render was running,
+      // silently record cached values without interrupting active typing.
+      if (_debounceTimer?.isActive == true) {
+        _completedRenderSequence = result.renderId;
+        _numericIndices = result.numericIndices;
+        _astNodes = result.astNodes;
+        _previewMarkdown = result.processedMarkdown;
+        _wordCount = result.wordCount;
+        _lineCount = result.lineCount;
+        _readingTimeMinutes = result.readingTimeMinutes;
+        _isBackgroundRendering = false;
+      } else if (scrollController.hasClients &&
+          scrollController.position.isScrollingNotifier.value) {
+        // If user is actively scrolling the editor, defer applying until scroll gesture finishes
+        void onScrollEnd() {
+          if (!scrollController.position.isScrollingNotifier.value) {
+            scrollController.position.isScrollingNotifier.removeListener(onScrollEnd);
+            applyResult();
+          }
+        }
+        scrollController.position.isScrollingNotifier.addListener(onScrollEnd);
+      } else {
+        applyResult();
+      }
+    }).catchError((_) {
+      if (renderSeq >= _completedRenderSequence) {
+        _completedRenderSequence = renderSeq;
+        _previewMarkdown = snapshotText;
+        _isBackgroundRendering = false;
+        previewNotifier.value = snapshotText;
+        notifyListeners();
+      }
+    });
   }
 
   /// Manually or automatically flushes any pending debounced render and metrics update.
@@ -309,9 +442,28 @@ class EditorController extends ChangeNotifier {
     _debounceTimer?.cancel();
     _debounceTimer = null;
     _lastObservedText = textController.text;
-    textController.reconcileFullHighlight();
-    _computeMetrics();
-    _previewMarkdown = textController.text;
+
+    final snapshotText = textController.text;
+    final renderSeq = ++_activeRenderSequence;
+    _completedRenderSequence = renderSeq;
+    _isBackgroundRendering = false;
+
+    final allCitations = [...citations, ...zoteroCitations];
+    final payload = MarkdownRenderPayload(
+      renderId: renderSeq,
+      rawMarkdown: snapshotText,
+      citations: allCitations,
+      citationStyle: _citationStyle,
+    );
+
+    final result = MarkdownRenderService.executeMarkdownRender(payload);
+    _numericIndices = result.numericIndices;
+    _astNodes = result.astNodes;
+    _previewMarkdown = result.processedMarkdown;
+    _wordCount = result.wordCount;
+    _lineCount = result.lineCount;
+    _readingTimeMinutes = result.readingTimeMinutes;
+    previewNotifier.value = result.processedMarkdown;
     notifyListeners();
   }
 
@@ -355,6 +507,10 @@ class EditorController extends ChangeNotifier {
     _isProgrammaticUpdate = false;
     _lastObservedText = '';
     _previewMarkdown = '';
+    _numericIndices = const {};
+    _astNodes = null;
+    _isBackgroundRendering = false;
+    previewNotifier.value = '';
     _computeMetrics();
     _isModified = false;
     if (scrollController.hasClients) {
@@ -380,7 +536,6 @@ class EditorController extends ChangeNotifier {
       textController.text = content;
       _isProgrammaticUpdate = false;
       _lastObservedText = content;
-      _previewMarkdown = content;
       _computeMetrics();
       _isModified = false;
 
@@ -389,6 +544,8 @@ class EditorController extends ChangeNotifier {
 
       // Auto-detect adjacent bibliography if present in the same directory
       _autoDetectAdjacentBibliography(File(path).parent.path);
+
+      flushPendingRenderUpdate();
 
       if (scrollController.hasClients) {
         scrollController.jumpTo(0.0);
@@ -410,11 +567,10 @@ class EditorController extends ChangeNotifier {
 
     try {
       final dir = Directory(directoryPath);
-      final list = await dir.list().toList();
-      for (final entity in list) {
+      await for (final entity in dir.list(followLinks: false)) {
         if (entity is File) {
           final lower = entity.path.toLowerCase();
-          if (lower.endsWith('.bib') || lower.endsWith('references.bib')) {
+          if (lower.endsWith('.bib')) {
             await loadBibliographyFile(entity.path);
             break;
           }
@@ -514,6 +670,9 @@ class EditorController extends ChangeNotifier {
       text: newText,
       selection: TextSelection.collapsed(offset: start + textToInsert.length),
     );
+    if (focusNode.canRequestFocus) {
+      focusNode.requestFocus();
+    }
     if (flushImmediately) {
       _isProgrammaticUpdate = false;
       _isModified = true;
@@ -523,27 +682,125 @@ class EditorController extends ChangeNotifier {
 
   /// Format currently selected text with markdown prefix and optional suffix
   void formatSelection(String prefix, [String? suffix]) {
-    final post = suffix ?? prefix;
+    final post = suffix ?? (prefix.endsWith(' ') ? '' : prefix);
     final currentText = textController.text;
     final selection = textController.selection;
 
+    final start = selection.isValid ? selection.start : currentText.length;
+    final end = selection.isValid ? selection.end : currentText.length;
+
     if (!selection.isValid || selection.isCollapsed) {
-      // Nothing selected: insert template
-      insertText('$prefix$post');
+      // Nothing selected: insert template and align typing cursor at entrypoint
+      final template = '$prefix$post';
+      final newText = currentText.replaceRange(start, end, template);
+      textController.value = TextEditingValue(
+        text: newText,
+        selection: TextSelection.collapsed(offset: start + prefix.length),
+      );
+      if (focusNode.canRequestFocus) {
+        focusNode.requestFocus();
+      }
       return;
     }
 
-    final selectedText = currentText.substring(selection.start, selection.end);
+    final selectedText = currentText.substring(start, end);
     final formatted = '$prefix$selectedText$post';
-    final newText = currentText.replaceRange(selection.start, selection.end, formatted);
+    final newText = currentText.replaceRange(start, end, formatted);
 
     textController.value = TextEditingValue(
       text: newText,
       selection: TextSelection(
-        baseOffset: selection.start + prefix.length,
-        extentOffset: selection.start + prefix.length + selectedText.length,
+        baseOffset: start + prefix.length,
+        extentOffset: start + prefix.length + selectedText.length,
       ),
     );
+    if (focusNode.canRequestFocus) {
+      focusNode.requestFocus();
+    }
+  }
+
+  /// Regex to identify GFM task list items (e.g. "- [ ]", "* [x]", "1. [ ]")
+  static final RegExp _taskCheckboxRegex = RegExp(
+    r'^[ \t]*(?:>+[ \t]*)*(?:[-*+]|\d+[.)])[ \t]+\[([ xX])\](?=[ \t]|$)',
+    multiLine: true,
+  );
+
+  /// Fenced code blocks to ignore when scanning for task list checkboxes
+  static final RegExp _fencedCodeBlockRegex = RegExp(
+    r'(```+|~~~+)[\s\S]*?(?:\1|$)',
+  );
+
+  /// Scans markdown text and returns all task list checkboxes in document order.
+  static List<MarkdownCheckboxInfo> findTaskCheckboxes(String text) {
+    if (!text.contains('[')) return const [];
+
+    final codeRanges = <(int, int)>[];
+    for (final cm in _fencedCodeBlockRegex.allMatches(text)) {
+      codeRanges.add((cm.start, cm.end));
+    }
+
+    final result = <MarkdownCheckboxInfo>[];
+    for (final m in _taskCheckboxRegex.allMatches(text)) {
+      final isInsideCode = codeRanges.any(
+        (range) => m.start >= range.$1 && m.start < range.$2,
+      );
+      if (isInsideCode) continue;
+
+      final fullMatch = m.group(0)!;
+      final bracketOffset = fullMatch.lastIndexOf('[');
+      if (bracketOffset == -1 || bracketOffset + 2 >= fullMatch.length) continue;
+      if (fullMatch[bracketOffset] != '[' ||
+          fullMatch[bracketOffset + 2] != ']') {
+        continue;
+      }
+
+      final charOffset = m.start + bracketOffset + 1;
+      if (charOffset >= text.length) continue;
+
+      final char = text[charOffset];
+      final isChecked = char == 'x' || char == 'X';
+
+      result.add(MarkdownCheckboxInfo(
+        charOffset: charOffset,
+        isChecked: isChecked,
+      ));
+    }
+
+    return result;
+  }
+
+  /// Toggles the task list checkbox at [index] (0-based document order).
+  ///
+  /// Swaps '[ ]' to '[x]' or '[x]'/'[X]' to '[ ]', synchronises the editor text
+  /// controller, and immediately updates the preview.
+  bool toggleCheckbox(int index) {
+    final currentText = textController.text;
+    final checkboxes = findTaskCheckboxes(currentText);
+    if (index < 0 || index >= checkboxes.length) return false;
+
+    final target = checkboxes[index];
+    final newChar = target.isChecked ? ' ' : 'x';
+
+    final newText = currentText.replaceRange(
+      target.charOffset,
+      target.charOffset + 1,
+      newChar,
+    );
+
+    _debounceTimer?.cancel();
+    _debounceTimer = null;
+
+    _isProgrammaticUpdate = true;
+    textController.value = TextEditingValue(
+      text: newText,
+      selection: textController.selection,
+    );
+    _isProgrammaticUpdate = false;
+    _lastObservedText = newText;
+    _isModified = true;
+    _computeMetrics();
+    flushPendingRenderUpdate();
+    return true;
   }
 
   /// Insert citation item formatted for Pandoc
@@ -622,7 +879,7 @@ class EditorController extends ChangeNotifier {
       _bibliographyStatus =
           'Loaded ${items.length} references from ${File(filePath).uri.pathSegments.last}';
 
-      final prefs = await SharedPreferences.getInstance();
+      final prefs = await _getPrefs();
       await prefs.setString('mdwriter_bibliography_path', filePath);
 
       notifyListeners();
@@ -648,8 +905,9 @@ class EditorController extends ChangeNotifier {
   }
 
   /// Check if Zotero Better BibTeX is running
-  Future<void> checkZoteroConnection() async {
-    _isZoteroConnected = await zoteroService.isBbtRunning();
+  Future<void> checkZoteroConnection({bool forceRefresh = false}) async {
+    _isZoteroConnected =
+        await zoteroService.isBbtRunning(forceRefresh: forceRefresh);
     if (_isZoteroConnected) {
       _bibliographyStatus = 'Connected to Zotero (Better BibTeX)';
     }
@@ -689,10 +947,7 @@ class EditorController extends ChangeNotifier {
         buffer.writeln();
 
         // Extract citekeys already present in the user bibliography
-        final entryKeyRegex = RegExp(
-          r'@([a-zA-Z]+)\s*\{\s*([a-zA-Z0-9_:.+-]+)\s*,',
-        );
-        for (final m in entryKeyRegex.allMatches(userContent)) {
+        for (final m in _bibEntryKeyRegex.allMatches(userContent)) {
           final k = m.group(2)?.trim().toLowerCase();
           if (k != null && k.isNotEmpty) {
             includedKeys.add(k);
@@ -886,10 +1141,12 @@ Try writing your thoughts, inserting literature references, and exporting to Wor
   @override
   void dispose() {
     _debounceTimer?.cancel();
+    previewNotifier.dispose();
     textController.removeListener(_onTextChanged);
     textController.dispose();
     focusNode.dispose();
     scrollController.dispose();
+    zoteroService.dispose();
     super.dispose();
   }
 }

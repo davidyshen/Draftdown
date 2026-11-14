@@ -142,6 +142,78 @@ void main() {
       expect(itemWithoutAuthors.effectiveYear, equals('2020'));
       expect(itemWithoutAuthors.formattedAuthorYear, equals('Moreno-Mateos et al., 2020'));
     });
+
+    test('renders bibliography authors correctly based on the 10/6 rule', () {
+      // 1 author
+      const single = CitationItem(
+        key: 'turing1950',
+        title: 'Computing Machinery and Intelligence',
+        authors: ['Alan M. Turing'],
+      );
+      expect(single.bibliographyAuthorsSummary, equals('Alan M. Turing'));
+
+      // 5 authors (<= 10: all shown)
+      const five = CitationItem(
+        key: 'five2020',
+        title: 'Title',
+        authors: ['A. Smith', 'B. Jones', 'C. Taylor', 'D. Brown', 'E. Wilson'],
+      );
+      expect(
+        five.bibliographyAuthorsSummary,
+        equals('A. Smith, B. Jones, C. Taylor, D. Brown, E. Wilson'),
+      );
+
+      // 10 authors (<= 10: all shown)
+      const ten = CitationItem(
+        key: 'ten2020',
+        title: 'Title',
+        authors: [
+          'A1', 'A2', 'A3', 'A4', 'A5',
+          'A6', 'A7', 'A8', 'A9', 'A10'
+        ],
+      );
+      expect(
+        ten.bibliographyAuthorsSummary,
+        equals('A1, A2, A3, A4, A5, A6, A7, A8, A9, A10'),
+      );
+
+      // 11 authors (> 10: first 6 shown and et al.)
+      const eleven = CitationItem(
+        key: 'eleven2020',
+        title: 'Title',
+        authors: [
+          'A1', 'A2', 'A3', 'A4', 'A5',
+          'A6', 'A7', 'A8', 'A9', 'A10', 'A11'
+        ],
+      );
+      expect(
+        eleven.bibliographyAuthorsSummary,
+        equals('A1, A2, A3, A4, A5, A6, et al.'),
+      );
+
+      // 14 authors (> 10: first 6 shown and et al.)
+      const fourteen = CitationItem(
+        key: 'fourteen2020',
+        title: 'Title',
+        authors: [
+          'Author 1', 'Author 2', 'Author 3', 'Author 4', 'Author 5',
+          'Author 6', 'Author 7', 'Author 8', 'Author 9', 'Author 10',
+          'Author 11', 'Author 12', 'Author 13', 'Author 14'
+        ],
+      );
+      expect(
+        fourteen.bibliographyAuthorsSummary,
+        equals('Author 1, Author 2, Author 3, Author 4, Author 5, Author 6, et al.'),
+      );
+
+      // Empty authors fallback
+      const empty = CitationItem(
+        key: 'anonymous2020',
+        title: 'Title',
+        authors: [],
+      );
+      expect(empty.bibliographyAuthorsSummary, equals('Anonymous'));
+    });
   });
 
   group('HistoryEntry Model', () {
@@ -342,6 +414,95 @@ void main() {
         controller.zoteroCitations.any((c) => c.key.contains('vaswani2017attention')),
         isTrue,
       );
+    });
+
+    test('switches document citation style between authorYear and numeric', () async {
+      SharedPreferences.setMockInitialValues({});
+      final controller = EditorController();
+
+      expect(controller.citationStyle, equals(CitationStyle.authorYear));
+
+      await controller.setCitationStyle(CitationStyle.numeric);
+      expect(controller.citationStyle, equals(CitationStyle.numeric));
+
+      await controller.setCitationStyle(CitationStyle.authorYear);
+      expect(controller.citationStyle, equals(CitationStyle.authorYear));
+    });
+
+    test('formatSelection inserts enclosing templates and positions cursor at entrypoint when collapsed', () {
+      final controller = EditorController();
+
+      // Bold: inserts **** and positions cursor at index 2 (**|**)
+      controller.textController.text = '';
+      controller.textController.selection = const TextSelection.collapsed(offset: 0);
+      controller.formatSelection('**', '**');
+      expect(controller.textController.text, equals('****'));
+      expect(controller.textController.selection.baseOffset, equals(2));
+      expect(controller.textController.selection.extentOffset, equals(2));
+
+      // Italic: inserts ** and positions cursor at index 1 (*|*)
+      controller.textController.text = '';
+      controller.textController.selection = const TextSelection.collapsed(offset: 0);
+      controller.formatSelection('*', '*');
+      expect(controller.textController.text, equals('**'));
+      expect(controller.textController.selection.baseOffset, equals(1));
+      expect(controller.textController.selection.extentOffset, equals(1));
+
+      // Strikethrough: inserts ~~~~ and positions cursor at index 2 (~~|~~)
+      controller.textController.text = '';
+      controller.textController.selection = const TextSelection.collapsed(offset: 0);
+      controller.formatSelection('~~', '~~');
+      expect(controller.textController.text, equals('~~~~'));
+      expect(controller.textController.selection.baseOffset, equals(2));
+      expect(controller.textController.selection.extentOffset, equals(2));
+
+      // Inline code: inserts `` and positions cursor at index 1 (`|`)
+      controller.textController.text = '';
+      controller.textController.selection = const TextSelection.collapsed(offset: 0);
+      controller.formatSelection('`', '`');
+      expect(controller.textController.text, equals('``'));
+      expect(controller.textController.selection.baseOffset, equals(1));
+      expect(controller.textController.selection.extentOffset, equals(1));
+
+      // Blockquote: inserts single > and positions cursor at index 2 (> |)
+      controller.textController.text = '';
+      controller.textController.selection = const TextSelection.collapsed(offset: 0);
+      controller.formatSelection('> ', '');
+      expect(controller.textController.text, equals('> '));
+      expect(controller.textController.selection.baseOffset, equals(2));
+      expect(controller.textController.selection.extentOffset, equals(2));
+
+      // Heading 1: inserts single # and positions cursor at index 2 (# |)
+      controller.textController.text = '';
+      controller.textController.selection = const TextSelection.collapsed(offset: 0);
+      controller.formatSelection('# ');
+      expect(controller.textController.text, equals('# '));
+      expect(controller.textController.selection.baseOffset, equals(2));
+      expect(controller.textController.selection.extentOffset, equals(2));
+
+      // Link: inserts [](https://) and positions cursor at index 1 ([|](https://))
+      controller.textController.text = '';
+      controller.textController.selection = const TextSelection.collapsed(offset: 0);
+      controller.formatSelection('[', '](https://)');
+      expect(controller.textController.text, equals('[](https://)'));
+      expect(controller.textController.selection.baseOffset, equals(1));
+      expect(controller.textController.selection.extentOffset, equals(1));
+    });
+
+    test('formatSelection wraps selected text properly', () {
+      final controller = EditorController();
+
+      // Wrap bold
+      controller.textController.text = 'important note';
+      controller.textController.selection = const TextSelection(baseOffset: 0, extentOffset: 9);
+      controller.formatSelection('**', '**');
+      expect(controller.textController.text, equals('**important** note'));
+
+      // Wrap quote
+      controller.textController.text = 'quoted words';
+      controller.textController.selection = const TextSelection(baseOffset: 0, extentOffset: 12);
+      controller.formatSelection('> ', '');
+      expect(controller.textController.text, equals('> quoted words'));
     });
 
     test('ZoteroService provides distinct citekeys and titles from Zotero library', () async {
@@ -560,6 +721,28 @@ def forward(x):
       // Verify auto-generated References heading and bibliography entry
       expect(html, contains('References'));
       expect(html, contains('Attention Is All You Need'));
+    });
+
+    test('generateHtmlDocument formats citations and bibliography numerically when in numeric mode', () async {
+      final controller = EditorController();
+      await controller.setCitationStyle(CitationStyle.numeric);
+      controller.textController.text =
+          'Pioneering work [@turing1950computing] led to transformers [@vaswani2017attention].';
+
+      final service = controller.directExportService;
+      final html = service.generateHtmlDocument(
+        markdown: controller.content,
+        controller: controller,
+      );
+
+      // Verify numeric citation formatting
+      expect(html, contains('<span class="citation">[1]</span>'));
+      expect(html, contains('<span class="citation">[2]</span>'));
+
+      // Verify numbered bibliography entries in HTML <ol> list
+      expect(html, contains('<ol>'));
+      expect(html, contains('<li><strong>Alan M. Turing</strong> (1950). <em>Computing Machinery and Intelligence</em>'));
+      expect(html, contains('<li><strong>Ashish Vaswani'));
     });
 
     test('DirectExportService finds browser executable on this environment', () async {

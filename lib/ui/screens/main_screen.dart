@@ -145,10 +145,12 @@ class _MainScreenState extends State<MainScreen> {
                 curve: Curves.easeInOut,
                 width: isSidebarOpen ? 290 : 0,
                 child: isSidebarOpen
-                    ? AppSidebar(
-                        controller: widget.controller,
-                        onOpenFile: _handleOpenFile,
-                        onNewFile: _handleNewFile,
+                    ? RepaintBoundary(
+                        child: AppSidebar(
+                          controller: widget.controller,
+                          onOpenFile: _handleOpenFile,
+                          onNewFile: _handleNewFile,
+                        ),
                       )
                     : const SizedBox.shrink(),
               ),
@@ -158,13 +160,15 @@ class _MainScreenState extends State<MainScreen> {
                 child: Column(
                   children: [
                     // Top App Toolbar
-                    AppToolbar(
-                      controller: widget.controller,
-                      onOpenCitationDialog: _openCitationDialog,
-                      onOpenExportDialog: _openExportDialog,
-                      onOpenSettingsDialog: _openSettingsDialog,
-                      onToggleTheme: widget.onToggleTheme,
-                      isDarkMode: widget.isDarkMode,
+                    RepaintBoundary(
+                      child: AppToolbar(
+                        controller: widget.controller,
+                        onOpenCitationDialog: _openCitationDialog,
+                        onOpenExportDialog: _openExportDialog,
+                        onOpenSettingsDialog: _openSettingsDialog,
+                        onToggleTheme: widget.onToggleTheme,
+                        isDarkMode: widget.isDarkMode,
+                      ),
                     ),
 
                     // Editor / Preview Split or Single View
@@ -181,31 +185,60 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
-  Widget _buildEditorWorkspace(EditorViewMode mode, Color borderColor) {
-    final editor = EditorView(
-      controller: widget.controller,
-      onOpenCitation: _openCitationDialog,
-      onOpenExport: _openExportDialog,
-      onOpenFile: _handleOpenFile,
-      onNewFile: _handleNewFile,
+  Widget? _cachedEditorView;
+
+  Widget _getEditorView() {
+    return _cachedEditorView ??= RepaintBoundary(
+      child: EditorView(
+        controller: widget.controller,
+        onOpenCitation: _openCitationDialog,
+        onOpenExport: _openExportDialog,
+        onOpenFile: _handleOpenFile,
+        onNewFile: _handleNewFile,
+      ),
     );
+  }
+
+  Widget _buildEditorWorkspace(EditorViewMode mode, Color borderColor) {
+    final editor = _getEditorView();
+
+    if (mode == EditorViewMode.preview) {
+      return ValueListenableBuilder<String>(
+        valueListenable: widget.controller.previewNotifier,
+        builder: (context, previewText, _) {
+          return MarkdownPreviewView(
+            markdown: previewText.isNotEmpty
+                ? previewText
+                : widget.controller.previewMarkdown,
+            bodyFont: widget.controller.renderBodyFont,
+            headerFont: widget.controller.effectiveRenderHeaderFont,
+            codeFont: widget.controller.editorFontFamily,
+            controller: widget.controller,
+            isFullView: true,
+          );
+        },
+      );
+    }
 
     if (mode == EditorViewMode.edit) {
       return editor;
     }
 
-    final preview = MarkdownPreviewView(
-      markdown: widget.controller.previewMarkdown,
-      bodyFont: widget.controller.renderBodyFont,
-      headerFont: widget.controller.effectiveRenderHeaderFont,
-      codeFont: widget.controller.editorFontFamily,
-      controller: widget.controller,
-      isFullView: mode == EditorViewMode.preview,
+    final preview = ValueListenableBuilder<String>(
+      valueListenable: widget.controller.previewNotifier,
+      builder: (context, previewText, _) {
+        return MarkdownPreviewView(
+          markdown: previewText.isNotEmpty
+              ? previewText
+              : widget.controller.previewMarkdown,
+          bodyFont: widget.controller.renderBodyFont,
+          headerFont: widget.controller.effectiveRenderHeaderFont,
+          codeFont: widget.controller.editorFontFamily,
+          controller: widget.controller,
+          isFullView: false,
+        );
+      },
     );
-
-    if (mode == EditorViewMode.preview) {
-      return preview;
-    }
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,

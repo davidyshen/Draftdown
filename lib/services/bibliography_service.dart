@@ -5,31 +5,47 @@ import '../models/citation_item.dart';
 /// Service responsible for loading, parsing, and caching bibliography databases
 /// (BibTeX, BibLaTeX, and CSL JSON formats).
 class BibliographyService {
+  static final RegExp _entryRegex = RegExp(
+    r'@([a-zA-Z]+)\s*\{\s*([a-zA-Z0-9_:.+-]+)\s*,\s*([\s\S]*?)(?=(?:\n\s*@|$))',
+  );
+  static final RegExp _andSplitRegex =
+      RegExp(r'\s+and\s+', caseSensitive: false);
+  static final RegExp _bracesRegex = RegExp(r'[{}]');
+  static final RegExp _latexCmdRegex = RegExp(r'\\[a-zA-Z]+');
+  static final RegExp _whitespaceRegex = RegExp(r'\s+');
+
   /// In-memory cache of currently parsed citation items
   List<CitationItem> _items = [];
+  List<CitationItem>? _unmodifiableItems;
+  final Map<String, CitationItem> _itemsByKey = {};
 
-  List<CitationItem> get items => List.unmodifiable(_items);
+  List<CitationItem> get items =>
+      _unmodifiableItems ??= List.unmodifiable(_items);
 
   /// Initialise the service with default sample references so the user can
   /// experiment with citations immediately out of the box.
   BibliographyService() {
-    _items = List.from(defaultSampleCitations);
+    _rebuildIndex(defaultSampleCitations);
+  }
+
+  void _rebuildIndex(List<CitationItem> source) {
+    _items = List<CitationItem>.from(source, growable: false);
+    _unmodifiableItems = null;
+    _itemsByKey.clear();
+    for (final item in _items) {
+      _itemsByKey[item.normalizedKey] = item;
+    }
   }
 
   /// Manually replace or initialise items in active bibliography
   void setItems(List<CitationItem> items) {
-    _items = List.from(items);
+    _rebuildIndex(items);
   }
 
-  /// Find a citation item by its citekey (case-insensitive, ignoring leading `@`)
+  /// Find a citation item by its citekey in O(1) time (case-insensitive, ignoring leading `@`)
   CitationItem? findByKey(String rawKey) {
     final clean = rawKey.trim().replaceAll('@', '').toLowerCase();
-    for (final item in _items) {
-      if (item.key.trim().replaceAll('@', '').toLowerCase() == clean) {
-        return item;
-      }
-    }
-    return null;
+    return _itemsByKey[clean];
   }
 
   /// Load a bibliography from a file path (.bib, .bibtex, .json)
@@ -51,22 +67,19 @@ class BibliographyService {
     }
 
     if (parsedItems.isNotEmpty) {
-      _items = parsedItems;
+      _rebuildIndex(parsedItems);
     }
-    return _items;
+    return items;
   }
 
   /// Parse BibTeX / BibLaTeX formatted string
   List<CitationItem> parseBibTeX(String bibtexContent) {
     final List<CitationItem> results = [];
-    final normalized = bibtexContent.replaceAll('\r\n', '\n');
+    final normalized = bibtexContent.contains('\r\n')
+        ? bibtexContent.replaceAll('\r\n', '\n')
+        : bibtexContent;
 
-    // Match @type{key, ...}
-    final entryRegex = RegExp(
-      r'@([a-zA-Z]+)\s*\{\s*([a-zA-Z0-9_:.+-]+)\s*,\s*([\s\S]*?)(?=(?:\n\s*@|$))',
-    );
-
-    final matches = entryRegex.allMatches(normalized);
+    final matches = _entryRegex.allMatches(normalized);
 
     for (final match in matches) {
       final type = match.group(1)?.toLowerCase().trim();
@@ -217,9 +230,9 @@ class BibliographyService {
 
   /// Parse author string like "Alan M. Turing and Alonzo Church" or "Turing, Alan and Church, Alonzo"
   List<String> _parseAuthors(String raw) {
-    if (raw.trim().isEmpty) return [];
+    if (raw.trim().isEmpty) return const [];
 
-    final parts = raw.split(RegExp(r'\s+and\s+', caseSensitive: false));
+    final parts = raw.split(_andSplitRegex);
     final List<String> authors = [];
 
     for (final part in parts) {
@@ -242,13 +255,15 @@ class BibliographyService {
 
   /// Clean LaTeX formatting artifacts from text
   String _cleanLatex(String text) {
+    if (text.isEmpty) return '';
     var out = text;
-    // Replace \{ and \}
-    out = out.replaceAll(RegExp(r'[{}]'), '');
-    // Replace \textit, \textbf, etc.
-    out = out.replaceAll(RegExp(r'\\[a-zA-Z]+'), '');
-    // Normalize extra whitespace
-    out = out.replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (out.contains('{') || out.contains('}')) {
+      out = out.replaceAll(_bracesRegex, '');
+    }
+    if (out.contains(r'\')) {
+      out = out.replaceAll(_latexCmdRegex, '');
+    }
+    out = out.replaceAll(_whitespaceRegex, ' ').trim();
     return out;
   }
 
@@ -306,7 +321,7 @@ class BibliographyService {
             }
           }
         } else if (authorList is String && authorList.trim().isNotEmpty) {
-          final parts = authorList.split(RegExp(r'\s+and\s+', caseSensitive: false));
+          final parts = authorList.split(_andSplitRegex);
           for (final p in parts) {
             final t = p.trim();
             if (t.isNotEmpty) authors.add(t);
@@ -333,15 +348,22 @@ class BibliographyService {
 
   /// Search literature in active bibliography with diacritic-insensitive matching
   List<CitationItem> search(String query) {
-    if (query.trim().isEmpty) return _items;
-    final normalized = CitationItem.normalizeForSearch(query.trim());
-    final tokens = normalized.split(RegExp(r'\s+')).where((t) => t.isNotEmpty).toList();
-    if (tokens.isEmpty) return _items;
+    final trimmed = query.trim();
+    if (trimmed.isEmpty) return items;
+    final normalized = CitationItem.normalizeForSearch(trimmed);
+    final tokens = normalized
+        .split(_whitespaceRegex)
+        .where((t) => t.isNotEmpty)
+        .toList(growable: false);
+    if (tokens.isEmpty) return items;
 
     return _items.where((item) {
       final text = item.searchableText;
-      return tokens.every((token) => text.contains(token));
-    }).toList();
+      for (int i = 0; i < tokens.length; i++) {
+        if (!text.contains(tokens[i])) return false;
+      }
+      return true;
+    }).toList(growable: false);
   }
 
   /// Preloaded foundational sample citations

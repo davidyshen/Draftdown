@@ -41,178 +41,140 @@ class AppToolbar extends StatelessWidget {
           // Main Top App Bar - Responsive with LayoutBuilder
           LayoutBuilder(
             builder: (context, constraints) {
-              final isCompact = constraints.maxWidth < 850;
+              final isCompact = constraints.maxWidth < 800;
 
               return Padding(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 child: Row(
                   children: [
-                    // Sidebar toggle
-                    if (!controller.isSidebarOpen)
-                      IconButton(
-                        icon: const Icon(Icons.menu, size: 20),
-                        tooltip: 'Open Navigation (Ctrl+\\)',
-                        splashRadius: 18,
-                        onPressed: controller.toggleSidebar,
-                      ),
-
-                    // Document title & modified status
-                    Flexible(
+                    // Left area: Sidebar toggle, document title, word count
+                    Expanded(
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
+                          if (!controller.isSidebarOpen)
+                            IconButton(
+                              icon: const Icon(Icons.menu, size: 20),
+                              tooltip: 'Open Navigation (Ctrl+\\)',
+                              splashRadius: 18,
+                              onPressed: controller.toggleSidebar,
+                            ),
+
+                          // Document title & modified status
                           Flexible(
-                            child: Text(
-                              controller.currentFileName,
-                              style: const TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    controller.currentFileName,
+                                    style: const TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                if (controller.isModified) ...[
+                                  const SizedBox(width: 6),
+                                  Container(
+                                    width: 7,
+                                    height: 7,
+                                    decoration: const BoxDecoration(
+                                      color: Colors.amber,
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
+                                ],
+                              ],
                             ),
                           ),
-                          if (controller.isModified) ...[
-                            const SizedBox(width: 6),
-                            Container(
-                              width: 7,
-                              height: 7,
-                              decoration: const BoxDecoration(
-                                color: Colors.amber,
-                                shape: BoxShape.circle,
+
+                          const SizedBox(width: 10),
+
+                          // Word count & Read time chip
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: isDarkMode
+                                  ? Colors.white.withValues(alpha: 0.06)
+                                  : Colors.black.withValues(alpha: 0.04),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              isCompact
+                                  ? '${controller.wordCount}w'
+                                  : '${controller.wordCount} words • ~${controller.readingTimeMinutes}m',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: mutedText,
+                                fontWeight: FontWeight.w500,
                               ),
                             ),
-                          ],
+                          ),
                         ],
                       ),
                     ),
 
-                    const SizedBox(width: 10),
-
-                    // Word count & Read time chip
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: isDarkMode
-                            ? Colors.white.withValues(alpha: 0.06)
-                            : Colors.black.withValues(alpha: 0.04),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        isCompact
-                            ? '${controller.wordCount}w'
-                            : '${controller.wordCount} words • ~${controller.readingTimeMinutes}m',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: mutedText,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ),
-
-                    const Spacer(),
-
-                    // Manual "Update Render" button shown when the file is modified
-                    if (controller.isModified) ...[
-                      if (isCompact)
-                        IconButton(
-                          key: const ValueKey('update-render-button'),
-                          icon: const Icon(Icons.refresh, size: 18),
-                          tooltip: 'Update Render',
-                          splashRadius: 18,
-                          onPressed: controller.updateRender,
-                        )
-                      else
-                        FilledButton.tonalIcon(
-                          key: const ValueKey('update-render-button'),
-                          icon: const Icon(Icons.refresh, size: 16),
-                          label: const Text(
-                            'Update Render',
-                            style: TextStyle(fontSize: 12),
-                          ),
-                          style: FilledButton.styleFrom(
-                            visualDensity: VisualDensity.compact,
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 6),
-                          ),
-                          onPressed: controller.updateRender,
-                        ),
-                      const SizedBox(width: 8),
-                    ],
-
-                    // View Mode Switcher: Edit, Split, Preview
+                    // Centred View Mode Switcher: Edit, Split, Preview
                     _buildViewModeSegmented(isCompact),
 
-                    const SizedBox(width: 8),
+                    // Right area: Settings, Colour mode, and Export button
+                    Expanded(
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // Settings
+                          IconButton(
+                            icon: const Icon(Icons.settings_outlined, size: 18),
+                            tooltip: 'Settings (Pandoc & Zotero)',
+                            splashRadius: 18,
+                            onPressed: onOpenSettingsDialog,
+                          ),
 
-                    // Insert Citation Button (@)
-                    if (isCompact)
-                      IconButton(
-                        icon: const Icon(Icons.format_quote, size: 18),
-                        tooltip: 'Insert Citation (Ctrl+Shift+C)',
-                        splashRadius: 18,
-                        onPressed: onOpenCitationDialog,
-                      )
-                    else
-                      FilledButton.tonalIcon(
-                        icon: const Icon(Icons.format_quote, size: 16),
-                        label: const Text('Citation',
-                            style: TextStyle(fontSize: 12)),
-                        style: FilledButton.styleFrom(
-                          visualDensity: VisualDensity.compact,
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 6),
-                        ),
-                        onPressed: onOpenCitationDialog,
+                          // Colour mode (Theme toggle)
+                          IconButton(
+                            icon: Icon(
+                              isDarkMode
+                                  ? Icons.light_mode_outlined
+                                  : Icons.dark_mode_outlined,
+                              size: 18,
+                            ),
+                            tooltip: isDarkMode
+                                ? 'Switch to Light'
+                                : 'Switch to Dark',
+                            splashRadius: 18,
+                            onPressed: onToggleTheme,
+                          ),
+
+                          const SizedBox(width: 6),
+
+                          // Export Button
+                          if (isCompact)
+                            IconButton(
+                              icon: const Icon(Icons.output, size: 18),
+                              tooltip: 'Export Document (Ctrl+E)',
+                              splashRadius: 18,
+                              onPressed: onOpenExportDialog,
+                            )
+                          else
+                            FilledButton.icon(
+                              icon: const Icon(Icons.output, size: 16),
+                              label: const Text('Export',
+                                  style: TextStyle(fontSize: 12)),
+                              style: FilledButton.styleFrom(
+                                visualDensity: VisualDensity.compact,
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 6),
+                              ),
+                              onPressed: onOpenExportDialog,
+                            ),
+                        ],
                       ),
-
-                    const SizedBox(width: 6),
-
-                    // Export Button
-                    if (isCompact)
-                      IconButton(
-                        icon: const Icon(Icons.output, size: 18),
-                        tooltip: 'Export Document (Ctrl+E)',
-                        splashRadius: 18,
-                        onPressed: onOpenExportDialog,
-                      )
-                    else
-                      FilledButton.icon(
-                        icon: const Icon(Icons.output, size: 16),
-                        label: const Text('Export',
-                            style: TextStyle(fontSize: 12)),
-                        style: FilledButton.styleFrom(
-                          visualDensity: VisualDensity.compact,
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 6),
-                        ),
-                        onPressed: onOpenExportDialog,
-                      ),
-
-                    const SizedBox(width: 4),
-
-                    // Settings
-                    IconButton(
-                      icon: const Icon(Icons.settings_outlined, size: 18),
-                      tooltip: 'Settings (Pandoc & Zotero)',
-                      splashRadius: 18,
-                      onPressed: onOpenSettingsDialog,
-                    ),
-
-                    // Theme toggle
-                    IconButton(
-                      icon: Icon(
-                        isDarkMode
-                            ? Icons.light_mode_outlined
-                            : Icons.dark_mode_outlined,
-                        size: 18,
-                      ),
-                      tooltip:
-                          isDarkMode ? 'Switch to Light' : 'Switch to Dark',
-                      splashRadius: 18,
-                      onPressed: onToggleTheme,
                     ),
                   ],
                 ),
@@ -235,39 +197,49 @@ class AppToolbar extends StatelessWidget {
                   _buildFormatBtn(
                     icon: Icons.format_bold,
                     tooltip: 'Bold (**text**)',
-                    onTap: () => controller.formatSelection('**'),
+                    onTap: () => controller.formatSelection('**', '**'),
                   ),
                   _buildFormatBtn(
                     icon: Icons.format_italic,
                     tooltip: 'Italic (*text*)',
-                    onTap: () => controller.formatSelection('*'),
+                    onTap: () => controller.formatSelection('*', '*'),
                   ),
                   _buildFormatBtn(
                     icon: Icons.format_strikethrough,
                     tooltip: 'Strikethrough (~~text~~)',
-                    onTap: () => controller.formatSelection('~~'),
+                    onTap: () => controller.formatSelection('~~', '~~'),
+                  ),
+                  _buildFormatBtn(
+                    icon: Icons.superscript,
+                    tooltip: 'Superscript (^text^)',
+                    onTap: () => controller.formatSelection('^', '^'),
+                  ),
+                  _buildFormatBtn(
+                    icon: Icons.subscript,
+                    tooltip: 'Subscript (~text~)',
+                    onTap: () => controller.formatSelection('~', '~'),
                   ),
                   _buildDivider(borderColor),
                   _buildFormatBtn(
                     icon: Icons.title,
                     tooltip: 'Heading 1 (# Heading)',
-                    onTap: () => controller.formatSelection('# '),
+                    onTap: () => controller.formatSelection('# ', ''),
                   ),
                   _buildFormatBtn(
                     icon: Icons.format_size,
                     tooltip: 'Heading 2 (## Heading)',
-                    onTap: () => controller.formatSelection('## '),
+                    onTap: () => controller.formatSelection('## ', ''),
                   ),
                   _buildDivider(borderColor),
                   _buildFormatBtn(
                     icon: Icons.format_quote_outlined,
                     tooltip: 'Blockquote (> quote)',
-                    onTap: () => controller.formatSelection('> '),
+                    onTap: () => controller.formatSelection('> ', ''),
                   ),
                   _buildFormatBtn(
                     icon: Icons.code,
                     tooltip: 'Inline Code (`code`)',
-                    onTap: () => controller.formatSelection('`'),
+                    onTap: () => controller.formatSelection('`', '`'),
                   ),
                   _buildFormatBtn(
                     icon: Icons.data_object,
@@ -278,17 +250,17 @@ class AppToolbar extends StatelessWidget {
                   _buildFormatBtn(
                     icon: Icons.format_list_bulleted,
                     tooltip: 'Bullet List (- item)',
-                    onTap: () => controller.formatSelection('- '),
+                    onTap: () => controller.formatSelection('- ', ''),
                   ),
                   _buildFormatBtn(
                     icon: Icons.format_list_numbered,
                     tooltip: 'Numbered List (1. item)',
-                    onTap: () => controller.formatSelection('1. '),
+                    onTap: () => controller.formatSelection('1. ', ''),
                   ),
                   _buildFormatBtn(
                     icon: Icons.check_box_outlined,
                     tooltip: 'Task List (- [ ] task)',
-                    onTap: () => controller.formatSelection('- [ ] '),
+                    onTap: () => controller.formatSelection('- [ ] ', ''),
                   ),
                   _buildDivider(borderColor),
                   _buildFormatBtn(
@@ -304,11 +276,8 @@ class AppToolbar extends StatelessWidget {
                       '\n| Header 1 | Header 2 |\n| :--- | :--- |\n| Value 1 | Value 2 |\n',
                     ),
                   ),
-                  _buildFormatBtn(
-                    icon: Icons.alternate_email,
-                    tooltip: 'Insert Citation (@)',
-                    onTap: onOpenCitationDialog,
-                  ),
+                  _buildDivider(borderColor),
+                  _buildCitationBtn(),
                 ],
               ),
             ),
@@ -361,6 +330,40 @@ class AppToolbar extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
           child: Icon(icon, size: 16),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCitationBtn() {
+    final scheme = AppTheme.activeSchemeForBrightness(isDarkMode);
+    final accent = scheme.accent;
+
+    return Tooltip(
+      message: 'Insert Academic Citation (Ctrl+Shift+C or @)',
+      child: InkWell(
+        borderRadius: BorderRadius.circular(4),
+        onTap: onOpenCitationDialog,
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 2),
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+          decoration: BoxDecoration(
+            color: isDarkMode
+                ? accent.withValues(alpha: 0.18)
+                : accent.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(4),
+            border: Border.all(
+              color: isDarkMode
+                  ? accent.withValues(alpha: 0.45)
+                  : accent.withValues(alpha: 0.35),
+              width: 1,
+            ),
+          ),
+          child: Icon(
+            Icons.alternate_email,
+            size: 16,
+            color: accent,
+          ),
         ),
       ),
     );

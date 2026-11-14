@@ -29,15 +29,22 @@ class _CitationDialogState extends State<CitationDialog> {
   final ScrollController _listScrollController = ScrollController();
 
   late CitationSource _activeSource;
+  late CitationStyle _activeCitationStyle;
   List<CitationItem> _filteredItems = [];
+  List<CitationItem> _availableItems = const [];
   final List<CitationItem> _selectedCitations = [];
   int _highlightedIndex = -1;
   DetectedCitation? _editingCitation;
 
-  List<CitationItem> get _availableItems {
-    return _filteredItems
-        .where((item) => !_selectedCitations.contains(item))
-        .toList();
+  void _rebuildAvailableItems() {
+    if (_selectedCitations.isEmpty) {
+      _availableItems = _filteredItems;
+    } else {
+      final selectedSet = _selectedCitations.toSet();
+      _availableItems = _filteredItems
+          .where((item) => !selectedSet.contains(item))
+          .toList(growable: false);
+    }
   }
 
   CitationItem? get _selectedItem =>
@@ -56,6 +63,7 @@ class _CitationDialogState extends State<CitationDialog> {
   void initState() {
     super.initState();
     _activeSource = widget.controller.citationSource;
+    _activeCitationStyle = widget.controller.citationStyle;
     _searchFocusNode.onKeyEvent = _handleKeyEvent;
     _editingCitation = widget.initialCitation ??
         widget.controller.getCitationAtCursor();
@@ -166,6 +174,7 @@ class _CitationDialogState extends State<CitationDialog> {
         }
         _searchController.clear();
         _highlightedIndex = -1; // Clear selection so next Enter confirms
+        _rebuildAvailableItems();
       });
       _onSearch('');
       _searchFocusNode.requestFocus();
@@ -181,6 +190,7 @@ class _CitationDialogState extends State<CitationDialog> {
         }
         _searchController.clear();
         _highlightedIndex = -1; // Clear selection so next Enter confirms
+        _rebuildAvailableItems();
       });
       _onSearch('');
       _searchFocusNode.requestFocus();
@@ -204,6 +214,7 @@ class _CitationDialogState extends State<CitationDialog> {
       }
       _searchController.clear();
       _highlightedIndex = -1;
+      _rebuildAvailableItems();
     });
     _onSearch('');
     _searchFocusNode.requestFocus();
@@ -214,6 +225,7 @@ class _CitationDialogState extends State<CitationDialog> {
       setState(() {
         _selectedCitations.removeLast();
         _highlightedIndex = -1;
+        _rebuildAvailableItems();
       });
     }
   }
@@ -223,6 +235,7 @@ class _CitationDialogState extends State<CitationDialog> {
       setState(() {
         _filteredItems = widget.controller.citations;
         _highlightedIndex = -1;
+        _rebuildAvailableItems();
       });
     } else {
       await _loadZoteroItems();
@@ -233,31 +246,20 @@ class _CitationDialogState extends State<CitationDialog> {
   void _populateInitialCitations() {
     if (_editingCitation == null) return;
     for (final key in _editingCitation!.keys) {
-      final cleanKey = key.trim().toLowerCase();
-      CitationItem? found;
-      for (final item in widget.controller.citations) {
-        if (item.key.trim().toLowerCase() == cleanKey) {
-          found = item;
-          break;
-        }
-      }
-      if (found == null) {
-        for (final item in widget.controller.zoteroCitations) {
-          if (item.key.trim().toLowerCase() == cleanKey) {
-            found = item;
-            break;
-          }
-        }
-      }
+      final cleanKey = key.trim();
+      CitationItem? found =
+          widget.controller.bibliographyService.findByKey(cleanKey) ??
+              widget.controller.zoteroService.findByKey(cleanKey);
       found ??= CitationItem(
-        key: key.trim(),
-        title: 'Citation: @${key.trim()}',
+        key: cleanKey,
+        title: 'Citation: @$cleanKey',
       );
 
       if (!_selectedCitations.contains(found)) {
         _selectedCitations.add(found);
       }
     }
+    _rebuildAvailableItems();
     if (mounted) {
       setState(() {});
     }
@@ -271,6 +273,7 @@ class _CitationDialogState extends State<CitationDialog> {
       _isLoadingZotero = false;
       _filteredItems = results;
       _highlightedIndex = -1;
+      _rebuildAvailableItems();
     });
   }
 
@@ -285,11 +288,64 @@ class _CitationDialogState extends State<CitationDialog> {
     _searchFocusNode.requestFocus();
   }
 
+  void _onStyleChanged(CitationStyle newStyle) {
+    if (_activeCitationStyle == newStyle) return;
+    setState(() {
+      _activeCitationStyle = newStyle;
+    });
+    widget.controller.setCitationStyle(newStyle);
+  }
+
+  String _formatRenderPreview(List<CitationItem> items) {
+    if (items.isEmpty) return '';
+    final isNum = _activeCitationStyle == CitationStyle.numeric;
+    final loc = _locatorController.text.trim();
+    final locStr = loc.isNotEmpty ? ', $loc' : '';
+
+    if (isNum) {
+      if (_inTextCitation) {
+        if (items.length == 1) {
+          final author = items.first.shortAuthorSummary;
+          return '$author [1$locStr]';
+        }
+        return '${items.map((i) => i.shortAuthorSummary).join(', ')} [1-${items.length}$locStr]';
+      } else {
+        if (items.length == 1) {
+          return '[1$locStr]';
+        }
+        final nums =
+            List.generate(items.length, (idx) => '${idx + 1}').join(', ');
+        return '[$nums$locStr]';
+      }
+    } else {
+      if (_inTextCitation) {
+        if (items.length == 1) {
+          return '${items.first.shortAuthorSummary} (${items.first.effectiveYear}$locStr)';
+        }
+        return items
+            .map((i) => '${i.shortAuthorSummary} (${i.effectiveYear}$locStr)')
+            .join('; ');
+      } else {
+        if (_suppressAuthor) {
+          if (items.length == 1) {
+            return '(${items.first.effectiveYear}$locStr)';
+          }
+          return '(${items.map((i) => i.effectiveYear).join('; ')}$locStr)';
+        }
+        if (items.length == 1) {
+          return '(${items.first.formattedAuthorYear}$locStr)';
+        }
+        return '(${items.map((i) => i.formattedAuthorYear).join('; ')}$locStr)';
+      }
+    }
+  }
+
   Future<void> _onSearch(String query) async {
     if (_activeSource == CitationSource.bibtex) {
       setState(() {
         _filteredItems = widget.controller.bibliographyService.search(query);
         _highlightedIndex = -1;
+        _rebuildAvailableItems();
       });
       if (_listScrollController.hasClients) {
         _listScrollController.jumpTo(0);
@@ -304,7 +360,7 @@ class _CitationDialogState extends State<CitationDialog> {
 
   Future<void> _retryZoteroConnection() async {
     setState(() => _isCheckingConnection = true);
-    await widget.controller.checkZoteroConnection();
+    await widget.controller.checkZoteroConnection(forceRefresh: true);
     await _loadZoteroItems(query: _searchController.text);
     if (mounted) {
       setState(() => _isCheckingConnection = false);
@@ -499,6 +555,58 @@ class _CitationDialogState extends State<CitationDialog> {
                 ),
               ),
 
+              const SizedBox(height: 8),
+
+              // Document Citation Style Switcher Row: Name-Year vs Numeric
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: isDark ? AppTheme.darkSidebar : AppTheme.lightSidebar,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: borderColor),
+                ),
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.format_list_bulleted,
+                        size: 15,
+                        color: mutedColor,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Citation Style:',
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
+                          color: mutedColor,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      _buildStyleTabButton(
+                        style: CitationStyle.authorYear,
+                        title: 'Name-Year (Surname et al., 2026)',
+                        icon: Icons.text_fields,
+                        isActive:
+                            _activeCitationStyle == CitationStyle.authorYear,
+                        theme: theme,
+                        isDark: isDark,
+                      ),
+                      const SizedBox(width: 4),
+                      _buildStyleTabButton(
+                        style: CitationStyle.numeric,
+                        title: 'Numeric ([1])',
+                        icon: Icons.tag,
+                        isActive: _activeCitationStyle == CitationStyle.numeric,
+                        theme: theme,
+                        isDark: isDark,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
               // Offline notice banner if Zotero is selected and disconnected
               if (_activeSource == CitationSource.zotero && !isZoteroConnected) ...[
                 const SizedBox(height: 10),
@@ -602,6 +710,7 @@ class _CitationDialogState extends State<CitationDialog> {
                                   onDeleted: () {
                                     setState(() {
                                       _selectedCitations.remove(item);
+                                      _rebuildAvailableItems();
                                     });
                                     _searchFocusNode.requestFocus();
                                   },
@@ -619,6 +728,7 @@ class _CitationDialogState extends State<CitationDialog> {
                         onPressed: () {
                           setState(() {
                             _selectedCitations.clear();
+                            _rebuildAvailableItems();
                           });
                           _searchFocusNode.requestFocus();
                         },
@@ -866,7 +976,7 @@ class _CitationDialogState extends State<CitationDialog> {
                         ),
                         child: _selectedItem == null
                             ? Center(
-                                child: Padding(
+                                child: SingleChildScrollView(
                                   padding: const EdgeInsets.all(16.0),
                                   child: Column(
                                     mainAxisSize: MainAxisSize.min,
@@ -911,10 +1021,19 @@ class _CitationDialogState extends State<CitationDialog> {
                                             height: 1.4,
                                           ),
                                         ),
-                                        const SizedBox(height: 16),
+                                        const SizedBox(height: 12),
+                                        Text(
+                                          'Pandoc Syntax (to insert):',
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.bold,
+                                            color: mutedColor,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 3),
                                         Container(
                                           width: double.infinity,
-                                          padding: const EdgeInsets.all(8),
+                                          padding: const EdgeInsets.all(6),
                                           decoration: BoxDecoration(
                                             color: isDark
                                                 ? Colors.black
@@ -942,9 +1061,44 @@ class _CitationDialogState extends State<CitationDialog> {
                                             style: TextStyle(
                                               fontFamily:
                                                   AppTheme.editorFontFamily,
-                                              fontSize: 11.5,
+                                              fontSize: 11,
                                               color: theme.colorScheme.primary,
                                               fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 8),
+                                        Text(
+                                          'Document Render Preview (${_activeCitationStyle == CitationStyle.numeric ? "Numeric" : "Name-Year"}):',
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.bold,
+                                            color: mutedColor,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 3),
+                                        Container(
+                                          width: double.infinity,
+                                          padding: const EdgeInsets.all(6),
+                                          decoration: BoxDecoration(
+                                            color: theme.colorScheme.primary
+                                                .withValues(alpha: 0.08),
+                                            border: Border.all(
+                                                color: theme.colorScheme.primary
+                                                    .withValues(alpha: 0.25)),
+                                            borderRadius:
+                                                BorderRadius.circular(4),
+                                          ),
+                                          child: Text(
+                                            _formatRenderPreview(
+                                                _selectedCitations),
+                                            textAlign: TextAlign.center,
+                                            style: TextStyle(
+                                              fontFamily:
+                                                  AppTheme.editorFontFamily,
+                                              fontSize: 11,
+                                              color: theme.colorScheme.primary,
+                                              fontWeight: FontWeight.w600,
                                             ),
                                           ),
                                         ),
@@ -1122,6 +1276,43 @@ class _CitationDialogState extends State<CitationDialog> {
                                         ),
                                       ),
                                     ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      'Document Render Preview (${_activeCitationStyle == CitationStyle.numeric ? "Numeric" : "Name-Year"}):',
+                                      style: const TextStyle(
+                                        fontSize: 10.5,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Container(
+                                      width: double.infinity,
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 8, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: theme.colorScheme.primary
+                                            .withValues(alpha: 0.08),
+                                        border: Border.all(
+                                            color: theme.colorScheme.primary
+                                                .withValues(alpha: 0.25)),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Text(
+                                        _selectedCitations.isNotEmpty
+                                            ? _formatRenderPreview(
+                                                _selectedCitations)
+                                            : (_selectedItem != null
+                                                ? _formatRenderPreview(
+                                                    [_selectedItem!])
+                                                : ''),
+                                        style: TextStyle(
+                                          fontFamily: AppTheme.editorFontFamily,
+                                          fontSize: 12,
+                                          color: theme.colorScheme.primary,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
                                   ],
                                 ),
                               ),
@@ -1277,6 +1468,64 @@ class _CitationDialogState extends State<CitationDialog> {
                 const SizedBox(width: 6),
                 statusWidget,
               ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStyleTabButton({
+    required CitationStyle style,
+    required String title,
+    required IconData icon,
+    required bool isActive,
+    required ThemeData theme,
+    required bool isDark,
+  }) {
+    final activeBg = isDark ? const Color(0xFF1E293B) : Colors.white;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(6),
+        splashFactory: NoSplash.splashFactory,
+        focusColor: Colors.transparent,
+        onTap: () => _onStyleChanged(style),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          decoration: BoxDecoration(
+            color: isActive ? activeBg : Colors.transparent,
+            borderRadius: BorderRadius.circular(6),
+            boxShadow: isActive
+                ? [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.05),
+                      blurRadius: 2,
+                      offset: const Offset(0, 1),
+                    )
+                  ]
+                : null,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                icon,
+                size: 14,
+                color: isActive ? theme.colorScheme.primary : Colors.grey,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+                  color: isActive
+                      ? (isDark ? Colors.white : Colors.black87)
+                      : (isDark ? Colors.grey[400] : Colors.grey[700]),
+                ),
+              ),
             ],
           ),
         ),

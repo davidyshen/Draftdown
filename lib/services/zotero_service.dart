@@ -10,13 +10,32 @@ class ZoteroService {
   static const String defaultBbtEndpoint =
       'http://127.0.0.1:23119/better-bibtex/json-rpc';
 
-  final String bbtEndpoint;
-  List<CitationItem> _cachedItems = [];
+  static final RegExp _yearBoundaryRegex = RegExp(r'\b(19\d\d|20\d\d)\b');
+  static final RegExp _yearRegex = RegExp(r'(19\d\d|20\d\d)');
+  static final RegExp _andSplitRegex =
+      RegExp(r'\s+and\s+', caseSensitive: false);
+  static final RegExp _whitespaceRegex = RegExp(r'\s+');
+  static const String _pingPayload =
+      '{"jsonrpc":"2.0","method":"user.ping","id":1}';
 
-  List<CitationItem> get cachedItems => _cachedItems;
+  final String bbtEndpoint;
+  late final Uri _bbtUri = Uri.parse(bbtEndpoint);
+  final http.Client _httpClient = http.Client();
+  final List<CitationItem> _cachedItems = [];
+  List<CitationItem>? _unmodifiableCachedItems;
+  final Map<String, CitationItem> _cachedByKey = {};
+
+  bool? _lastBbtRunning;
+  DateTime? _lastBbtCheckTime;
+
+  List<CitationItem> get cachedItems =>
+      _unmodifiableCachedItems ??= List.unmodifiable(_cachedItems);
 
   ZoteroService({this.bbtEndpoint = defaultBbtEndpoint}) {
-    _cachedItems = List.from(defaultSampleZoteroItems);
+    for (final item in defaultSampleZoteroItems) {
+      _cachedItems.add(item);
+      _cachedByKey[item.normalizedKey] = item;
+    }
   }
 
   /// Default sample items representing Zotero library entries with Better BibTeX citekeys
@@ -119,22 +138,33 @@ class ZoteroService {
   ];
 
   /// Check whether Zotero with Better BibTeX is running and responding
-  Future<bool> isBbtRunning({Duration timeout = const Duration(seconds: 2)}) async {
+  Future<bool> isBbtRunning({
+    Duration timeout = const Duration(milliseconds: 800),
+    bool forceRefresh = false,
+  }) async {
+    final now = DateTime.now();
+    if (!forceRefresh &&
+        _lastBbtRunning != null &&
+        _lastBbtCheckTime != null &&
+        now.difference(_lastBbtCheckTime!) < const Duration(seconds: 3)) {
+      return _lastBbtRunning!;
+    }
     try {
-      final response = await http
+      final response = await _httpClient
           .post(
-            Uri.parse(bbtEndpoint),
-            headers: {'Content-Type': 'application/json'},
-            body: jsonEncode({
-              'jsonrpc': '2.0',
-              'method': 'user.ping',
-              'id': 1,
-            }),
+            _bbtUri,
+            headers: const {'Content-Type': 'application/json'},
+            body: _pingPayload,
           )
           .timeout(timeout);
 
-      return response.statusCode == 200;
+      final running = response.statusCode == 200;
+      _lastBbtRunning = running;
+      _lastBbtCheckTime = DateTime.now();
+      return running;
     } catch (_) {
+      _lastBbtRunning = false;
+      _lastBbtCheckTime = DateTime.now();
       return false;
     }
   }
@@ -142,10 +172,10 @@ class ZoteroService {
   /// Query Zotero Better BibTeX for literature items matching a search query
   Future<List<CitationItem>> searchBbt(String query) async {
     try {
-      final response = await http
+      final response = await _httpClient
           .post(
-            Uri.parse(bbtEndpoint),
-            headers: {'Content-Type': 'application/json'},
+            _bbtUri,
+            headers: const {'Content-Type': 'application/json'},
             body: jsonEncode({
               'jsonrpc': '2.0',
               'method': 'item.search',
@@ -156,12 +186,12 @@ class ZoteroService {
           .timeout(const Duration(seconds: 4));
 
       if (response.statusCode != 200) {
-        return [];
+        return const [];
       }
 
       final Map<String, dynamic> data = jsonDecode(response.body);
       final List<dynamic>? results = data['result'] as List<dynamic>?;
-      if (results == null) return [];
+      if (results == null) return const [];
 
       final parsed = results.map((item) {
         final rawMap = (item is Map) ? item : <dynamic, dynamic>{};
@@ -173,12 +203,12 @@ class ZoteroService {
             rawMap['key']?.toString() ??
             'item';
         final title = map['title']?.toString() ?? 'Untitled';
-        
+
         String? year = map['year']?.toString();
         if (year == null || year.isEmpty) {
           final dateStr = map['date']?.toString();
           if (dateStr != null) {
-            final match = RegExp(r'\b(19\d\d|20\d\d)\b').firstMatch(dateStr);
+            final match = _yearBoundaryRegex.firstMatch(dateStr);
             year = match?.group(0) ?? dateStr;
           }
         }
@@ -195,7 +225,7 @@ class ZoteroService {
           }
         }
         if (year == null || year.isEmpty) {
-          final keyYear = RegExp(r'(19\d\d|20\d\d)').firstMatch(citekey);
+          final keyYear = _yearRegex.firstMatch(citekey);
           year = keyYear?.group(0);
         }
 
@@ -238,7 +268,7 @@ class ZoteroService {
             }
           }
         } else if (rawCreators is String && rawCreators.trim().isNotEmpty) {
-          final parts = rawCreators.split(RegExp(r'\s+and\s+', caseSensitive: false));
+          final parts = rawCreators.split(_andSplitRegex);
           for (final p in parts) {
             final trimmed = p.trim();
             if (trimmed.isNotEmpty) authors.add(trimmed);
@@ -256,34 +286,32 @@ class ZoteroService {
           url: url,
           abstractText: abstractText,
         );
-      }).toList();
+      }).toList(growable: false);
 
       if (parsed.isNotEmpty) {
-        final existingKeys =
-            _cachedItems.map((e) => e.key.trim().toLowerCase()).toSet();
+        bool addedAny = false;
         for (final item in parsed) {
-          final k = item.key.trim().toLowerCase();
-          if (!existingKeys.contains(k)) {
+          final k = item.normalizedKey;
+          if (!_cachedByKey.containsKey(k)) {
             _cachedItems.add(item);
-            existingKeys.add(k);
+            _cachedByKey[k] = item;
+            addedAny = true;
           }
+        }
+        if (addedAny) {
+          _unmodifiableCachedItems = null;
         }
       }
       return parsed;
     } catch (_) {
-      return [];
+      return const [];
     }
   }
 
-  /// Find a cached citation item by its citekey (case-insensitive, ignoring leading `@`)
+  /// Find a cached citation item by its citekey in O(1) time (case-insensitive, ignoring leading `@`)
   CitationItem? findByKey(String rawKey) {
     final clean = rawKey.trim().replaceAll('@', '').toLowerCase();
-    for (final item in _cachedItems) {
-      if (item.key.trim().replaceAll('@', '').toLowerCase() == clean) {
-        return item;
-      }
-    }
-    return null;
+    return _cachedByKey[clean];
   }
 
   /// Resolve a citation item by its citekey, searching BBT if running and not currently in cache
@@ -295,9 +323,9 @@ class ZoteroService {
     if (isRunning) {
       final clean = rawKey.trim().replaceAll('@', '');
       final results = await searchBbt(clean);
+      final targetLower = clean.toLowerCase();
       for (final item in results) {
-        if (item.key.trim().replaceAll('@', '').toLowerCase() ==
-            clean.toLowerCase()) {
+        if (item.normalizedKey == targetLower) {
           return item;
         }
       }
@@ -319,17 +347,23 @@ class ZoteroService {
 
     // Filter cached items if offline or if empty result
     if (cleanQuery.isEmpty) {
-      return List.unmodifiable(_cachedItems);
+      return cachedItems;
     }
 
     final normalized = CitationItem.normalizeForSearch(cleanQuery);
-    final tokens = normalized.split(RegExp(r'\s+')).where((t) => t.isNotEmpty).toList();
-    if (tokens.isEmpty) return List.unmodifiable(_cachedItems);
+    final tokens = normalized
+        .split(_whitespaceRegex)
+        .where((t) => t.isNotEmpty)
+        .toList(growable: false);
+    if (tokens.isEmpty) return cachedItems;
 
     return _cachedItems.where((item) {
       final text = item.searchableText;
-      return tokens.every((token) => text.contains(token));
-    }).toList();
+      for (int i = 0; i < tokens.length; i++) {
+        if (!text.contains(tokens[i])) return false;
+      }
+      return true;
+    }).toList(growable: false);
   }
 
   /// Query items from Zotero Web API using user/group credentials
@@ -341,7 +375,7 @@ class ZoteroService {
     try {
       final url = Uri.parse(
           'https://api.zotero.org/users/$userId/items?format=csljson&limit=$limit');
-      final response = await http.get(
+      final response = await _httpClient.get(
         url,
         headers: {
           'Zotero-API-Version': '3',
@@ -397,5 +431,10 @@ class ZoteroService {
     } catch (_) {
       return [];
     }
+  }
+
+  /// Closes the underlying persistent HTTP client.
+  void dispose() {
+    _httpClient.close();
   }
 }

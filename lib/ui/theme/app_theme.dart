@@ -441,10 +441,10 @@ class AppTheme {
     catppuccinLatteScheme,
   ];
 
-  static List<AppColorScheme> get darkColorSchemes =>
+  static final List<AppColorScheme> darkColorSchemes =
       availableColorSchemes.where((s) => s.isDark).toList(growable: false);
 
-  static List<AppColorScheme> get lightColorSchemes =>
+  static final List<AppColorScheme> lightColorSchemes =
       availableColorSchemes.where((s) => !s.isDark).toList(growable: false);
 
   static AppColorScheme _activeDarkScheme = slateDarkScheme;
@@ -544,9 +544,22 @@ class AppTheme {
     'monospace',
   ];
 
+  static String? _cachedLightSchemeId;
+  static String? _cachedLightTooltipDarkId;
+  static ThemeData? _cachedLightTheme;
+
+  static String? _cachedDarkSchemeId;
+  static String? _cachedDarkTooltipLightId;
+  static ThemeData? _cachedDarkTheme;
+
   static ThemeData lightTheme([AppColorScheme? scheme]) {
     final s = scheme ?? _activeLightScheme;
-    return ThemeData(
+    if (_cachedLightTheme != null &&
+        _cachedLightSchemeId == s.id &&
+        _cachedLightTooltipDarkId == _activeDarkScheme.id) {
+      return _cachedLightTheme!;
+    }
+    final theme = ThemeData(
       useMaterial3: true,
       brightness: Brightness.light,
       scaffoldBackgroundColor: s.bg,
@@ -587,11 +600,20 @@ class AppTheme {
         waitDuration: const Duration(milliseconds: 500),
       ),
     );
+    _cachedLightSchemeId = s.id;
+    _cachedLightTooltipDarkId = _activeDarkScheme.id;
+    _cachedLightTheme = theme;
+    return theme;
   }
 
   static ThemeData darkTheme([AppColorScheme? scheme]) {
     final s = scheme ?? _activeDarkScheme;
-    return ThemeData(
+    if (_cachedDarkTheme != null &&
+        _cachedDarkSchemeId == s.id &&
+        _cachedDarkTooltipLightId == _activeLightScheme.id) {
+      return _cachedDarkTheme!;
+    }
+    final theme = ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
       scaffoldBackgroundColor: s.bg,
@@ -632,5 +654,9 @@ class AppTheme {
         waitDuration: const Duration(milliseconds: 500),
       ),
     );
+    _cachedDarkSchemeId = s.id;
+    _cachedDarkTooltipLightId = _activeLightScheme.id;
+    _cachedDarkTheme = theme;
+    return theme;
   }
 }
