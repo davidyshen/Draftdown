@@ -1246,8 +1246,9 @@ class EditorController extends ChangeNotifier {
 
       final fullMatch = m.group(0)!;
       final bracketOffset = fullMatch.lastIndexOf('[');
-      if (bracketOffset == -1 || bracketOffset + 2 >= fullMatch.length)
+      if (bracketOffset == -1 || bracketOffset + 2 >= fullMatch.length) {
         continue;
+      }
       if (fullMatch[bracketOffset] != '[' ||
           fullMatch[bracketOffset + 2] != ']') {
         continue;

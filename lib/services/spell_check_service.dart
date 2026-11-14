@@ -1380,12 +1380,14 @@ class _FallbackDictionary {
 
     // Basic morphological suffix stripping
     if (lower.endsWith('s') && lower.length > 3) {
-      if (_coreWords.contains(lower.substring(0, lower.length - 1)))
+      if (_coreWords.contains(lower.substring(0, lower.length - 1))) {
         return true;
+      }
     }
     if (lower.endsWith('es') && lower.length > 4) {
-      if (_coreWords.contains(lower.substring(0, lower.length - 2)))
+      if (_coreWords.contains(lower.substring(0, lower.length - 2))) {
         return true;
+      }
     }
     if (lower.endsWith('ed') && lower.length > 4) {
       final stem = lower.substring(0, lower.length - 2);
@@ -1400,8 +1402,9 @@ class _FallbackDictionary {
       }
     }
     if (lower.endsWith('ly') && lower.length > 4) {
-      if (_coreWords.contains(lower.substring(0, lower.length - 2)))
+      if (_coreWords.contains(lower.substring(0, lower.length - 2))) {
         return true;
+      }
     }
     return false;
   }

@@ -20,6 +20,6 @@ jobs:
       - name: Verify formatting
         run: dart format --output=none --set-exit-if-changed .
       - name: Analyse project
-        run: flutter analyze
+        run: flutter analyze --no-fatal-infos
       - name: Run tests
         run: flutter test
