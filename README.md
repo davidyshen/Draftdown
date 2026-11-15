@@ -1,5 +1,6 @@
 # Draftdown
 
+![logo](media/logo.png)
 <p align="center">
   <strong>Modern Academic Markdown Editor & Publication Workbench</strong>
   <br />
@@ -20,9 +21,14 @@
 
 ## Overview
 
-**Draftdown** is a high-performance, distraction-free desktop Markdown editor designed specifically for researchers, academics, authors, and journalists. Originally forked from and based on [Zettlr](https://github.com/Zettlr/Zettlr), Draftdown has since been completely reimplemented in **Flutter** to deliver native desktop performance, instant startup times, lightweight memory utilisation, and seamless cross-platform support across Windows, macOS, and Linux.
+**Draftdown** is a high-performance, distraction-free desktop Markdown editor designed specifically for academia and scientific writing. Originally forked from and based on [Zettlr](https://github.com/Zettlr/Zettlr), Draftdown has since been completely reimplemented in **Flutter** to be faster, with reduced system resource usage.
 
 Draftdown pairs real-time Markdown syntax highlighting with a paper-styled live preview, complete KaTeX mathematics, in-place academic citation formatting, robust image rendering, and a publication export pipeline powered by bundled Pandoc.
+
+![alt text](media/main1.png)
+![alt text](media/main2.png)
+
+Draftdown is currently available for Windows x86 and ARM. MacOS and Linux (x86 and ARM) support is planned and coming soon.
 
 ---
 
@@ -56,6 +62,8 @@ Draftdown pairs real-time Markdown syntax highlighting with a paper-styled live 
 - **Zotero & Better BibTeX Integration**: Directly connects to Zotero's Better BibTeX local HTTP JSON-RPC endpoint to search and cite items from your personal library.
 - **Quick Citation Dialog**: Searchable citation palette with keyboard navigation (arrow keys, space to select, enter to insert).
 
+![alt text](media/citation.png)
+
 ### 🚀 Publication Export Pipeline
 - **Bundled Pandoc**: Ships with a pre-configured, self-contained Pandoc binary on Windows, requiring zero external dependencies.
 - **Multi-Format Export**: Direct compilation to **PDF**, **Microsoft Word (DOCX)**, **LaTeX**, **HTML5**, **EPUB**, **OpenDocument (ODT)**, and **Rich Text (RTF)**.
@@ -63,7 +71,10 @@ Draftdown pairs real-time Markdown syntax highlighting with a paper-styled live 
 
 ### 🎨 Typography & Theming
 - **Dual Light and Dark Themes**: Fully customisable colour schemes tailored for daytime research and late-night drafting.
-- **Typography Pairing**: Configure separate editor monospace fonts (Consolas, JetBrains Mono, Fira Code, Source Code Pro) and render typography pairings (e.g. Segoe UI with Georgia headers).
+- **Typography Pairing**: Configure separate editor monospace fonts and render typography pairings (e.g. Segoe UI with Georgia headers).
+
+![alt text](media/type_colours.png)
+![alt text](media/type2.png)
 
 ---
 
