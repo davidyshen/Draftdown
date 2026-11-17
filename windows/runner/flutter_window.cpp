@@ -65,6 +65,18 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
     case WM_FONTCHANGE:
       flutter_controller_->engine()->ReloadSystemFonts();
       break;
+    case WM_ACTIVATE:
+      if (LOWORD(wparam) != WA_INACTIVE && flutter_controller_) {
+        InvalidateRect(hwnd, nullptr, FALSE);
+        flutter_controller_->ForceRedraw();
+      }
+      break;
+    case WM_SETFOCUS:
+      if (flutter_controller_) {
+        InvalidateRect(hwnd, nullptr, FALSE);
+        flutter_controller_->ForceRedraw();
+      }
+      break;
   }
 
   return Win32Window::MessageHandler(hwnd, message, wparam, lparam);
