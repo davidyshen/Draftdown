@@ -48,16 +48,49 @@ class DraftdownApp extends StatefulWidget {
   State<DraftdownApp> createState() => _DraftdownAppState();
 }
 
-class _DraftdownAppState extends State<DraftdownApp> {
+class _DraftdownAppState extends State<DraftdownApp>
+    with WidgetsBindingObserver, WindowListener {
   Widget? _cachedMaterialApp;
   bool? _lastIsDarkMode;
   String? _lastDarkSchemeId;
   String? _lastLightSchemeId;
 
+  bool get _isDesktop =>
+      Platform.isWindows || Platform.isLinux || Platform.isMacOS;
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    if (_isDesktop) {
+      try {
+        windowManager.addListener(this);
+      } catch (_) {}
+    }
     widget.controller.syncDarkMode(widget.initialDarkMode);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    if (_isDesktop) {
+      try {
+        windowManager.removeListener(this);
+      } catch (_) {}
+    }
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      WidgetsBinding.instance.scheduleFrame();
+    }
+  }
+
+  @override
+  void onWindowFocus() {
+    WidgetsBinding.instance.scheduleFrame();
   }
 
   void _toggleTheme() {

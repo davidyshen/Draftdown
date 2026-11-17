@@ -31,7 +31,7 @@ class EditorView extends StatefulWidget {
   State<EditorView> createState() => _EditorViewState();
 }
 
-class _EditorViewState extends State<EditorView> {
+class _EditorViewState extends State<EditorView> with WidgetsBindingObserver {
   static const double _fontSize = 13.5;
   static const double _lineHeightMultiplier = 1.5;
   static const double _lineBoxHeight =
@@ -74,6 +74,7 @@ class _EditorViewState extends State<EditorView> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _lastEditorFontFamily = widget.controller.editorFontFamily;
     _lastHoverTextSnapshot = widget.controller.textController.text;
     widget.controller.addListener(_handleControllerChanged);
@@ -103,11 +104,19 @@ class _EditorViewState extends State<EditorView> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _dismissSpellHoverMenu();
     widget.controller.removeListener(_handleControllerChanged);
     widget.controller.textController.removeListener(_handleTextChangedForHover);
     widget.controller.scrollController.removeListener(_dismissSpellHoverMenu);
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) {
+      _dismissSpellHoverMenu();
+    }
   }
 
   void _handleTextChangedForHover() {
