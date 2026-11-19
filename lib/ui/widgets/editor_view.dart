@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 
 import '../../controllers/editor_controller.dart';
 import '../../services/spell_check_service.dart';
+import '../../utils/yaml_frontmatter_helper.dart';
 import '../theme/app_theme.dart';
 
 /// The core Markdown text editor widget with precision-synchronised
@@ -37,6 +38,7 @@ class _EditorViewState extends State<EditorView> with WidgetsBindingObserver {
   static const double _lineBoxHeight =
       20.0; // Exact strut-rounded line height in SkParagraph
   static const double _contentPaddingTop = 16.0;
+  static const double _frontmatterPillOffset = 30.0;
   static const double _contentPaddingBottom = 40.0;
   static const double _contentPaddingHorizontal = 16.0;
   static const double _gutterWidth = 52.0;
@@ -69,13 +71,17 @@ class _EditorViewState extends State<EditorView> with WidgetsBindingObserver {
   double? _lastGutterViewportHeight;
   Color? _lastGutterTextColor;
   String? _lastGutterFontFamily;
+  bool? _lastGutterHasFrontmatter;
+  int? _lastGutterLineOffset;
   late String _lastEditorFontFamily;
+  late String _lastFrontmatter;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _lastEditorFontFamily = widget.controller.editorFontFamily;
+    _lastFrontmatter = widget.controller.frontmatter;
     _lastHoverTextSnapshot = widget.controller.textController.text;
     widget.controller.addListener(_handleControllerChanged);
     widget.controller.textController.addListener(_handleTextChangedForHover);
@@ -94,6 +100,7 @@ class _EditorViewState extends State<EditorView> with WidgetsBindingObserver {
         _dismissSpellHoverMenu,
       );
       _lastEditorFontFamily = widget.controller.editorFontFamily;
+      _lastFrontmatter = widget.controller.frontmatter;
       _lastHoverTextSnapshot = widget.controller.textController.text;
       widget.controller.addListener(_handleControllerChanged);
       widget.controller.textController.addListener(_handleTextChangedForHover);
@@ -127,10 +134,199 @@ class _EditorViewState extends State<EditorView> with WidgetsBindingObserver {
     }
   }
 
+  Future<void> _showFrontmatterDialog() async {
+    final fmController = TextEditingController(
+      text: YamlFrontmatterHelper.extractInnerYaml(
+        widget.controller.frontmatter,
+      ),
+    );
+    final fmScrollController = ScrollController();
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final borderColor = isDark ? AppTheme.darkBorder : AppTheme.lightBorder;
+    final surfaceColor = isDark ? AppTheme.darkSurface : AppTheme.lightSurface;
+    final gutterBg = isDark ? AppTheme.darkGutter : AppTheme.lightGutter;
+    final gutterTextColor = isDark ? Colors.grey[500]! : Colors.grey[600]!;
+    final sidebarColor = isDark ? AppTheme.darkSidebar : AppTheme.lightSidebar;
+    const fmFontSize = 12.5;
+    const fmLineHeight = 1.45;
+    final fmStrut = StrutStyle(
+      fontFamily: widget.controller.editorFontFamily,
+      fontFamilyFallback: AppTheme.editorFontFamilyFallback,
+      fontSize: fmFontSize,
+      height: fmLineHeight,
+      forceStrutHeight: true,
+    );
+    final fmTextStyle = TextStyle(
+      fontFamily: widget.controller.editorFontFamily,
+      fontFamilyFallback: AppTheme.editorFontFamilyFallback,
+      fontSize: fmFontSize,
+      height: fmLineHeight,
+    );
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return Dialog(
+          backgroundColor: surfaceColor,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(color: borderColor),
+          ),
+          child: Container(
+            width: 520,
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      Icons.data_object,
+                      size: 18,
+                      color: theme.colorScheme.primary,
+                    ),
+                    const SizedBox(width: 8),
+                    const Text(
+                      'YAML Frontmatter',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const Spacer(),
+                    IconButton(
+                      icon: const Icon(Icons.close, size: 18),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      onPressed: () => Navigator.of(dialogContext).pop(),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Hidden from the Markdown editor. Changes here are saved with your document.',
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    color: isDark ? Colors.grey[400] : Colors.grey[600],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  height: 180,
+                  decoration: BoxDecoration(
+                    color: sidebarColor,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: borderColor),
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(7),
+                    child: SingleChildScrollView(
+                      controller: fmScrollController,
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(minHeight: 178),
+                        child: IntrinsicHeight(
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Container(
+                                width: 40,
+                                padding: const EdgeInsets.fromLTRB(
+                                  0,
+                                  12,
+                                  8,
+                                  12,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: gutterBg,
+                                  border: Border(
+                                    right: BorderSide(color: borderColor),
+                                  ),
+                                ),
+                                child: AnimatedBuilder(
+                                  animation: fmController,
+                                  builder: (context, _) {
+                                    final lines = fmController.text.isEmpty
+                                        ? 1
+                                        : '\n'
+                                                  .allMatches(fmController.text)
+                                                  .length +
+                                              1;
+                                    return Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.end,
+                                      children: [
+                                        for (int i = 0; i < lines; i++)
+                                          Text(
+                                            '${i + 2}',
+                                            strutStyle: fmStrut,
+                                            style: fmTextStyle.copyWith(
+                                              color: gutterTextColor,
+                                            ),
+                                          ),
+                                      ],
+                                    );
+                                  },
+                                ),
+                              ),
+                              Expanded(
+                                child: Padding(
+                                  padding: const EdgeInsets.all(12),
+                                  child: TextField(
+                                    controller: fmController,
+                                    maxLines: null,
+                                    style: fmTextStyle,
+                                    strutStyle: fmStrut,
+                                    decoration: const InputDecoration.collapsed(
+                                      hintText:
+                                          'csl: apa\ntitle: My Manuscript',
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: () => Navigator.of(dialogContext).pop(),
+                      child: const Text('Cancel'),
+                    ),
+                    const SizedBox(width: 8),
+                    FilledButton(
+                      onPressed: () {
+                        widget.controller.setFrontmatter(fmController.text);
+                        Navigator.of(dialogContext).pop();
+                      },
+                      child: const Text('Apply'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+    fmController.dispose();
+    fmScrollController.dispose();
+  }
+
   void _handleControllerChanged() {
     final currentFont = widget.controller.editorFontFamily;
-    if (currentFont != _lastEditorFontFamily) {
+    final currentFrontmatter = widget.controller.frontmatter;
+    if (currentFont != _lastEditorFontFamily ||
+        currentFrontmatter != _lastFrontmatter) {
       _lastEditorFontFamily = currentFont;
+      _lastFrontmatter = currentFrontmatter;
       _cachedGutterSubtree = null;
       if (mounted) {
         setState(() {});
@@ -602,6 +798,13 @@ class _EditorViewState extends State<EditorView> with WidgetsBindingObserver {
           child: LayoutBuilder(
             builder: (context, constraints) {
               final viewportHeight = constraints.maxHeight;
+              final hasFrontmatter = widget.controller.hasFrontmatter;
+              final frontmatterLineCount = hasFrontmatter
+                  ? '\n'.allMatches(widget.controller.frontmatter).length
+                  : 0;
+              final effectiveTopPadding = hasFrontmatter
+                  ? _contentPaddingTop + _frontmatterPillOffset
+                  : _contentPaddingTop;
               final editorWidth =
                   (constraints.maxWidth -
                           _gutterWidth -
@@ -655,7 +858,9 @@ class _EditorViewState extends State<EditorView> with WidgetsBindingObserver {
                               _lastGutterEditorWidth == editorWidth &&
                               _lastGutterViewportHeight == viewportHeight &&
                               _lastGutterTextColor == gutterTextColor &&
-                              _lastGutterFontFamily == fontFamily) {
+                              _lastGutterFontFamily == fontFamily &&
+                              _lastGutterHasFrontmatter == hasFrontmatter &&
+                              _lastGutterLineOffset == frontmatterLineCount) {
                             return _cachedGutterSubtree!;
                           }
 
@@ -675,7 +880,8 @@ class _EditorViewState extends State<EditorView> with WidgetsBindingObserver {
                                   scrollOffset: scrollOffset,
                                   viewportHeight: viewportHeight,
                                   lineBoxHeight: _lineBoxHeight,
-                                  contentPaddingTop: _contentPaddingTop,
+                                  contentPaddingTop: effectiveTopPadding,
+                                  lineNumberOffset: frontmatterLineCount,
                                   gutterTextColor: gutterTextColor,
                                   fontFamily: fontFamily,
                                   fontFamilyFallback:
@@ -694,6 +900,8 @@ class _EditorViewState extends State<EditorView> with WidgetsBindingObserver {
                           _lastGutterViewportHeight = viewportHeight;
                           _lastGutterTextColor = gutterTextColor;
                           _lastGutterFontFamily = fontFamily;
+                          _lastGutterHasFrontmatter = hasFrontmatter;
+                          _lastGutterLineOffset = frontmatterLineCount;
                           _cachedGutterSubtree = subtree;
                           return subtree;
                         },
@@ -730,28 +938,104 @@ class _EditorViewState extends State<EditorView> with WidgetsBindingObserver {
                                 widget.controller.outdentSelection();
                               },
                             },
-                            child: TextField(
-                              key: _textFieldKey,
-                              controller: widget.controller.textController,
-                              focusNode: widget.controller.focusNode,
-                              scrollController:
-                                  widget.controller.scrollController,
-                              maxLines: null,
-                              expands: true,
-                              keyboardType: TextInputType.multiline,
-                              style: editorTextStyle,
-                              strutStyle: editorStrutStyle,
-                              contextMenuBuilder: _buildContextMenu,
-                              decoration: const InputDecoration(
-                                border: InputBorder.none,
-                                contentPadding: EdgeInsets.fromLTRB(
-                                  _contentPaddingHorizontal,
-                                  _contentPaddingTop,
-                                  _contentPaddingHorizontal,
-                                  _contentPaddingBottom,
+                            child: Stack(
+                              clipBehavior: Clip.hardEdge,
+                              children: [
+                                TextField(
+                                  key: _textFieldKey,
+                                  controller: widget.controller.textController,
+                                  focusNode: widget.controller.focusNode,
+                                  scrollController:
+                                      widget.controller.scrollController,
+                                  maxLines: null,
+                                  expands: true,
+                                  keyboardType: TextInputType.multiline,
+                                  style: editorTextStyle,
+                                  strutStyle: editorStrutStyle,
+                                  contextMenuBuilder: _buildContextMenu,
+                                  decoration: InputDecoration(
+                                    border: InputBorder.none,
+                                    contentPadding: EdgeInsets.fromLTRB(
+                                      _contentPaddingHorizontal,
+                                      effectiveTopPadding,
+                                      _contentPaddingHorizontal,
+                                      _contentPaddingBottom,
+                                    ),
+                                    isDense: true,
+                                  ),
                                 ),
-                                isDense: true,
-                              ),
+                                if (hasFrontmatter)
+                                  AnimatedBuilder(
+                                    animation:
+                                        widget.controller.scrollController,
+                                    builder: (context, child) {
+                                      final scrollOffset =
+                                          widget
+                                              .controller
+                                              .scrollController
+                                              .hasClients
+                                          ? widget
+                                                .controller
+                                                .scrollController
+                                                .offset
+                                          : 0.0;
+                                      return Positioned(
+                                        top: _contentPaddingTop - scrollOffset,
+                                        left: _contentPaddingHorizontal,
+                                        child: child!,
+                                      );
+                                    },
+                                    child: Material(
+                                      color: isDark
+                                          ? Colors.white.withValues(alpha: 0.06)
+                                          : Colors.black.withValues(
+                                              alpha: 0.05,
+                                            ),
+                                      borderRadius: BorderRadius.circular(999),
+                                      child: InkWell(
+                                        borderRadius: BorderRadius.circular(
+                                          999,
+                                        ),
+                                        onTap: _showFrontmatterDialog,
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 10,
+                                            vertical: 3,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            borderRadius: BorderRadius.circular(
+                                              999,
+                                            ),
+                                            border: Border.all(
+                                              color: borderColor.withValues(
+                                                alpha: 0.7,
+                                              ),
+                                            ),
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(
+                                                Icons.data_object,
+                                                size: 12,
+                                                color: gutterTextColor,
+                                              ),
+                                              const SizedBox(width: 5),
+                                              Text(
+                                                'Frontmatter',
+                                                style: TextStyle(
+                                                  fontSize: 11,
+                                                  color: gutterTextColor,
+                                                  fontWeight: FontWeight.w500,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                              ],
                             ),
                           ),
                         ),
@@ -779,6 +1063,7 @@ class _LineNumberPainter extends CustomPainter {
   final double viewportHeight;
   final double lineBoxHeight;
   final double contentPaddingTop;
+  final int lineNumberOffset;
   final Color gutterTextColor;
   final String fontFamily;
   final List<String> fontFamilyFallback;
@@ -803,6 +1088,7 @@ class _LineNumberPainter extends CustomPainter {
     required this.viewportHeight,
     required this.lineBoxHeight,
     required this.contentPaddingTop,
+    this.lineNumberOffset = 0,
     required this.gutterTextColor,
     required this.fontFamily,
     required this.fontFamilyFallback,
@@ -928,6 +1214,19 @@ class _LineNumberPainter extends CustomPainter {
     final int startIdx = firstVisibleIndex > 0 ? firstVisibleIndex - 1 : 0;
     final double maxLabelWidth = size.width - 12.0;
 
+    // When YAML frontmatter is hidden, paint line number 1 aligned with the
+    // Frontmatter pill above the Markdown body.
+    if (lineNumberOffset > 0) {
+      final pillY =
+          (contentPaddingTop - _EditorViewState._frontmatterPillOffset) -
+          scrollOffset;
+      if (pillY + singleLineHeight >= 0 && pillY <= viewportHeight) {
+        final pillPainter = _getOrLayoutPainter(1, maxLabelWidth);
+        final double pillX = size.width - pillPainter.width - 12.0;
+        pillPainter.paint(canvas, Offset(pillX, pillY));
+      }
+    }
+
     for (int i = startIdx; i < lineStartOffsets.length; i++) {
       final y = getLineTopY(i);
 
@@ -935,7 +1234,10 @@ class _LineNumberPainter extends CustomPainter {
       if (y > viewportHeight) break;
       if (y + singleLineHeight < 0) continue;
 
-      final textPainter = _getOrLayoutPainter(i + 1, maxLabelWidth);
+      final textPainter = _getOrLayoutPainter(
+        i + 1 + lineNumberOffset,
+        maxLabelWidth,
+      );
       final double x = size.width - textPainter.width - 12.0;
 
       // Because textPainter uses the exact same editorStrutStyle (with forceStrutHeight: true),
@@ -951,6 +1253,8 @@ class _LineNumberPainter extends CustomPainter {
         oldDelegate.editorWidth != editorWidth ||
         oldDelegate.gutterTextColor != gutterTextColor ||
         oldDelegate.fontFamily != fontFamily ||
-        oldDelegate.viewportHeight != viewportHeight;
+        oldDelegate.viewportHeight != viewportHeight ||
+        oldDelegate.lineNumberOffset != lineNumberOffset ||
+        oldDelegate.contentPaddingTop != contentPaddingTop;
   }
 }

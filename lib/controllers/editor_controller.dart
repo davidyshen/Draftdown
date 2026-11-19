@@ -7,9 +7,11 @@ import 'package:markdown/markdown.dart' as md;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/citation_item.dart';
+import '../models/csl_style.dart';
 import '../models/export_format.dart';
 import '../models/history_entry.dart';
 import '../services/bibliography_service.dart';
+import '../services/csl_style_service.dart';
 import '../services/direct_export_service.dart';
 import '../services/file_service.dart';
 import '../services/history_service.dart';
@@ -18,6 +20,7 @@ import '../services/pandoc_service.dart';
 import '../services/spell_check_service.dart';
 import '../services/zotero_service.dart';
 import '../ui/theme/app_theme.dart';
+import '../utils/yaml_frontmatter_helper.dart';
 import 'markdown_syntax_controller.dart';
 
 enum EditorViewMode { edit, split, preview }
@@ -56,7 +59,8 @@ class OpenDocument {
   int charCount;
   int lineCount;
   int readingTimeMinutes;
-  CitationStyle citationStyle;
+  String cslStyleId;
+  String frontmatter;
 
   OpenDocument({
     required this.id,
@@ -78,7 +82,8 @@ class OpenDocument {
     this.charCount = 0,
     this.lineCount = 1,
     this.readingTimeMinutes = 1,
-    this.citationStyle = CitationStyle.authorYear,
+    this.cslStyleId = CslStyleService.defaultStyleId,
+    this.frontmatter = '',
   });
 }
 
@@ -93,6 +98,7 @@ class EditorController extends ChangeNotifier {
   final BibliographyService bibliographyService;
   final PandocService pandocService;
   final ZoteroService zoteroService;
+  final CslStyleService cslStyleService;
   final DirectExportService directExportService;
   final SpellCheckService spellCheckService;
 
@@ -135,7 +141,8 @@ class EditorController extends ChangeNotifier {
   bool _isZoteroConnected = false;
   String _bibliographyStatus = 'Initialised with sample bibliography';
   CitationSource _citationSource = CitationSource.bibtex;
-  CitationStyle _citationStyle = CitationStyle.authorYear;
+  String _cslStyleId = CslStyleService.defaultStyleId;
+  String _frontmatter = '';
 
   // Pandoc state
   bool _isPandocAvailable = false;
@@ -223,7 +230,17 @@ class EditorController extends ChangeNotifier {
   List<HistoryEntry> get history => historyService.history;
   List<CitationItem> get citations => bibliographyService.items;
   CitationSource get citationSource => _citationSource;
-  CitationStyle get citationStyle => _citationStyle;
+  String get cslStyleId => _cslStyleId;
+  String get frontmatter => _frontmatter;
+  bool get hasFrontmatter => _frontmatter.trim().isNotEmpty;
+  String get fullDocumentContent =>
+      YamlFrontmatterHelper.joinFrontmatter(_frontmatter, textController.text);
+  CslStyle get activeCslStyle => cslStyleService.resolveOrDefault(_cslStyleId);
+  List<CslStyle> get availableCslStyles => cslStyleService.installedStyles;
+  String? get missingCslStyleId =>
+      cslStyleService.findById(_cslStyleId) == null ? _cslStyleId : null;
+  String? get activeEffectiveCslPath =>
+      cslStyleService.resolveEffectiveCslPath(activeCslStyle.id);
   List<CitationItem> get zoteroCitations => zoteroService.cachedItems;
   String? get bibliographyPath => _bibliographyPath;
   bool get isZoteroConnected => _isZoteroConnected;
@@ -257,6 +274,7 @@ class EditorController extends ChangeNotifier {
     BibliographyService? bibliographyService,
     PandocService? pandocService,
     ZoteroService? zoteroService,
+    CslStyleService? cslStyleService,
     DirectExportService? directExportService,
     MarkdownRenderService? renderService,
     SpellCheckService? spellCheckService,
@@ -266,6 +284,7 @@ class EditorController extends ChangeNotifier {
        bibliographyService = bibliographyService ?? BibliographyService(),
        pandocService = pandocService ?? PandocService(),
        zoteroService = zoteroService ?? ZoteroService(),
+       cslStyleService = cslStyleService ?? CslStyleService(),
        directExportService = directExportService ?? DirectExportService(),
        _renderService = renderService ?? MarkdownRenderService(),
        spellCheckService = spellCheckService ?? SpellCheckService(),
@@ -285,7 +304,11 @@ class EditorController extends ChangeNotifier {
 
   /// Initialise controller, check Pandoc & Zotero, load history and preferences
   Future<void> initialise() async {
-    await Future.wait([historyService.loadHistory(), _loadPreferences()]);
+    await Future.wait([
+      historyService.loadHistory(),
+      _loadPreferences(),
+      cslStyleService.initialize(),
+    ]);
     await Future.wait([checkPandocAvailability(), checkZoteroConnection()]);
 
     // Check if there is an active history entry or load welcome document
@@ -462,45 +485,85 @@ class EditorController extends ChangeNotifier {
     return {};
   }
 
-  Future<CitationStyle> _loadFileCitationStyle(String path) async {
+  Future<String> _loadDocumentCslStyle(String path, String content) async {
+    final frontmatterCsl = YamlFrontmatterHelper.readCslFromFrontmatter(
+      content,
+    );
+    if (frontmatterCsl != null) {
+      return frontmatterCsl.toLowerCase();
+    }
+    // Migrate legacy SharedPreferences per-file style if present
     final map = await _readFileCitationStylesMap();
     final saved = map[_normalizePathKey(path)];
-    if (saved == CitationStyle.numeric.name) {
-      return CitationStyle.numeric;
+    if (saved == 'numeric') return 'ieee';
+    if (saved == 'authorYear') return CslStyleService.defaultStyleId;
+    if (saved != null && saved.isNotEmpty) return saved.toLowerCase();
+    return CslStyleService.defaultStyleId;
+  }
+
+  /// Change active document CSL citation style and persist in YAML frontmatter.
+  Future<void> setCslStyle(String styleId) async {
+    final cleanId = styleId.trim().toLowerCase();
+    final updatedFm = YamlFrontmatterHelper.upsertCslInFrontmatter(
+      _frontmatter,
+      cleanId,
+    );
+    _cslStyleId = cleanId;
+    activeDocument?.cslStyleId = cleanId;
+
+    if (updatedFm != _frontmatter) {
+      _frontmatter = updatedFm;
+      activeDocument?.frontmatter = updatedFm;
+      _isModified = true;
+      activeDocument?.isModified = true;
     }
-    return CitationStyle.authorYear;
-  }
 
-  Future<void> _saveFileCitationStyle(String path, CitationStyle style) async {
-    try {
-      final prefs = await _getPrefs();
-      final map = await _readFileCitationStylesMap();
-      map[_normalizePathKey(path)] = style.name;
-      await prefs.setString(_fileCitationStylesKey, jsonEncode(map));
-    } catch (_) {}
-  }
-
-  Future<void> _removeFileCitationStyle(String path) async {
-    try {
-      final prefs = await _getPrefs();
-      final map = await _readFileCitationStylesMap();
-      if (map.remove(_normalizePathKey(path)) != null) {
-        await prefs.setString(_fileCitationStylesKey, jsonEncode(map));
-      }
-    } catch (_) {}
-  }
-
-  /// Change active document citation style (Author-Year vs Numeric)
-  Future<void> setCitationStyle(CitationStyle style) async {
-    if (_citationStyle == style) return;
-    _citationStyle = style;
-    activeDocument?.citationStyle = style;
     flushPendingRenderUpdate();
     notifyListeners();
-    final path = _currentFilePath;
-    if (path != null) {
-      await _saveFileCitationStyle(path, style);
+  }
+
+  /// Update the active document's hidden YAML frontmatter block from the
+  /// Frontmatter editor dialog. Always wraps content strictly inside `---` lines.
+  void setFrontmatter(String innerYaml) {
+    final normalized = YamlFrontmatterHelper.wrapInnerYaml(innerYaml);
+    if (normalized == _frontmatter) return;
+    _frontmatter = normalized;
+    activeDocument?.frontmatter = normalized;
+    final fmCsl = YamlFrontmatterHelper.readCslFromFrontmatter(normalized);
+    if (fmCsl != null) {
+      _cslStyleId = fmCsl.toLowerCase();
+      activeDocument?.cslStyleId = _cslStyleId;
     }
+    _isModified = true;
+    activeDocument?.isModified = true;
+    flushPendingRenderUpdate();
+    notifyListeners();
+  }
+
+  /// Install a CSL style from the online Zotero Styles Library.
+  Future<CslStyle> installCslStyleFromZotero(String slug) async {
+    final style = await cslStyleService.installFromZotero(slug);
+    flushPendingRenderUpdate();
+    notifyListeners();
+    return style;
+  }
+
+  /// Import a local `.csl` file into the user styles directory.
+  Future<CslStyle> importLocalCslStyle(String sourcePath) async {
+    final style = await cslStyleService.importLocalCslFile(sourcePath);
+    flushPendingRenderUpdate();
+    notifyListeners();
+    return style;
+  }
+
+  /// Remove a user-installed CSL style. If any open document used it, fall back to APA.
+  Future<void> removeCslStyle(String styleId) async {
+    await cslStyleService.removeStyle(styleId);
+    final cleanId = styleId.trim().toLowerCase();
+    if (_cslStyleId == cleanId) {
+      flushPendingRenderUpdate();
+    }
+    notifyListeners();
   }
 
   /// Update editor and render typography settings
@@ -580,6 +643,14 @@ class EditorController extends ChangeNotifier {
 
     _charCount = currentText.length;
 
+    if (currentText.startsWith('---') || currentText.startsWith('\uFEFF---')) {
+      final fmCsl = YamlFrontmatterHelper.readCslFromFrontmatter(currentText);
+      if (fmCsl != null && fmCsl.toLowerCase() != _cslStyleId) {
+        _cslStyleId = fmCsl.toLowerCase();
+        activeDocument?.cslStyleId = _cslStyleId;
+      }
+    }
+
     // When text is set programmatically before the editor widget is mounted,
     // synchronise metrics and preview immediately without leaving a pending timer.
     if (focusNode.context == null) {
@@ -622,7 +693,7 @@ class EditorController extends ChangeNotifier {
       renderId: renderSeq,
       rawMarkdown: snapshotText,
       citations: allCitations,
-      citationStyle: _citationStyle,
+      isNumericCitation: activeCslStyle.isNumeric,
     );
 
     _renderService
@@ -722,7 +793,7 @@ class EditorController extends ChangeNotifier {
       renderId: renderSeq,
       rawMarkdown: snapshotText,
       citations: allCitations,
-      citationStyle: _citationStyle,
+      isNumericCitation: activeCslStyle.isNumeric,
     );
 
     final result = MarkdownRenderService.executeMarkdownRender(payload);
@@ -835,7 +906,8 @@ class EditorController extends ChangeNotifier {
     doc.charCount = _charCount;
     doc.lineCount = _lineCount;
     doc.readingTimeMinutes = _readingTimeMinutes;
-    doc.citationStyle = _citationStyle;
+    doc.cslStyleId = _cslStyleId;
+    doc.frontmatter = _frontmatter;
   }
 
   void _loadDocumentFromStore(int index) {
@@ -865,7 +937,8 @@ class EditorController extends ChangeNotifier {
     _charCount = doc.charCount;
     _lineCount = doc.lineCount;
     _readingTimeMinutes = doc.readingTimeMinutes;
-    _citationStyle = doc.citationStyle;
+    _cslStyleId = doc.cslStyleId;
+    _frontmatter = doc.frontmatter;
     _isModified = doc.isModified;
     _hasConflict = doc.hasConflict;
     _hasPromptedConflict = doc.hasPromptedConflict;
@@ -955,7 +1028,8 @@ class EditorController extends ChangeNotifier {
     _isModified = false;
     _hasConflict = false;
     _hasPromptedConflict = false;
-    _citationStyle = CitationStyle.authorYear;
+    _cslStyleId = CslStyleService.defaultStyleId;
+    _frontmatter = '';
     if (scrollController.hasClients) {
       scrollController.jumpTo(0.0);
     }
@@ -968,7 +1042,8 @@ class EditorController extends ChangeNotifier {
       charCount: _charCount,
       lineCount: _lineCount,
       readingTimeMinutes: _readingTimeMinutes,
-      citationStyle: _citationStyle,
+      cslStyleId: _cslStyleId,
+      frontmatter: '',
     );
     _openDocuments.add(doc);
     _activeDocumentIndex = _openDocuments.length - 1;
@@ -992,7 +1067,8 @@ class EditorController extends ChangeNotifier {
     try {
       final content = await fileService.readFile(path);
       final stat = await fileService.statFile(path);
-      final fileCitationStyle = await _loadFileCitationStyle(path);
+      final split = YamlFrontmatterHelper.splitFrontmatter(content);
+      final fileCslStyleId = await _loadDocumentCslStyle(path, content);
 
       if (_debounceTimer?.isActive ?? false) {
         flushPendingRenderUpdate();
@@ -1016,20 +1092,21 @@ class EditorController extends ChangeNotifier {
           .lastWhere((s) => s.isNotEmpty);
       _isProgrammaticUpdate = true;
       textController.isActivelyTyping = false;
-      textController.text = content;
+      textController.text = split.body;
       _isProgrammaticUpdate = false;
-      _lastObservedText = content;
+      _lastObservedText = split.body;
       _computeMetrics();
       _isModified = false;
       _hasConflict = false;
       _hasPromptedConflict = false;
-      _citationStyle = fileCitationStyle;
+      _cslStyleId = fileCslStyleId;
+      _frontmatter = split.frontmatter;
 
       final doc = OpenDocument(
         id: path,
         filePath: path,
         fileName: _currentFileName,
-        content: content,
+        content: split.body,
         isModified: false,
         hasConflict: false,
         hasPromptedConflict: false,
@@ -1040,7 +1117,8 @@ class EditorController extends ChangeNotifier {
         charCount: _charCount,
         lineCount: _lineCount,
         readingTimeMinutes: _readingTimeMinutes,
-        citationStyle: _citationStyle,
+        cslStyleId: _cslStyleId,
+        frontmatter: _frontmatter,
       );
       _openDocuments.add(doc);
       _activeDocumentIndex = _openDocuments.length - 1;
@@ -1097,12 +1175,13 @@ class EditorController extends ChangeNotifier {
       textController.reconcileFullHighlight();
       _charCount = textController.text.length;
       flushPendingRenderUpdate();
-      await fileService.writeFile(_currentFilePath!, textController.text);
+      final fullText = fullDocumentContent;
+      await fileService.writeFile(_currentFilePath!, fullText);
       final stat = await fileService.statFile(_currentFilePath!);
       _isModified = false;
       _hasConflict = false;
       _hasPromptedConflict = false;
-      activeDocument?.lastKnownDiskContent = textController.text;
+      activeDocument?.lastKnownDiskContent = fullText;
       activeDocument?.lastDiskModified = stat?.modified;
       activeDocument?.lastDiskSize = stat?.size;
       _syncActiveDocumentToStore();
@@ -1128,7 +1207,8 @@ class EditorController extends ChangeNotifier {
       textController.reconcileFullHighlight();
       _charCount = textController.text.length;
       flushPendingRenderUpdate();
-      await fileService.writeFile(destination, textController.text);
+      final fullText = fullDocumentContent;
+      await fileService.writeFile(destination, fullText);
       final stat = await fileService.statFile(destination);
       _currentFilePath = destination;
       _currentFileName = File(destination).uri.pathSegments
@@ -1147,12 +1227,11 @@ class EditorController extends ChangeNotifier {
         }
       }
       activeDocument?.id = destination;
-      activeDocument?.lastKnownDiskContent = textController.text;
+      activeDocument?.lastKnownDiskContent = fullText;
       activeDocument?.lastDiskModified = stat?.modified;
       activeDocument?.lastDiskSize = stat?.size;
       _syncActiveDocumentToStore();
       _syncDirectoryWatchers();
-      await _saveFileCitationStyle(destination, _citationStyle);
       await historyService.recordFileOpen(destination);
       notifyListeners();
       return true;
@@ -1241,8 +1320,6 @@ class EditorController extends ChangeNotifier {
       activeDocument?.fileName = newFileName;
       activeDocument?.lastDiskModified = stat?.modified;
       activeDocument?.lastDiskSize = stat?.size;
-      await _removeFileCitationStyle(oldPath);
-      await _saveFileCitationStyle(newPath, _citationStyle);
       await historyService.removeEntry(oldPath);
       await historyService.recordFileOpen(newPath);
       _syncDirectoryWatchers();
@@ -1780,7 +1857,7 @@ class EditorController extends ChangeNotifier {
     try {
       if (_currentFilePath == null || _isModified) {
         tempSourceFile = await fileService.createTemporaryFile(
-          textController.text,
+          fullDocumentContent,
         );
         sourcePath = tempSourceFile.path;
       }
@@ -2067,21 +2144,28 @@ Try writing your thoughts, inserting literature references, and exporting to Wor
     _documentEpoch++;
     _isBackgroundRendering = false;
 
+    final split = YamlFrontmatterHelper.splitFrontmatter(diskContent);
+    final body = split.body;
+    _frontmatter = split.frontmatter;
+    activeDocument?.frontmatter = _frontmatter;
+    final fmCsl = YamlFrontmatterHelper.readCslFromFrontmatter(_frontmatter);
+    if (fmCsl != null) {
+      _cslStyleId = fmCsl.toLowerCase();
+      activeDocument?.cslStyleId = _cslStyleId;
+    }
+
     final previousSelection = textController.selection;
-    final safeBase = previousSelection.baseOffset.clamp(0, diskContent.length);
-    final safeExtent = previousSelection.extentOffset.clamp(
-      0,
-      diskContent.length,
-    );
+    final safeBase = previousSelection.baseOffset.clamp(0, body.length);
+    final safeExtent = previousSelection.extentOffset.clamp(0, body.length);
 
     _isProgrammaticUpdate = true;
     textController.isActivelyTyping = false;
     textController.value = TextEditingValue(
-      text: diskContent,
+      text: body,
       selection: TextSelection(baseOffset: safeBase, extentOffset: safeExtent),
     );
     _isProgrammaticUpdate = false;
-    _lastObservedText = diskContent;
+    _lastObservedText = body;
     _isModified = false;
     _hasConflict = false;
     _hasPromptedConflict = false;
@@ -2098,9 +2182,18 @@ Try writing your thoughts, inserting literature references, and exporting to Wor
     OpenDocument doc,
     String diskContent,
   ) {
-    final safeBase = doc.selection.baseOffset.clamp(0, diskContent.length);
-    final safeExtent = doc.selection.extentOffset.clamp(0, diskContent.length);
-    doc.content = diskContent;
+    final split = YamlFrontmatterHelper.splitFrontmatter(diskContent);
+    final body = split.body;
+    doc.frontmatter = split.frontmatter;
+    final fmCsl = YamlFrontmatterHelper.readCslFromFrontmatter(
+      split.frontmatter,
+    );
+    if (fmCsl != null) {
+      doc.cslStyleId = fmCsl.toLowerCase();
+    }
+    final safeBase = doc.selection.baseOffset.clamp(0, body.length);
+    final safeExtent = doc.selection.extentOffset.clamp(0, body.length);
+    doc.content = body;
     doc.selection = TextSelection(
       baseOffset: safeBase,
       extentOffset: safeExtent,
@@ -2112,16 +2205,18 @@ Try writing your thoughts, inserting literature references, and exporting to Wor
     final result = MarkdownRenderService.executeMarkdownRender(
       MarkdownRenderPayload(
         renderId: 0,
-        rawMarkdown: diskContent,
+        rawMarkdown: body,
         citations: [...citations, ...zoteroCitations],
-        citationStyle: doc.citationStyle,
+        isNumericCitation: cslStyleService
+            .resolveOrDefault(doc.cslStyleId)
+            .isNumeric,
       ),
     );
     doc.previewMarkdown = result.processedMarkdown;
     doc.numericIndices = result.numericIndices;
     doc.astNodes = result.astNodes;
     doc.wordCount = result.wordCount;
-    doc.charCount = diskContent.length;
+    doc.charCount = body.length;
     doc.lineCount = result.lineCount;
     doc.readingTimeMinutes = result.readingTimeMinutes;
     notifyListeners();

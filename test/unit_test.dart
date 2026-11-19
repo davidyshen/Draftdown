@@ -464,13 +464,13 @@ void main() {
         SharedPreferences.setMockInitialValues({});
         final controller = EditorController();
 
-        expect(controller.citationStyle, equals(CitationStyle.authorYear));
+        expect(controller.cslStyleId, equals('apa'));
 
-        await controller.setCitationStyle(CitationStyle.numeric);
-        expect(controller.citationStyle, equals(CitationStyle.numeric));
+        await controller.setCslStyle('ieee');
+        expect(controller.cslStyleId, equals('ieee'));
 
-        await controller.setCitationStyle(CitationStyle.authorYear);
-        expect(controller.citationStyle, equals(CitationStyle.authorYear));
+        await controller.setCslStyle('apa');
+        expect(controller.cslStyleId, equals('apa'));
       },
     );
 
@@ -496,23 +496,24 @@ void main() {
         addTearDown(controller.dispose);
 
         await controller.openFile(fileA.path);
-        await controller.setCitationStyle(CitationStyle.numeric);
-        expect(controller.citationStyle, equals(CitationStyle.numeric));
+        await controller.setCslStyle('ieee');
+        expect(controller.cslStyleId, equals('ieee'));
+        await controller.saveFile();
 
         await controller.openFile(fileB.path);
-        expect(controller.citationStyle, equals(CitationStyle.authorYear));
+        expect(controller.cslStyleId, equals('apa'));
 
-        // Switch back to PaperA: should restore numeric
+        // Switch back to PaperA: should restore ieee
         await controller.openFile(fileA.path);
-        expect(controller.citationStyle, equals(CitationStyle.numeric));
+        expect(controller.cslStyleId, equals('ieee'));
 
-        // New controller instance should still remember PaperA = numeric, PaperB = authorYear
+        // New controller instance should still remember PaperA = ieee, PaperB = apa
         final controller2 = EditorController();
         addTearDown(controller2.dispose);
         await controller2.openFile(fileA.path);
-        expect(controller2.citationStyle, equals(CitationStyle.numeric));
+        expect(controller2.cslStyleId, equals('ieee'));
         await controller2.openFile(fileB.path);
-        expect(controller2.citationStyle, equals(CitationStyle.authorYear));
+        expect(controller2.cslStyleId, equals('apa'));
       },
     );
 
@@ -850,7 +851,7 @@ def shannon_index(counts):
 
     test('generateHtmlDocument formats citations and bibliography numerically when in numeric mode', () async {
       final controller = EditorController();
-      await controller.setCitationStyle(CitationStyle.numeric);
+      await controller.setCslStyle('ieee');
       controller.textController.text = 'Pioneering work [@holling1973resilience] led to synthesis [@loreau2001biodiversity].';
 
       final service = controller.directExportService;

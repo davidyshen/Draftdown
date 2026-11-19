@@ -78,7 +78,15 @@ jobs:
         run: flutter pub get
 
       - name: Build Windows Release (${{ matrix.arch }})
-        run: flutter build windows --release
+        shell: pwsh
+        run: |
+          $pubspec = Get-Content "pubspec.yaml" -Raw
+          if ($pubspec -match '(?m)^version:\s*([0-9]+\.[0-9]+\.[0-9]+)') {
+            $appVersion = $Matches[1]
+          } else {
+            $appVersion = "1.2.0"
+          }
+          flutter build windows --release --dart-define="APP_VERSION=$appVersion"
 
       - name: Package release archive
         shell: pwsh

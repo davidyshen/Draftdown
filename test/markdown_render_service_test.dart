@@ -14,7 +14,7 @@ void main() {
         renderId: 1,
         rawMarkdown: '   \n  ',
         citations: const [],
-        citationStyle: CitationStyle.authorYear,
+        isNumericCitation: false,
       );
 
       final result = MarkdownRenderService.executeMarkdownRender(payload);
@@ -33,7 +33,7 @@ void main() {
         renderId: 2,
         rawMarkdown: raw,
         citations: const [],
-        citationStyle: CitationStyle.authorYear,
+        isNumericCitation: false,
       );
 
       final result = MarkdownRenderService.executeMarkdownRender(payload);
@@ -53,7 +53,7 @@ void main() {
         renderId: 3,
         rawMarkdown: raw,
         citations: const [],
-        citationStyle: CitationStyle.authorYear,
+        isNumericCitation: false,
       );
 
       final result = MarkdownRenderService.executeMarkdownRender(payload);
@@ -95,7 +95,7 @@ As demonstrated by @turing1950 and earlier in [@shannon1948].
           renderId: 4,
           rawMarkdown: raw,
           citations: citations,
-          citationStyle: CitationStyle.authorYear,
+          isNumericCitation: false,
         );
 
         final result = MarkdownRenderService.executeMarkdownRender(payload);
@@ -139,7 +139,7 @@ First [@turing1950], then [@shannon1948].
           renderId: 5,
           rawMarkdown: raw,
           citations: citations,
-          citationStyle: CitationStyle.numeric,
+          isNumericCitation: true,
         );
 
         final result = MarkdownRenderService.executeMarkdownRender(payload);
@@ -168,7 +168,7 @@ First [@turing1950], then [@shannon1948].
           renderId: 42,
           rawMarkdown: '# Async Test\nContent',
           citations: const [],
-          citationStyle: CitationStyle.authorYear,
+          isNumericCitation: false,
         );
 
         final result = await service.render(payload);
@@ -423,7 +423,7 @@ As shown by @turing1950computing.
           renderId: 1,
           rawMarkdown: mdWithCodeAndSubheading,
           citations: const [],
-          citationStyle: CitationStyle.authorYear,
+          isNumericCitation: false,
         ),
       );
 
@@ -439,7 +439,7 @@ As shown by @turing1950computing.
           renderId: 1,
           rawMarkdown: mdWithCrlfRefs,
           citations: const [],
-          citationStyle: CitationStyle.authorYear,
+          isNumericCitation: false,
         ),
       );
 

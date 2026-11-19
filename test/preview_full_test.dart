@@ -6,7 +6,6 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_math_fork/flutter_math.dart';
 import 'package:draftdown/controllers/editor_controller.dart';
-import 'package:draftdown/models/citation_item.dart';
 import 'package:draftdown/ui/theme/app_theme.dart';
 import 'package:draftdown/ui/widgets/markdown_preview.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -97,7 +96,7 @@ The quadratic formula is given by:
     (tester) async {
       SharedPreferences.setMockInitialValues({});
       final controller = EditorController();
-      await controller.setCitationStyle(CitationStyle.numeric);
+      await controller.setCslStyle('ieee');
 
       const markdown = '''
 Foundational models include [@holling1973resilience] and [@hutchinson1957concluding].

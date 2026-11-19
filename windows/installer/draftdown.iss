@@ -2,7 +2,7 @@
 ; Compile with: iscc windows\installer\draftdown.iss
 
 #ifndef MyAppVersion
-  #define MyAppVersion "1.1.1"
+  #define MyAppVersion "1.2.0"
 #endif
 
 #ifndef MyAppArch
