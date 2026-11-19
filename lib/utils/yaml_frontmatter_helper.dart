@@ -36,9 +36,7 @@ class YamlFrontmatterHelper {
   /// Wrap inner YAML lines in `---\n...\n---\n`, stripping any stray `---`
   /// delimiter lines so all content stays strictly inside the YAML block.
   static String wrapInnerYaml(String innerYaml) {
-    final lines = innerYaml
-        .replaceAll('\r\n', '\n')
-        .split('\n');
+    final lines = innerYaml.replaceAll('\r\n', '\n').split('\n');
     // Strip leading/trailing `---` lines if pasted
     while (lines.isNotEmpty && lines.first.trim() == '---') {
       lines.removeAt(0);
@@ -57,7 +55,9 @@ class YamlFrontmatterHelper {
     final newline = frontmatter.contains('\r\n') || body.contains('\r\n')
         ? '\r\n'
         : '\n';
-    final fm = frontmatter.endsWith('\n') ? frontmatter : '$frontmatter$newline';
+    final fm = frontmatter.endsWith('\n')
+        ? frontmatter
+        : '$frontmatter$newline';
     return '$fm$body';
   }
 

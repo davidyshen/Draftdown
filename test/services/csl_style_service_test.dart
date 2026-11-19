@@ -153,8 +153,7 @@ author: Jane Doe
 ---
 
 Body text.''';
-      final updated =
-          YamlFrontmatterHelper.upsertCslInFrontmatter(md, 'ieee');
+      final updated = YamlFrontmatterHelper.upsertCslInFrontmatter(md, 'ieee');
       expect(YamlFrontmatterHelper.readCslFromFrontmatter(updated), 'ieee');
       expect(updated, contains('title: My Manuscript'));
       expect(updated, contains('author: Jane Doe'));
@@ -163,8 +162,10 @@ Body text.''';
 
     test('prepends frontmatter when none exists', () {
       const md = '# Heading\n\nParagraph.';
-      final updated =
-          YamlFrontmatterHelper.upsertCslInFrontmatter(md, 'nature');
+      final updated = YamlFrontmatterHelper.upsertCslInFrontmatter(
+        md,
+        'nature',
+      );
       expect(YamlFrontmatterHelper.readCslFromFrontmatter(updated), 'nature');
       expect(
         YamlFrontmatterHelper.stripYamlFrontmatter(updated),

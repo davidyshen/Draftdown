@@ -486,7 +486,9 @@ class EditorController extends ChangeNotifier {
   }
 
   Future<String> _loadDocumentCslStyle(String path, String content) async {
-    final frontmatterCsl = YamlFrontmatterHelper.readCslFromFrontmatter(content);
+    final frontmatterCsl = YamlFrontmatterHelper.readCslFromFrontmatter(
+      content,
+    );
     if (frontmatterCsl != null) {
       return frontmatterCsl.toLowerCase();
     }
@@ -2154,10 +2156,7 @@ Try writing your thoughts, inserting literature references, and exporting to Wor
 
     final previousSelection = textController.selection;
     final safeBase = previousSelection.baseOffset.clamp(0, body.length);
-    final safeExtent = previousSelection.extentOffset.clamp(
-      0,
-      body.length,
-    );
+    final safeExtent = previousSelection.extentOffset.clamp(0, body.length);
 
     _isProgrammaticUpdate = true;
     textController.isActivelyTyping = false;
@@ -2186,7 +2185,9 @@ Try writing your thoughts, inserting literature references, and exporting to Wor
     final split = YamlFrontmatterHelper.splitFrontmatter(diskContent);
     final body = split.body;
     doc.frontmatter = split.frontmatter;
-    final fmCsl = YamlFrontmatterHelper.readCslFromFrontmatter(split.frontmatter);
+    final fmCsl = YamlFrontmatterHelper.readCslFromFrontmatter(
+      split.frontmatter,
+    );
     if (fmCsl != null) {
       doc.cslStyleId = fmCsl.toLowerCase();
     }
@@ -2206,8 +2207,9 @@ Try writing your thoughts, inserting literature references, and exporting to Wor
         renderId: 0,
         rawMarkdown: body,
         citations: [...citations, ...zoteroCitations],
-        isNumericCitation:
-            cslStyleService.resolveOrDefault(doc.cslStyleId).isNumeric,
+        isNumericCitation: cslStyleService
+            .resolveOrDefault(doc.cslStyleId)
+            .isNumeric,
       ),
     );
     doc.previewMarkdown = result.processedMarkdown;

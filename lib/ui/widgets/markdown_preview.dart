@@ -1402,12 +1402,8 @@ class _MarkdownPreviewViewState extends State<MarkdownPreviewView> {
     // In flutter_markdown_plus, an empty task list item causes `_inlines.isEmpty` assertion to fail
     // because <input type="checkbox"> has no children and no text node is generated.
     // Appending a non-breaking space ensures a text child exists, safely clearing inlines.
-    var processed = YamlFrontmatterHelper.stripYamlFrontmatter(
-      widget.markdown,
-    ).replaceAllMapped(
-      _emptyTaskRegex,
-      (m) => '${m[1]} \u00A0',
-    );
+    var processed = YamlFrontmatterHelper.stripYamlFrontmatter(widget.markdown)
+        .replaceAllMapped(_emptyTaskRegex, (m) => '${m[1]} \u00A0');
 
     // Handle incomplete list markers (e.g. line with only "* " or "*   ")
     // In standard CommonMark, an empty bullet "*   " is parsed as an empty <li></li>,

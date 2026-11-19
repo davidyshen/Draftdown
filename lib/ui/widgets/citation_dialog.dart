@@ -562,7 +562,8 @@ class _CitationDialogState extends State<CitationDialog> {
                 builder: (context) {
                   final activeStyle = widget.controller.activeCslStyle;
                   final styles = widget.controller.availableCslStyles;
-                  final dropdownStyles = styles.any((s) => s.id == activeStyle.id)
+                  final dropdownStyles =
+                      styles.any((s) => s.id == activeStyle.id)
                       ? styles
                       : [activeStyle, ...styles];
                   return Container(

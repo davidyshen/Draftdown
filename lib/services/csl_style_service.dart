@@ -67,7 +67,7 @@ class CslStyleService {
   bool _initialized = false;
 
   CslStyleService({http.Client? httpClient})
-      : _httpClient = httpClient ?? http.Client();
+    : _httpClient = httpClient ?? http.Client();
 
   bool get isInitialized => _initialized;
 
@@ -95,7 +95,8 @@ class CslStyleService {
     final clean = id.trim().toLowerCase();
     final found = findById(clean);
     if (found != null) return found;
-    if (!_initialized && (clean == 'ieee' || clean == 'nature' || clean == 'vancouver')) {
+    if (!_initialized &&
+        (clean == 'ieee' || clean == 'nature' || clean == 'vancouver')) {
       return CslStyle(
         id: clean,
         title: clean.toUpperCase(),
@@ -198,10 +199,7 @@ class CslStyleService {
     _initialized = true;
   }
 
-  Future<void> _scanDirectory(
-    Directory dir, {
-    required bool isBuiltIn,
-  }) async {
+  Future<void> _scanDirectory(Directory dir, {required bool isBuiltIn}) async {
     if (!await dir.exists()) return;
     await for (final entity in dir.list(followLinks: false)) {
       if (entity is! File) continue;
@@ -209,7 +207,9 @@ class CslStyleService {
       try {
         final id = p.basenameWithoutExtension(entity.path).toLowerCase();
         // Do not let user files overwrite built-in IDs in the lookup map
-        if (!isBuiltIn && _stylesById.containsKey(id) && _stylesById[id]!.isBuiltIn) {
+        if (!isBuiltIn &&
+            _stylesById.containsKey(id) &&
+            _stylesById[id]!.isBuiltIn) {
           continue;
         }
         final xml = await entity.readAsString();
@@ -414,10 +414,7 @@ class CslStyleService {
     if (style.isDependent &&
         findById(style.independentParentId!) == null &&
         !visitedSet.contains(style.independentParentId!)) {
-      await installFromZotero(
-        style.independentParentId!,
-        visited: visitedSet,
-      );
+      await installFromZotero(style.independentParentId!, visited: visitedSet);
     }
 
     return style;

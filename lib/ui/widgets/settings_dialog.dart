@@ -322,7 +322,12 @@ class _SettingsDialogState extends State<SettingsDialog>
                     _buildTypographyTab(theme, isDark, borderColor, mutedColor),
 
                     // Tab 3: Referencing & CSL Styles
-                    _buildReferencingTab(theme, isDark, borderColor, mutedColor),
+                    _buildReferencingTab(
+                      theme,
+                      isDark,
+                      borderColor,
+                      mutedColor,
+                    ),
 
                     // Tab 4: Spellcheck
                     _buildSpellcheckTab(theme, isDark, borderColor, mutedColor),
@@ -516,7 +521,9 @@ class _SettingsDialogState extends State<SettingsDialog>
                         vertical: 2,
                       ),
                       decoration: BoxDecoration(
-                        color: theme.colorScheme.primary.withValues(alpha: 0.14),
+                        color: theme.colorScheme.primary.withValues(
+                          alpha: 0.14,
+                        ),
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: Text(
@@ -1017,8 +1024,11 @@ class _SettingsDialogState extends State<SettingsDialog>
               ),
               child: Row(
                 children: [
-                  Icon(Icons.warning_amber_rounded,
-                      size: 16, color: Colors.amber[700]),
+                  Icon(
+                    Icons.warning_amber_rounded,
+                    size: 16,
+                    color: Colors.amber[700],
+                  ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
@@ -1118,10 +1128,12 @@ class _SettingsDialogState extends State<SettingsDialog>
             child: ListView.separated(
               shrinkWrap: true,
               itemCount: installed.length,
-              separatorBuilder: (_, _) => Divider(height: 1, color: borderColor),
+              separatorBuilder: (_, _) =>
+                  Divider(height: 1, color: borderColor),
               itemBuilder: (context, index) {
                 final style = installed[index];
-                final isActive = style.id == activeStyle.id && missingId == null;
+                final isActive =
+                    style.id == activeStyle.id && missingId == null;
                 return InkWell(
                   onTap: () {
                     widget.controller.setCslStyle(style.id);

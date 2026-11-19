@@ -146,9 +146,7 @@ class _EditorViewState extends State<EditorView> with WidgetsBindingObserver {
     final borderColor = isDark ? AppTheme.darkBorder : AppTheme.lightBorder;
     final surfaceColor = isDark ? AppTheme.darkSurface : AppTheme.lightSurface;
     final gutterBg = isDark ? AppTheme.darkGutter : AppTheme.lightGutter;
-    final gutterTextColor = isDark
-        ? Colors.grey[500]!
-        : Colors.grey[600]!;
+    final gutterTextColor = isDark ? Colors.grey[500]! : Colors.grey[600]!;
     final sidebarColor = isDark ? AppTheme.darkSidebar : AppTheme.lightSidebar;
     const fmFontSize = 12.5;
     const fmLineHeight = 1.45;
@@ -281,7 +279,8 @@ class _EditorViewState extends State<EditorView> with WidgetsBindingObserver {
                                     style: fmTextStyle,
                                     strutStyle: fmStrut,
                                     decoration: const InputDecoration.collapsed(
-                                      hintText: 'csl: apa\ntitle: My Manuscript',
+                                      hintText:
+                                          'csl: apa\ntitle: My Manuscript',
                                     ),
                                   ),
                                 ),
@@ -988,9 +987,7 @@ class _EditorViewState extends State<EditorView> with WidgetsBindingObserver {
                                     },
                                     child: Material(
                                       color: isDark
-                                          ? Colors.white.withValues(
-                                              alpha: 0.06,
-                                            )
+                                          ? Colors.white.withValues(alpha: 0.06)
                                           : Colors.black.withValues(
                                               alpha: 0.05,
                                             ),
