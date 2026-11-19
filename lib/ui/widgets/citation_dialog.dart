@@ -392,7 +392,7 @@ class _CitationDialogState extends State<CitationDialog> {
     if (_editingCitation != null) {
       widget.controller.replaceCitation(_editingCitation!, citationStr);
     } else {
-      widget.controller.insertText(citationStr);
+      widget.controller.insertText(citationStr, flushImmediately: true);
     }
 
     Navigator.of(context).pop();

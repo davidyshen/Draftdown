@@ -868,10 +868,10 @@ def shannon_index(counts):
       expect(
         html,
         contains(
-          '<li><strong>C. S. Holling</strong> (1973). <em>Resilience and Stability of Ecological Systems</em>',
+          '<li>Holling, C. S. (1973). Resilience and Stability of Ecological Systems.',
         ),
       );
-      expect(html, contains('<li><strong>Michel Loreau'));
+      expect(html, contains('<li>Loreau, M.'));
     });
 
     test(

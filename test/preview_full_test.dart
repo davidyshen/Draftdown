@@ -122,28 +122,32 @@ Another reference to @holling1973resilience is cited here.
 
       // Verify references section with numbered entries
       expect(find.textContaining('References'), findsWidgets);
-      expect(find.textContaining('C. S. Holling'), findsWidgets);
-      expect(find.textContaining('G. Evelyn Hutchinson'), findsWidgets);
+      expect(find.textContaining('Holling, C. S.'), findsWidgets);
+      expect(find.textContaining('Hutchinson, G. E.'), findsWidgets);
     },
   );
 
   testWidgets(
-    'renders more than 10 authors with first 6 and et al in bibliography',
+    'renders more than 10 authors with first 6 and et al in standard APA bibliography format',
     (tester) async {
       SharedPreferences.setMockInitialValues({});
       final controller = EditorController();
 
       final parsed = controller.bibliographyService.parseBibTeX('''
-@article{genomeProject2022,
-  title = {The Complete Human Genome Sequencing},
-  author = {Smith, John and Doe, Jane and Taylor, Alice and Brown, Bob and Wilson, Chris and Miller, David and Davis, Emma and Garcia, Frank and Rodriguez, Grace and Martinez, Henry and Anderson, Ian and Thomas, Jack},
-  journal = {Science},
-  year = {2022}
+@article{zizka2019coordinatecleaner,
+  title = {CoordinateCleaner: Automated cleaning of occurrence records from biological collection databases},
+  author = {Zizka, Alexander and Silvestro, Daniele and Andermann, Tobias and Azevedo, Josué and Duarte Ritter, Camila and Edler, Daniel and Farooq, Harith and Herdean, Andrei and Ariza, María and Scharn, Ruud and Svantesson, Sten and Wengström, Niklas and Zizka, Vera and Antonelli, Alexandre},
+  journal = {Methods in Ecology and Evolution},
+  volume = {10},
+  number = {5},
+  pages = {744--751},
+  year = {2019},
+  doi = {10.1111/2041-210X.13152}
 }
 ''');
       controller.bibliographyService.setItems(parsed);
 
-      const markdown = '[@genomeProject2022]';
+      const markdown = '[@zizka2019coordinatecleaner]';
 
       await tester.pumpWidget(
         MaterialApp(
@@ -157,15 +161,11 @@ Another reference to @holling1973resilience is cited here.
       );
       await tester.pump();
 
-      // Verify the first 6 authors are present
-      expect(find.textContaining('John Smith'), findsWidgets);
-      expect(find.textContaining('Jane Doe'), findsWidgets);
-      expect(find.textContaining('David Miller'), findsWidgets);
-      // Verify et al. is appended
-      expect(find.textContaining('et al.'), findsWidgets);
-      // Verify author 7 and onwards are NOT displayed in bibliography
-      expect(find.textContaining('Emma Davis'), findsNothing);
-      expect(find.textContaining('Jack Thomas'), findsNothing);
+      expect(find.textContaining('Zizka, A., Silvestro, D., Andermann, T., Azevedo, J., Ritter, C. D., Edler, D., et al.'), findsWidgets);
+      expect(find.textContaining('Farooq, H.'), findsNothing);
+      expect(find.textContaining('Antonelli, A.'), findsNothing);
+      expect(find.textContaining('10(5), 744–751'), findsWidgets);
+      expect(find.textContaining('https://doi.org/10.1111/2041-210X.13152'), findsWidgets);
     },
   );
 

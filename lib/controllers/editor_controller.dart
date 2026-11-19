@@ -163,6 +163,8 @@ class EditorController extends ChangeNotifier {
   int _completedRenderSequence = 0;
   int _documentEpoch = 0;
   bool _isBackgroundRendering = false;
+  bool _isDisposed = false;
+  final Set<String> _attemptedZoteroKeys = <String>{};
   bool? _isProgrammaticUpdate;
   String? _lastObservedText;
 
@@ -582,10 +584,10 @@ class EditorController extends ChangeNotifier {
     // synchronise metrics and preview immediately without leaving a pending timer.
     if (focusNode.context == null) {
       _isModified = true;
-      _computeMetrics();
-      _previewMarkdown = currentText;
+      _charCount = currentText.length;
       activeDocument?.isModified = true;
       activeDocument?.content = currentText;
+      flushPendingRenderUpdate();
       return;
     }
 
@@ -645,6 +647,7 @@ class EditorController extends ChangeNotifier {
               _isBackgroundRendering = false;
               previewNotifier.value = result.processedMarkdown;
               notifyListeners();
+              _resolveMissingCitationsFromZotero(snapshotText);
             }
           }
 
@@ -679,11 +682,20 @@ class EditorController extends ChangeNotifier {
           }
         })
         .catchError((_) {
-          if (renderSeq >= _completedRenderSequence) {
+          if (renderEpoch == _documentEpoch &&
+              renderSeq >= _completedRenderSequence) {
+            final fallback = MarkdownRenderService.executeMarkdownRender(
+              payload,
+            );
             _completedRenderSequence = renderSeq;
-            _previewMarkdown = snapshotText;
+            _numericIndices = fallback.numericIndices;
+            _astNodes = fallback.astNodes;
+            _previewMarkdown = fallback.processedMarkdown;
+            _wordCount = fallback.wordCount;
+            _lineCount = fallback.lineCount;
+            _readingTimeMinutes = fallback.readingTimeMinutes;
             _isBackgroundRendering = false;
-            previewNotifier.value = snapshotText;
+            previewNotifier.value = fallback.processedMarkdown;
             notifyListeners();
           }
         });
@@ -722,6 +734,49 @@ class EditorController extends ChangeNotifier {
     _readingTimeMinutes = result.readingTimeMinutes;
     previewNotifier.value = result.processedMarkdown;
     notifyListeners();
+    _resolveMissingCitationsFromZotero(snapshotText);
+  }
+
+  /// Lazily resolves any cited keys missing from the local bibliography against
+  /// a running Zotero Better BibTeX instance and refreshes the preview if found.
+  Future<void> _resolveMissingCitationsFromZotero(String markdownText) async {
+    if (_isDisposed || Platform.environment.containsKey('FLUTTER_TEST')) {
+      return;
+    }
+    if (!markdownText.contains('@')) return;
+
+    final citedKeys = CitationItem.extractCitedKeys(markdownText);
+    if (citedKeys.isEmpty) return;
+
+    final missing = <String>[];
+    for (final rawKey in citedKeys) {
+      final clean = rawKey.trim().replaceAll('@', '').toLowerCase();
+      if (clean.isEmpty || _attemptedZoteroKeys.contains(clean)) continue;
+      if (bibliographyService.findByKey(clean) != null ||
+          zoteroService.findByKey(clean) != null) {
+        continue;
+      }
+      missing.add(rawKey);
+    }
+    if (missing.isEmpty) return;
+
+    final running = await zoteroService.isBbtRunning();
+    if (!running || _isDisposed) return;
+
+    bool resolvedAny = false;
+    for (final rawKey in missing) {
+      if (_isDisposed) return;
+      final clean = rawKey.trim().replaceAll('@', '').toLowerCase();
+      _attemptedZoteroKeys.add(clean);
+      final item = await zoteroService.resolveItem(rawKey);
+      if (item != null) {
+        resolvedAny = true;
+      }
+    }
+
+    if (resolvedAny && !_isDisposed && textController.text == markdownText) {
+      flushPendingRenderUpdate();
+    }
   }
 
   void _computeMetrics() {
@@ -1039,11 +1094,9 @@ class EditorController extends ChangeNotifier {
     }
 
     try {
-      _debounceTimer?.cancel();
-      _debounceTimer = null;
       textController.reconcileFullHighlight();
-      _computeMetrics();
-      _previewMarkdown = textController.text;
+      _charCount = textController.text.length;
+      flushPendingRenderUpdate();
       await fileService.writeFile(_currentFilePath!, textController.text);
       final stat = await fileService.statFile(_currentFilePath!);
       _isModified = false;
@@ -1072,11 +1125,9 @@ class EditorController extends ChangeNotifier {
     if (destination == null) return false;
 
     try {
-      _debounceTimer?.cancel();
-      _debounceTimer = null;
       textController.reconcileFullHighlight();
-      _computeMetrics();
-      _previewMarkdown = textController.text;
+      _charCount = textController.text.length;
+      flushPendingRenderUpdate();
       await fileService.writeFile(destination, textController.text);
       final stat = await fileService.statFile(destination);
       _currentFilePath = destination;
@@ -1213,11 +1264,9 @@ class EditorController extends ChangeNotifier {
   void setViewMode(EditorViewMode mode) {
     _viewMode = mode;
     if (mode != EditorViewMode.edit) {
-      _debounceTimer?.cancel();
-      _debounceTimer = null;
       textController.reconcileFullHighlight();
-      _computeMetrics();
-      _previewMarkdown = textController.text;
+      _charCount = textController.text.length;
+      flushPendingRenderUpdate();
     }
     notifyListeners();
   }
@@ -1578,7 +1627,7 @@ class EditorController extends ChangeNotifier {
       final prefs = await _getPrefs();
       await prefs.setString('draftdown_bibliography_path', filePath);
 
-      notifyListeners();
+      flushPendingRenderUpdate();
       return true;
     } catch (e) {
       _bibliographyStatus = 'Failed to load bibliography: $e';
@@ -1832,8 +1881,8 @@ Try writing your thoughts, inserting literature references, and exporting to Wor
 ''';
     _isProgrammaticUpdate = false;
     _lastObservedText = textController.text;
-    _previewMarkdown = textController.text;
-    _computeMetrics();
+    _charCount = textController.text.length;
+    flushPendingRenderUpdate();
     _isModified = false;
     _hasConflict = false;
     _hasPromptedConflict = false;
@@ -2099,6 +2148,7 @@ Try writing your thoughts, inserting literature references, and exporting to Wor
 
   @override
   void dispose() {
+    _isDisposed = true;
     stopFileWatching();
     _debounceTimer?.cancel();
     previewNotifier.dispose();

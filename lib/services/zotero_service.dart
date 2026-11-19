@@ -220,6 +220,9 @@ class ZoteroService {
                 map['bookTitle']?.toString() ??
                 map['publisher']?.toString();
             final itemType = map['itemType']?.toString();
+            final volume = map['volume']?.toString();
+            final issue = (map['issue'] ?? map['number'])?.toString();
+            final pages = map['pages']?.toString();
             final doi = map['DOI']?.toString() ?? map['doi']?.toString();
             final url = map['url']?.toString();
             final abstractText =
@@ -269,6 +272,9 @@ class ZoteroService {
               year: year,
               venue: venue,
               itemType: itemType,
+              volume: volume,
+              issue: issue,
+              pages: pages,
               doi: doi,
               url: url,
               abstractText: abstractText,

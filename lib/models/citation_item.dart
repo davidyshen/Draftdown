@@ -16,6 +16,9 @@ class CitationItem {
   final String? year;
   final String? venue; // Journal, book title, or conference
   final String? itemType; // article, book, inproceedings, etc.
+  final String? volume;
+  final String? issue;
+  final String? pages;
   final String? doi;
   final String? url;
   final String? abstractText;
@@ -28,6 +31,9 @@ class CitationItem {
     this.year,
     this.venue,
     this.itemType,
+    this.volume,
+    this.issue,
+    this.pages,
     this.doi,
     this.url,
     this.abstractText,
@@ -202,6 +208,140 @@ class CitationItem {
     }
     _bibliographyAuthorsCache[this] = result;
     return result;
+  }
+
+  /// Format a single author name into APA-style "Surname, I. M." format.
+  static String formatAuthorInitials(String fullName) {
+    final trimmed = fullName.trim();
+    if (trimmed.isEmpty) return '';
+
+    String surname;
+    List<String> givenParts;
+
+    final commaIdx = trimmed.indexOf(',');
+    if (commaIdx != -1) {
+      surname = trimmed.substring(0, commaIdx).trim();
+      final given = trimmed.substring(commaIdx + 1).trim();
+      givenParts = given.isEmpty
+          ? const []
+          : given.split(_whitespaceRegex).where((s) => s.isNotEmpty).toList();
+    } else {
+      final parts =
+          trimmed.split(_whitespaceRegex).where((s) => s.isNotEmpty).toList();
+      if (parts.length <= 1) return trimmed;
+      surname = parts.last;
+      givenParts = parts.sublist(0, parts.length - 1);
+    }
+
+    if (givenParts.isEmpty) return surname;
+
+    final initials = givenParts.map((part) {
+      // Preserve hyphenated given names like "Jean-Luc" -> "J.-L."
+      if (part.contains('-')) {
+        return part
+            .split('-')
+            .where((p) => p.isNotEmpty)
+            .map((p) => '${p[0].toUpperCase()}.')
+            .join('-');
+      }
+      final clean = part.replaceAll('.', '');
+      if (clean.isEmpty) return '';
+      return '${clean[0].toUpperCase()}.';
+    }).where((s) => s.isNotEmpty).join(' ');
+
+    return initials.isNotEmpty ? '$surname, $initials' : surname;
+  }
+
+  /// Format authors in standard APA bibliography style:
+  /// - Up to 10 authors: "Surname, I., Surname2, I., & Surname3, I."
+  /// - More than 10 authors: first 6 authors followed by ", et al."
+  String get formatBibliographyAuthors {
+    if (authors.isEmpty) {
+      final inferred = inferAuthorFromKey(key);
+      return inferred.isNotEmpty ? inferred : 'Unknown author';
+    }
+    final formatted = authors
+        .map(formatAuthorInitials)
+        .where((a) => a.isNotEmpty)
+        .toList();
+    if (formatted.isEmpty) return 'Unknown author';
+    if (formatted.length == 1) return formatted.first;
+    if (formatted.length == 2) return '${formatted[0]}, & ${formatted[1]}';
+    if (formatted.length <= 10) {
+      return '${formatted.sublist(0, formatted.length - 1).join(', ')}, & ${formatted.last}';
+    }
+    return '${formatted.take(6).join(', ')}, et al.';
+  }
+
+  /// Format a complete bibliography entry in standard APA style, e.g.:
+  /// "Zizka, A., ... & Antonelli, A. (2019). Title. *Journal*, *10*(5), 744–751. https://doi.org/..."
+  String formatBibliographyEntry({int? numericIndex}) {
+    final authorsStr = formatBibliographyAuthors;
+    final yearStr = effectiveYear != 'n.d.'
+        ? effectiveYear
+        : (year != null && year!.trim().isNotEmpty ? year!.trim() : 'n.d.');
+
+    final buf = StringBuffer();
+    if (numericIndex != null) {
+      buf.write('$numericIndex. ');
+    } else {
+      buf.write('- ');
+    }
+
+    buf.write('$authorsStr ($yearStr). ');
+
+    final cleanTitle = title.trim();
+    if (cleanTitle.isNotEmpty) {
+      final endsWithPunct =
+          cleanTitle.endsWith('.') ||
+          cleanTitle.endsWith('?') ||
+          cleanTitle.endsWith('!');
+      buf.write(endsWithPunct ? cleanTitle : '$cleanTitle.');
+    }
+
+    final cleanVenue = venue?.trim() ?? '';
+    final cleanVol = volume?.trim() ?? '';
+    final cleanIssue = issue?.trim() ?? '';
+    final cleanPages = pages?.trim().replaceAll('--', '–') ?? '';
+
+    if (cleanVenue.isNotEmpty) {
+      buf.write(' *$cleanVenue*');
+      if (cleanVol.isNotEmpty) {
+        buf.write(', *$cleanVol*');
+        if (cleanIssue.isNotEmpty) {
+          buf.write('($cleanIssue)');
+        }
+      } else if (cleanIssue.isNotEmpty) {
+        buf.write(', ($cleanIssue)');
+      }
+      if (cleanPages.isNotEmpty) {
+        buf.write(', $cleanPages');
+      }
+      buf.write('.');
+    } else if (cleanVol.isNotEmpty || cleanPages.isNotEmpty) {
+      if (cleanVol.isNotEmpty) {
+        buf.write(' *$cleanVol*');
+        if (cleanIssue.isNotEmpty) buf.write('($cleanIssue)');
+      }
+      if (cleanPages.isNotEmpty) {
+        buf.write(cleanVol.isNotEmpty ? ', $cleanPages' : ' $cleanPages');
+      }
+      buf.write('.');
+    }
+
+    final cleanDoi = doi?.trim() ?? '';
+    final cleanUrl = url?.trim() ?? '';
+    if (cleanDoi.isNotEmpty) {
+      final doiUrl =
+          cleanDoi.startsWith('http://') || cleanDoi.startsWith('https://')
+              ? cleanDoi
+              : 'https://doi.org/$cleanDoi';
+      buf.write(' $doiUrl');
+    } else if (cleanUrl.isNotEmpty) {
+      buf.write(' $cleanUrl');
+    }
+
+    return buf.toString();
   }
 
   /// Mapping of accented / diacritic characters and ligatures to their plain ASCII equivalents.

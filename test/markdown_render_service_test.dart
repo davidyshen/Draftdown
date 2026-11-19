@@ -102,9 +102,10 @@ As demonstrated by @turing1950 and earlier in [@shannon1948].
         expect(result.processedMarkdown, contains('### References'));
         // In author-year, Shannon (S) appears before Turing (T)
         final shannonIdx = result.processedMarkdown.indexOf(
-          'Claude E. Shannon',
+          'Shannon, C. E.',
         );
-        final turingIdx = result.processedMarkdown.indexOf('Alan M. Turing');
+        final turingIdx = result.processedMarkdown.indexOf('Turing, A. M.');
+        expect(shannonIdx, isNot(-1));
         expect(shannonIdx, lessThan(turingIdx));
       },
     );
@@ -148,11 +149,11 @@ First [@turing1950], then [@shannon1948].
         expect(result.numericIndices['shannon1948'], equals(2));
         expect(
           result.processedMarkdown,
-          contains('1. **Alan M. Turing** (1950).'),
+          contains('1. Turing, A. M. (1950). Computing Machinery and Intelligence. *Mind*.'),
         );
         expect(
           result.processedMarkdown,
-          contains('2. **Claude E. Shannon** (1948).'),
+          contains('2. Shannon, C. E. (1948). A Mathematical Theory of Communication. *Bell System Technical Journal*.'),
         );
       },
     );
@@ -355,6 +356,97 @@ Formula: \$E=mc^2\$.
         final astWidget = tester.widget<SliverAstMarkdownList>(astFinder);
         expect(astWidget.astNodes, isNotNull);
         expect(astWidget.astNodes, equals(controller.astNodes));
+      },
+    );
+
+    testWidgets(
+      'setViewMode preserves auto-generated bibliography when citations are added to a large document',
+      (tester) async {
+        final controller = EditorController(
+          renderDebounceDuration: const Duration(milliseconds: 1500),
+        );
+        addTearDown(controller.dispose);
+        controller.newFile();
+        controller.setViewMode(EditorViewMode.edit);
+
+        // Simulate a large (> 30k chars) markdown document
+        final largeBody = List.filled(
+          1000,
+          'Lorem ipsum dolor sit amet, consectetur adipiscing elit.\n',
+        ).join();
+        controller.textController.text = '# Large Document\n\n$largeBody';
+        controller.flushPendingRenderUpdate();
+
+        // Mount a TextField with controller.textController and focusNode so _onTextChanged schedules debounce
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: TextField(
+                controller: controller.textController,
+                focusNode: controller.focusNode,
+                maxLines: null,
+              ),
+            ),
+          ),
+        );
+
+        // Add a citation (without flushImmediately, as happens during typing or dialog insertion)
+        controller.insertText(' As shown by @turing1950computing.');
+        expect(controller.isRenderPending, isTrue);
+
+        // Immediately switch to preview mode before the 1.5s debounce timer fires
+        controller.setViewMode(EditorViewMode.preview);
+
+        expect(controller.isRenderPending, isFalse);
+        expect(controller.previewMarkdown, contains('### References'));
+        expect(controller.previewNotifier.value, contains('### References'));
+        expect(controller.previewMarkdown, contains('Turing'));
+      },
+    );
+
+    test(
+      'generates bibliography when non-bibliography heading or code block mentions References',
+      () {
+        const mdWithCodeAndSubheading = '''
+# Large Technical Guide
+
+## References to external APIs
+
+```markdown
+## References
+```
+
+As shown by @turing1950computing.
+''';
+        final result = MarkdownRenderService.executeMarkdownRender(
+          MarkdownRenderPayload(
+            renderId: 1,
+            rawMarkdown: mdWithCodeAndSubheading,
+            citations: const [],
+            citationStyle: CitationStyle.authorYear,
+          ),
+        );
+
+        expect(result.processedMarkdown, contains('### References'));
+        expect(result.processedMarkdown, contains('Turing (1950)'));
+      },
+    );
+
+    test(
+      'skips auto-generated bibliography when standalone References heading exists with CRLF',
+      () {
+        const mdWithCrlfRefs =
+            '# Paper\r\n\r\nCited @turing1950computing.\r\n\r\n## References\r\n\r\n- Manual entry\r\n';
+        final result = MarkdownRenderService.executeMarkdownRender(
+          MarkdownRenderPayload(
+            renderId: 1,
+            rawMarkdown: mdWithCrlfRefs,
+            citations: const [],
+            citationStyle: CitationStyle.authorYear,
+          ),
+        );
+
+        expect(result.processedMarkdown, isNot(contains('### References')));
       },
     );
   });
