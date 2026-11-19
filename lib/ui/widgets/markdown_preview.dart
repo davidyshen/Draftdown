@@ -1808,11 +1808,7 @@ class _MarkdownPreviewViewState extends State<MarkdownPreviewView> {
               controller?.toggleCheckbox(targetIndex);
             },
             child: Padding(
-              padding: const EdgeInsets.only(
-                right: 6.0,
-                top: 1.0,
-                bottom: 1.0,
-              ),
+              padding: const EdgeInsets.only(right: 6.0, top: 1.0, bottom: 1.0),
               child: Icon(
                 isChecked ? Icons.check_box : Icons.check_box_outline_blank,
                 size: 17,
@@ -1838,10 +1834,7 @@ class _MarkdownPreviewViewState extends State<MarkdownPreviewView> {
           helper: helper,
           isDark: isDark,
         ),
-        'code': MathCodeBlockBuilder(
-          textColor: textColor,
-          codeFont: codeFont,
-        ),
+        'code': MathCodeBlockBuilder(textColor: textColor, codeFont: codeFont),
         'img': MarkdownImageElementBuilder(
           controller: controller,
           imageDirectory: imgDir,

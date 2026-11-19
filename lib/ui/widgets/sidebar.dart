@@ -372,11 +372,7 @@ class _AppSidebarState extends State<AppSidebar> {
                       child: const Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(
-                            Icons.circle,
-                            size: 7,
-                            color: Colors.red,
-                          ),
+                          Icon(Icons.circle, size: 7, color: Colors.red),
                           SizedBox(width: 4),
                           Text(
                             'Conflict',

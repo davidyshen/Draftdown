@@ -718,7 +718,9 @@ class _EditorViewState extends State<EditorView> with WidgetsBindingObserver {
                           },
                           child: CallbackShortcuts(
                             bindings: <ShortcutActivator, VoidCallback>{
-                              const SingleActivator(LogicalKeyboardKey.tab): () {
+                              const SingleActivator(
+                                LogicalKeyboardKey.tab,
+                              ): () {
                                 widget.controller.indentSelection();
                               },
                               const SingleActivator(

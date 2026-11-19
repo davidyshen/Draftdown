@@ -1162,10 +1162,7 @@ void main() {
       // Conflict badge and popup dialog should be visible
       expect(find.text('Conflict'), findsOneWidget);
       expect(find.text('File Conflict'), findsOneWidget);
-      expect(
-        find.textContaining('unsaved changes'),
-        findsOneWidget,
-      );
+      expect(find.textContaining('unsaved changes'), findsOneWidget);
       expect(
         find.textContaining('file on disk has been modified'),
         findsOneWidget,

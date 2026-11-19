@@ -1263,9 +1263,7 @@ class MarkdownSyntaxHighlighter {
     return spans;
   }
 
-  static final RegExp _visibleSpaceRegex = RegExp(
-    r' +(?=\r?\n|$)|(?<= ) +',
-  );
+  static final RegExp _visibleSpaceRegex = RegExp(r' +(?=\r?\n|$)|(?<= ) +');
 
   /// Builds a complete TextSpan hierarchy for rendering in an editable TextField from tokens.
   /// When [windowStart] and [windowEnd] are provided (e.g. during active typing on large files),

@@ -1335,7 +1335,9 @@ class EditorController extends ChangeNotifier {
       if (line.startsWith('\t')) {
         removed = 1;
       } else {
-        while (removed < spaces && removed < line.length && line[removed] == ' ') {
+        while (removed < spaces &&
+            removed < line.length &&
+            line[removed] == ' ') {
           removed++;
         }
       }
