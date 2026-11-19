@@ -95,20 +95,29 @@ class MathElementBuilder extends MarkdownElementBuilder {
       );
     }
 
-    return Math.tex(
-      tex,
-      mathStyle: MathStyle.text,
-      textStyle: (preferredStyle ?? const TextStyle()).copyWith(
-        color: textColor,
-        fontSize: 14.5,
-      ),
-      onErrorFallback: (err) => Text(
-        '\$$tex\$',
-        style: TextStyle(
-          color: Colors.redAccent,
-          fontFamily: codeFont,
-          fontSize: 12,
-        ),
+    return RichText(
+      text: TextSpan(
+        children: [
+          WidgetSpan(
+            alignment: PlaceholderAlignment.middle,
+            child: Math.tex(
+              tex,
+              mathStyle: MathStyle.text,
+              textStyle: (preferredStyle ?? const TextStyle()).copyWith(
+                color: textColor,
+                fontSize: 14.5,
+              ),
+              onErrorFallback: (err) => Text(
+                '\$$tex\$',
+                style: TextStyle(
+                  color: Colors.redAccent,
+                  fontFamily: codeFont,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -393,9 +402,15 @@ class CitationElementBuilder extends MarkdownElementBuilder {
   CitationElementBuilder({required this.helper, required this.isDark});
 
   @override
-  Widget? visitElementAfter(md.Element element, TextStyle? preferredStyle) {
+  Widget? visitElementAfterWithContext(
+    BuildContext context,
+    md.Element element,
+    TextStyle? preferredStyle,
+    TextStyle? parentStyle,
+  ) {
     final raw = element.textContent;
     final isBracketed = element.attributes['bracketed'] != 'false';
+    final effectiveStyle = parentStyle ?? preferredStyle ?? const TextStyle();
 
     // Handle multiple citations in brackets e.g. [@smith2020; @doe2021]
     final segments = raw.split(';').map((s) => s.trim()).toList();
@@ -408,6 +423,7 @@ class CitationElementBuilder extends MarkdownElementBuilder {
     final linkColor = isDark ? AppTheme.darkAccent : AppTheme.lightAccent;
     final isNumeric = helper.controller?.citationStyle == CitationStyle.numeric;
 
+    final Widget pill;
     if (isBracketed) {
       final combined = isNumeric
           ? formattedSegments.map((s) => s.rendered).join(', ')
@@ -417,7 +433,7 @@ class CitationElementBuilder extends MarkdownElementBuilder {
           .join('\n---\n');
       final displayText = isNumeric ? '[$combined]' : '($combined)';
 
-      return Tooltip(
+      pill = Tooltip(
         message: tooltipCombined,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
@@ -427,7 +443,7 @@ class CitationElementBuilder extends MarkdownElementBuilder {
           ),
           child: Text(
             displayText,
-            style: (preferredStyle ?? const TextStyle()).copyWith(
+            style: effectiveStyle.copyWith(
               color: linkColor,
               fontWeight: FontWeight.w600,
             ),
@@ -436,7 +452,7 @@ class CitationElementBuilder extends MarkdownElementBuilder {
       );
     } else {
       final seg = formattedSegments.first;
-      return Tooltip(
+      pill = Tooltip(
         message: seg.tooltip,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
@@ -446,7 +462,7 @@ class CitationElementBuilder extends MarkdownElementBuilder {
           ),
           child: Text(
             seg.rendered,
-            style: (preferredStyle ?? const TextStyle()).copyWith(
+            style: effectiveStyle.copyWith(
               color: linkColor,
               fontWeight: FontWeight.w600,
             ),
@@ -454,6 +470,18 @@ class CitationElementBuilder extends MarkdownElementBuilder {
         ),
       );
     }
+
+    return RichText(
+      text: TextSpan(
+        children: [
+          WidgetSpan(
+            alignment: PlaceholderAlignment.baseline,
+            baseline: TextBaseline.alphabetic,
+            child: pill,
+          ),
+        ],
+      ),
+    );
   }
 }
 

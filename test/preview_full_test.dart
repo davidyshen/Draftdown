@@ -570,4 +570,43 @@ Some paragraph in between.
       expect(controller.content, contains('- [x] Second task'));
     },
   );
+
+  testWidgets(
+    'Inline citations and inline LaTeX merge into surrounding RichText without forcing line breaks',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final controller = EditorController();
+      addTearDown(controller.dispose);
+
+      const markdown =
+          'Both sub-models evaluate (\$f(\\mathbf{X})\$), while persistence [@partel2011]. Next sentence.';
+      controller.textController.text = markdown;
+      controller.flushPendingRenderUpdate();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: MarkdownPreviewView(
+              markdown: controller.previewMarkdown,
+              controller: controller,
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      // The paragraph should be merged into a single RichText (via Text.rich)
+      // containing the surrounding text and WidgetSpans for inline math & citation.
+      final mergedTextFinder = find.byWidgetPredicate((w) {
+        if (w is RichText && w.text is TextSpan) {
+          final plain = w.text.toPlainText();
+          return plain.contains('Both sub-models evaluate (') &&
+              plain.contains('), while persistence ') &&
+              plain.contains('. Next sentence.');
+        }
+        return false;
+      });
+      expect(mergedTextFinder, findsOneWidget);
+    },
+  );
 }
