@@ -1248,6 +1248,128 @@ class EditorController extends ChangeNotifier {
     }
   }
 
+  /// Indent at the cursor by [spaces] spaces, or indent all lines in the
+  /// current selection by [spaces] spaces when a block of text is highlighted.
+  void indentSelection({int spaces = 2}) {
+    final indent = ' ' * spaces;
+    final currentText = textController.text;
+    final selection = textController.selection;
+
+    if (!selection.isValid) {
+      insertText(indent);
+      return;
+    }
+
+    if (selection.isCollapsed) {
+      final offset = selection.start;
+      final newText = currentText.replaceRange(offset, offset, indent);
+      textController.value = TextEditingValue(
+        text: newText,
+        selection: TextSelection.collapsed(offset: offset + spaces),
+      );
+      return;
+    }
+
+    final selStart = selection.start;
+    final selEnd = selection.end;
+    final isReversed = selection.baseOffset > selection.extentOffset;
+
+    final lineStart = selStart == 0
+        ? 0
+        : currentText.lastIndexOf('\n', selStart - 1) + 1;
+    final effectiveEnd = (selEnd > lineStart && currentText[selEnd - 1] == '\n')
+        ? selEnd - 1
+        : selEnd;
+    final nextNewline = currentText.indexOf('\n', effectiveEnd);
+    final blockEnd = nextNewline == -1 ? currentText.length : nextNewline;
+
+    final lines = currentText.substring(lineStart, blockEnd).split('\n');
+    final indentedBlock = lines.map((line) => '$indent$line').join('\n');
+    final newText = currentText.replaceRange(
+      lineStart,
+      blockEnd,
+      indentedBlock,
+    );
+
+    final newStart = selStart + spaces;
+    final newEnd = selEnd + (lines.length * spaces);
+    textController.value = TextEditingValue(
+      text: newText,
+      selection: isReversed
+          ? TextSelection(baseOffset: newEnd, extentOffset: newStart)
+          : TextSelection(baseOffset: newStart, extentOffset: newEnd),
+    );
+  }
+
+  /// Outdent (unindent) the current line or all lines in the selection by up to
+  /// [spaces] leading spaces.
+  void outdentSelection({int spaces = 2}) {
+    final currentText = textController.text;
+    final selection = textController.selection;
+    if (!selection.isValid) return;
+
+    final selStart = selection.start;
+    final selEnd = selection.end;
+    final isReversed = selection.baseOffset > selection.extentOffset;
+
+    final lineStart = selStart == 0
+        ? 0
+        : currentText.lastIndexOf('\n', selStart - 1) + 1;
+    final effectiveEnd =
+        (!selection.isCollapsed &&
+            selEnd > lineStart &&
+            currentText[selEnd - 1] == '\n')
+        ? selEnd - 1
+        : selEnd;
+    final nextNewline = currentText.indexOf('\n', effectiveEnd);
+    final blockEnd = nextNewline == -1 ? currentText.length : nextNewline;
+
+    final lines = currentText.substring(lineStart, blockEnd).split('\n');
+    int firstLineRemoved = 0;
+    int totalRemoved = 0;
+    final outdentedLines = <String>[];
+
+    for (int i = 0; i < lines.length; i++) {
+      final line = lines[i];
+      int removed = 0;
+      if (line.startsWith('\t')) {
+        removed = 1;
+      } else {
+        while (removed < spaces && removed < line.length && line[removed] == ' ') {
+          removed++;
+        }
+      }
+      if (i == 0) {
+        firstLineRemoved = removed;
+      }
+      totalRemoved += removed;
+      outdentedLines.add(line.substring(removed));
+    }
+
+    if (totalRemoved == 0) return;
+
+    final outdentedBlock = outdentedLines.join('\n');
+    final newText = currentText.replaceRange(
+      lineStart,
+      blockEnd,
+      outdentedBlock,
+    );
+
+    final newStart = (selStart - firstLineRemoved).clamp(
+      lineStart,
+      newText.length,
+    );
+    final newEnd = (selEnd - totalRemoved).clamp(newStart, newText.length);
+    textController.value = TextEditingValue(
+      text: newText,
+      selection: selection.isCollapsed
+          ? TextSelection.collapsed(offset: newStart)
+          : (isReversed
+                ? TextSelection(baseOffset: newEnd, extentOffset: newStart)
+                : TextSelection(baseOffset: newStart, extentOffset: newEnd)),
+    );
+  }
+
   /// Format currently selected text with markdown prefix and optional suffix
   void formatSelection(String prefix, [String? suffix]) {
     final post = suffix ?? (prefix.endsWith(' ') ? '' : prefix);

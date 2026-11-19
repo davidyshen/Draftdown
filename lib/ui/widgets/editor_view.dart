@@ -716,27 +716,40 @@ class _EditorViewState extends State<EditorView> with WidgetsBindingObserver {
                               _lastSecondaryClickGlobalPos = null;
                             }
                           },
-                          child: TextField(
-                            key: _textFieldKey,
-                            controller: widget.controller.textController,
-                            focusNode: widget.controller.focusNode,
-                            scrollController:
-                                widget.controller.scrollController,
-                            maxLines: null,
-                            expands: true,
-                            keyboardType: TextInputType.multiline,
-                            style: editorTextStyle,
-                            strutStyle: editorStrutStyle,
-                            contextMenuBuilder: _buildContextMenu,
-                            decoration: const InputDecoration(
-                              border: InputBorder.none,
-                              contentPadding: EdgeInsets.fromLTRB(
-                                _contentPaddingHorizontal,
-                                _contentPaddingTop,
-                                _contentPaddingHorizontal,
-                                _contentPaddingBottom,
+                          child: CallbackShortcuts(
+                            bindings: <ShortcutActivator, VoidCallback>{
+                              const SingleActivator(LogicalKeyboardKey.tab): () {
+                                widget.controller.indentSelection();
+                              },
+                              const SingleActivator(
+                                LogicalKeyboardKey.tab,
+                                shift: true,
+                              ): () {
+                                widget.controller.outdentSelection();
+                              },
+                            },
+                            child: TextField(
+                              key: _textFieldKey,
+                              controller: widget.controller.textController,
+                              focusNode: widget.controller.focusNode,
+                              scrollController:
+                                  widget.controller.scrollController,
+                              maxLines: null,
+                              expands: true,
+                              keyboardType: TextInputType.multiline,
+                              style: editorTextStyle,
+                              strutStyle: editorStrutStyle,
+                              contextMenuBuilder: _buildContextMenu,
+                              decoration: const InputDecoration(
+                                border: InputBorder.none,
+                                contentPadding: EdgeInsets.fromLTRB(
+                                  _contentPaddingHorizontal,
+                                  _contentPaddingTop,
+                                  _contentPaddingHorizontal,
+                                  _contentPaddingBottom,
+                                ),
+                                isDense: true,
                               ),
-                              isDense: true,
                             ),
                           ),
                         ),

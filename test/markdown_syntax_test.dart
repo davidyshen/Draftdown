@@ -545,5 +545,28 @@ void main() {
         expect(incResult.$1[i].type, equals(fullExpected[i].type));
       }
     });
+
+    test(
+      'buildSpanFromTokens renders trailing and consecutive spaces as non-breaking spaces without changing length',
+      () {
+        const text = 'David Shen: david.shen@bio.au.dk   \n## Author   contributions';
+        final tokens = MarkdownSyntaxHighlighter.parseTokens(text);
+        final span = MarkdownSyntaxHighlighter.buildSpanFromTokens(
+          text: text,
+          tokens: tokens,
+          baseStyle: baseStyle,
+          theme: darkTheme,
+        );
+
+        final rendered = span.toPlainText();
+        expect(rendered.length, equals(text.length));
+        expect(
+          rendered,
+          equals(
+            'David Shen: david.shen@bio.au.dk\u00A0\u00A0\u00A0\n## Author \u00A0\u00A0contributions',
+          ),
+        );
+      },
+    );
   });
 }
