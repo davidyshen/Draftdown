@@ -12,6 +12,7 @@ class AppSidebar extends StatefulWidget {
   final VoidCallback onNewFile;
   final VoidCallback onOpenSettingsDialog;
   final VoidCallback onToggleTheme;
+  final VoidCallback? onResolveConflict;
   final bool isFloating;
 
   const AppSidebar({
@@ -21,6 +22,7 @@ class AppSidebar extends StatefulWidget {
     required this.onNewFile,
     required this.onOpenSettingsDialog,
     required this.onToggleTheme,
+    this.onResolveConflict,
     this.isFloating = false,
   });
 
@@ -287,6 +289,7 @@ class _AppSidebarState extends State<AppSidebar> {
     final fileName = widget.controller.currentFileName;
     final filePath = widget.controller.currentFilePath;
     final isModified = widget.controller.isModified;
+    final hasConflict = widget.controller.hasConflict;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
@@ -295,9 +298,11 @@ class _AppSidebarState extends State<AppSidebar> {
           color: isDark ? AppTheme.darkSurface : AppTheme.lightSurface,
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
-            color: isModified
-                ? theme.colorScheme.primary.withValues(alpha: 0.5)
-                : borderColor,
+            color: hasConflict
+                ? Colors.red.withValues(alpha: 0.65)
+                : (isModified
+                      ? theme.colorScheme.primary.withValues(alpha: 0.5)
+                      : borderColor),
           ),
           boxShadow: [
             BoxShadow(
@@ -312,39 +317,80 @@ class _AppSidebarState extends State<AppSidebar> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 6,
-                    vertical: 2,
-                  ),
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.primary.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.check_circle_outline,
-                        size: 11,
-                        color: theme.colorScheme.primary,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        'CURRENT FILE',
-                        style: TextStyle(
-                          fontSize: 9.5,
-                          fontWeight: FontWeight.w700,
+                Flexible(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.primary.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.check_circle_outline,
+                          size: 11,
                           color: theme.colorScheme.primary,
-                          letterSpacing: 0.6,
                         ),
-                      ),
-                    ],
+                        const SizedBox(width: 4),
+                        Flexible(
+                          child: Text(
+                            'CURRENT FILE',
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                            style: TextStyle(
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w700,
+                              color: theme.colorScheme.primary,
+                              letterSpacing: 0.6,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-                const Spacer(),
-                if (isModified)
+                const SizedBox(width: 6),
+                if (hasConflict)
+                  InkWell(
+                    onTap: widget.onResolveConflict,
+                    borderRadius: BorderRadius.circular(4),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 5,
+                        vertical: 1.5,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.red.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.circle,
+                            size: 7,
+                            color: Colors.red,
+                          ),
+                          SizedBox(width: 4),
+                          Text(
+                            'Conflict',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.red,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                else if (isModified)
                   Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 5,
@@ -422,6 +468,7 @@ class _AppSidebarState extends State<AppSidebar> {
             const SizedBox(height: 10),
             // Action buttons for currently open file
             Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Expanded(
                   child: OutlinedButton.icon(
@@ -722,6 +769,7 @@ class _AppSidebarState extends State<AppSidebar> {
         if (hasActiveHistoryAtTop && index == 0) {
           final entry = activeHistoryEntry;
           final isModified = widget.controller.isFileModified(entry.path);
+          final hasConflict = widget.controller.isFileConflicted(entry.path);
           final openDoc = widget.controller.openDocumentForPath(entry.path);
           return _buildSidebarFileItem(
             fileName: entry.fileName,
@@ -730,6 +778,7 @@ class _AppSidebarState extends State<AppSidebar> {
             isCurrent: true,
             isOpen: true,
             isModified: isModified,
+            hasConflict: hasConflict,
             theme: theme,
             isDark: isDark,
             lightTextColor: lightTextColor,
@@ -780,6 +829,7 @@ class _AppSidebarState extends State<AppSidebar> {
         final isCurrent = entry.path == widget.controller.currentFilePath;
         final isOpen = widget.controller.isFileOpen(entry.path);
         final isModified = widget.controller.isFileModified(entry.path);
+        final hasConflict = widget.controller.isFileConflicted(entry.path);
         final openDoc = widget.controller.openDocumentForPath(entry.path);
 
         return _buildSidebarFileItem(
@@ -789,6 +839,7 @@ class _AppSidebarState extends State<AppSidebar> {
           isCurrent: isCurrent,
           isOpen: isOpen,
           isModified: isModified,
+          hasConflict: hasConflict,
           theme: theme,
           isDark: isDark,
           lightTextColor: lightTextColor,
@@ -858,6 +909,7 @@ class _AppSidebarState extends State<AppSidebar> {
     required bool isCurrent,
     required bool isOpen,
     required bool isModified,
+    bool hasConflict = false,
     required ThemeData theme,
     required bool isDark,
     required Color lightTextColor,
@@ -919,7 +971,17 @@ class _AppSidebarState extends State<AppSidebar> {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              if (isModified) ...[
+              if (hasConflict) ...[
+                const SizedBox(width: 6),
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: const BoxDecoration(
+                    color: Colors.red,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ] else if (isModified) ...[
                 const SizedBox(width: 6),
                 Container(
                   width: 8,

@@ -1015,4 +1015,117 @@ def shannon_index(counts):
       },
     );
   });
+
+  group('External File Change Watching & Conflict Detection', () {
+    test('fileWatchDebounce is 150ms and watching starts/stops cleanly', () {
+      expect(
+        EditorController.fileWatchDebounce,
+        equals(const Duration(milliseconds: 150)),
+      );
+      final controller = EditorController();
+      addTearDown(controller.dispose);
+
+      expect(controller.isFileWatchingActive, isFalse);
+      controller.startFileWatching();
+      expect(controller.isFileWatchingActive, isTrue);
+      controller.stopFileWatching();
+      expect(controller.isFileWatchingActive, isFalse);
+    });
+
+    test(
+      'auto-reloads disk changes via directory watcher when there are no unsaved changes',
+      () async {
+        SharedPreferences.setMockInitialValues({});
+        final tempDir = await Directory.systemTemp.createTemp(
+          'draftdown_watch_reload_',
+        );
+        addTearDown(() => tempDir.delete(recursive: true));
+
+        final file = File('${tempDir.path}${Platform.pathSeparator}notes.md');
+        await file.writeAsString('# Initial Heading\n\nOriginal text.');
+
+        final controller = EditorController();
+        addTearDown(controller.dispose);
+        controller.startFileWatching();
+
+        final opened = await controller.openFile(file.path);
+        expect(opened, isTrue);
+        expect(controller.isModified, isFalse);
+        expect(controller.hasConflict, isFalse);
+
+        // Simulate external agent modifying the file on disk
+        await file.writeAsString(
+          '# Updated Heading\n\nUpdated by external agent.',
+        );
+
+        // Wait for OS directory watcher + 150ms debounce
+        for (
+          int i = 0;
+          i < 30 &&
+              controller.content !=
+                  '# Updated Heading\n\nUpdated by external agent.';
+          i++
+        ) {
+          await Future<void>.delayed(const Duration(milliseconds: 50));
+        }
+
+        expect(
+          controller.content,
+          equals('# Updated Heading\n\nUpdated by external agent.'),
+        );
+        expect(
+          controller.previewMarkdown,
+          equals('# Updated Heading\n\nUpdated by external agent.'),
+        );
+        expect(controller.isModified, isFalse);
+        expect(controller.hasConflict, isFalse);
+      },
+    );
+
+    test(
+      'sets Conflict status and discards changes cleanly when unsaved edits exist',
+      () async {
+        SharedPreferences.setMockInitialValues({});
+        final tempDir = await Directory.systemTemp.createTemp(
+          'draftdown_poll_conflict_',
+        );
+        addTearDown(() => tempDir.delete(recursive: true));
+
+        final file = File('${tempDir.path}${Platform.pathSeparator}notes.md');
+        await file.writeAsString('# Initial');
+
+        final controller = EditorController();
+        addTearDown(controller.dispose);
+
+        await controller.openFile(file.path);
+        controller.textController.text = '# Local Unsaved Edit';
+        expect(controller.isModified, isTrue);
+        expect(controller.hasConflict, isFalse);
+
+        // External agent modifies the file on disk
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+        await file.writeAsString('# External Agent Edit on Disk');
+
+        await controller.checkOpenFilesForChanges();
+
+        expect(controller.isModified, isTrue);
+        expect(controller.hasConflict, isTrue);
+        expect(controller.shouldPromptConflict, isTrue);
+        expect(controller.isFileConflicted(file.path), isTrue);
+        // Local unsaved content is preserved until user resolves conflict
+        expect(controller.content, equals('# Local Unsaved Edit'));
+
+        // Marking prompted suppresses duplicate popups
+        controller.markConflictPrompted();
+        expect(controller.shouldPromptConflict, isFalse);
+
+        // Discarding changes reloads disk content and clears conflict
+        final discarded = await controller.discardChangesAndReloadFromDisk();
+        expect(discarded, isTrue);
+        expect(controller.content, equals('# External Agent Edit on Disk'));
+        expect(controller.isModified, isFalse);
+        expect(controller.hasConflict, isFalse);
+      },
+    );
+  });
 }

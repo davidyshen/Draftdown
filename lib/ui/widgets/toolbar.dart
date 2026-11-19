@@ -69,14 +69,30 @@ class AppToolbar extends StatelessWidget {
                                     overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
-                                if (controller.isModified) ...[
+                                if (controller.hasConflict) ...[
                                   const SizedBox(width: 6),
-                                  Container(
-                                    width: 7,
-                                    height: 7,
-                                    decoration: const BoxDecoration(
-                                      color: Colors.amber,
-                                      shape: BoxShape.circle,
+                                  Tooltip(
+                                    message: 'Conflict: file modified on disk',
+                                    child: Container(
+                                      width: 8,
+                                      height: 8,
+                                      decoration: const BoxDecoration(
+                                        color: Colors.red,
+                                        shape: BoxShape.circle,
+                                      ),
+                                    ),
+                                  ),
+                                ] else if (controller.isModified) ...[
+                                  const SizedBox(width: 6),
+                                  Tooltip(
+                                    message: 'Unsaved changes',
+                                    child: Container(
+                                      width: 7,
+                                      height: 7,
+                                      decoration: const BoxDecoration(
+                                        color: Colors.amber,
+                                        shape: BoxShape.circle,
+                                      ),
                                     ),
                                   ),
                                 ],

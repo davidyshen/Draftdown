@@ -35,12 +35,14 @@ class _MainScreenState extends State<MainScreen> {
   bool _showFloatingSidebar = false;
   bool _isHoveringHamburger = false;
   bool _isHoveringFloatingSidebar = false;
+  bool _isConflictDialogOpen = false;
   Timer? _startupPeekTimer;
   Timer? _floatingCloseTimer;
 
   @override
   void initState() {
     super.initState();
+    widget.controller.addListener(_onControllerChanged);
     if (!widget.controller.isSidebarOpen) {
       _showFloatingSidebar = true;
       _startupPeekTimer = Timer(const Duration(seconds: 1), () {
@@ -53,10 +55,81 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   @override
+  void didUpdateWidget(covariant MainScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller.removeListener(_onControllerChanged);
+      widget.controller.addListener(_onControllerChanged);
+    }
+  }
+
+  @override
   void dispose() {
+    widget.controller.removeListener(_onControllerChanged);
     _startupPeekTimer?.cancel();
     _floatingCloseTimer?.cancel();
     super.dispose();
+  }
+
+  void _onControllerChanged() {
+    if (!mounted || _isConflictDialogOpen) return;
+    if (widget.controller.shouldPromptConflict) {
+      _isConflictDialogOpen = true;
+      widget.controller.markConflictPrompted();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _showConflictDialog();
+        } else {
+          _isConflictDialogOpen = false;
+        }
+      });
+    }
+  }
+
+  Future<void> _showConflictDialog() async {
+    try {
+      final fileName = widget.controller.currentFileName;
+      final action = await showDialog<String>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, color: Colors.red),
+              SizedBox(width: 8),
+              Text('File Conflict'),
+            ],
+          ),
+          content: Text(
+            'There are unsaved changes in $fileName, but the file on disk has been modified.\n\n'
+            'Do you want to discard your changes or save as a new file?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, 'cancel'),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, 'discard'),
+              style: TextButton.styleFrom(foregroundColor: Colors.red),
+              child: const Text('Discard Changes'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, 'save_as'),
+              child: const Text('Save as New File'),
+            ),
+          ],
+        ),
+      );
+
+      if (!mounted) return;
+      if (action == 'discard') {
+        await widget.controller.discardChangesAndReloadFromDisk();
+      } else if (action == 'save_as') {
+        await widget.controller.saveFileAs();
+      }
+    } finally {
+      _isConflictDialogOpen = false;
+    }
   }
 
   void _onHamburgerHoverChanged(bool isHovering) {
@@ -173,6 +246,7 @@ class _MainScreenState extends State<MainScreen> {
                                         onOpenSettingsDialog:
                                             _openSettingsDialog,
                                         onToggleTheme: widget.onToggleTheme,
+                                        onResolveConflict: _showConflictDialog,
                                       ),
                                     )
                                   : const SizedBox.shrink(),
@@ -227,6 +301,7 @@ class _MainScreenState extends State<MainScreen> {
                               onNewFile: _handleNewFile,
                               onOpenSettingsDialog: _openSettingsDialog,
                               onToggleTheme: widget.onToggleTheme,
+                              onResolveConflict: _showConflictDialog,
                               isFloating: true,
                             ),
                           ),

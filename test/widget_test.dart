@@ -1114,4 +1114,92 @@ void main() {
       expect(betaY, lessThan(gammaY));
     },
   );
+
+  testWidgets(
+    'Conflict status shows red dot, Conflict badge, and popup dialog to discard or save as new file',
+    (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1400, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      SharedPreferences.setMockInitialValues({});
+      final tempDir = await tester.runAsync(
+        () => Directory.systemTemp.createTemp('draftdown_widget_conflict_'),
+      );
+      addTearDown(() async {
+        await tester.runAsync(() => tempDir!.delete(recursive: true));
+      });
+
+      final file = File(
+        '${tempDir!.path}${Platform.pathSeparator}ConflictDoc.md',
+      );
+      await tester.runAsync(() => file.writeAsString('# Original'));
+
+      final controller = EditorController();
+      addTearDown(controller.dispose);
+      await tester.runAsync(() => controller.openFile(file.path));
+      controller.toggleSidebar();
+
+      await tester.pumpWidget(
+        DraftdownApp(controller: controller, initialDarkMode: false),
+      );
+      await tester.pumpAndSettle();
+
+      // Make an unsaved edit in the app
+      controller.textController.text = '# Unsaved Local Edit';
+      await tester.pump();
+      expect(find.text('Unsaved'), findsOneWidget);
+
+      // Modify the file on disk externally
+      await tester.runAsync(() async {
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+        await file.writeAsString('# Modified On Disk By Agent');
+        await controller.checkOpenFilesForChanges();
+      });
+
+      await tester.pumpAndSettle();
+
+      // Conflict badge and popup dialog should be visible
+      expect(find.text('Conflict'), findsOneWidget);
+      expect(find.text('File Conflict'), findsOneWidget);
+      expect(
+        find.textContaining('unsaved changes'),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining('file on disk has been modified'),
+        findsOneWidget,
+      );
+      expect(find.text('Discard Changes'), findsOneWidget);
+      expect(find.text('Save as New File'), findsOneWidget);
+
+      // Verify red warning dot is rendered in toolbar/sidebar
+      final redDots = tester.widgetList<Container>(
+        find.byWidgetPredicate(
+          (w) =>
+              w is Container &&
+              w.decoration is BoxDecoration &&
+              (w.decoration as BoxDecoration).shape == BoxShape.circle &&
+              (w.decoration as BoxDecoration).color == Colors.red,
+        ),
+      );
+      expect(redDots.length, greaterThanOrEqualTo(1));
+
+      // Tap Discard Changes -> should reload disk content and clear conflict
+      await tester.tap(find.text('Discard Changes'));
+      await tester.pumpAndSettle();
+      for (int i = 0; i < 20 && controller.hasConflict; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 20)),
+        );
+        await tester.pump();
+      }
+      await tester.pumpAndSettle();
+
+      expect(controller.content, equals('# Modified On Disk By Agent'));
+      expect(controller.isModified, isFalse);
+      expect(controller.hasConflict, isFalse);
+      expect(find.text('Conflict'), findsNothing);
+    },
+  );
 }
