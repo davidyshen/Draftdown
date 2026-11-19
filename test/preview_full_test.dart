@@ -161,11 +161,19 @@ Another reference to @holling1973resilience is cited here.
       );
       await tester.pump();
 
-      expect(find.textContaining('Zizka, A., Silvestro, D., Andermann, T., Azevedo, J., Ritter, C. D., Edler, D., et al.'), findsWidgets);
+      expect(
+        find.textContaining(
+          'Zizka, A., Silvestro, D., Andermann, T., Azevedo, J., Ritter, C. D., Edler, D., et al.',
+        ),
+        findsWidgets,
+      );
       expect(find.textContaining('Farooq, H.'), findsNothing);
       expect(find.textContaining('Antonelli, A.'), findsNothing);
       expect(find.textContaining('10(5), 744–751'), findsWidgets);
-      expect(find.textContaining('https://doi.org/10.1111/2041-210X.13152'), findsWidgets);
+      expect(
+        find.textContaining('https://doi.org/10.1111/2041-210X.13152'),
+        findsWidgets,
+      );
     },
   );
 

@@ -201,6 +201,7 @@ class MarkdownRenderService {
     final withoutCodeBlocks = markdown.replaceAll(_fencedCodeBlockRegex, '');
     return _existingRefHeadingRegex.hasMatch(withoutCodeBlocks);
   }
+
   static final RegExp _citeKeyExtractRegex = RegExp(r'@([a-zA-Z0-9_\-:#\/]+)');
   static final RegExp _leadingAtOrHyphenRegex = RegExp(r'^[@\-]+');
   static final RegExp _yearFallbackRegex = RegExp(r'(19\d\d|20\d\d)');

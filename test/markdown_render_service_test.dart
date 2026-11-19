@@ -101,9 +101,7 @@ As demonstrated by @turing1950 and earlier in [@shannon1948].
         final result = MarkdownRenderService.executeMarkdownRender(payload);
         expect(result.processedMarkdown, contains('### References'));
         // In author-year, Shannon (S) appears before Turing (T)
-        final shannonIdx = result.processedMarkdown.indexOf(
-          'Shannon, C. E.',
-        );
+        final shannonIdx = result.processedMarkdown.indexOf('Shannon, C. E.');
         final turingIdx = result.processedMarkdown.indexOf('Turing, A. M.');
         expect(shannonIdx, isNot(-1));
         expect(shannonIdx, lessThan(turingIdx));
@@ -149,11 +147,15 @@ First [@turing1950], then [@shannon1948].
         expect(result.numericIndices['shannon1948'], equals(2));
         expect(
           result.processedMarkdown,
-          contains('1. Turing, A. M. (1950). Computing Machinery and Intelligence. *Mind*.'),
+          contains(
+            '1. Turing, A. M. (1950). Computing Machinery and Intelligence. *Mind*.',
+          ),
         );
         expect(
           result.processedMarkdown,
-          contains('2. Shannon, C. E. (1948). A Mathematical Theory of Communication. *Bell System Technical Journal*.'),
+          contains(
+            '2. Shannon, C. E. (1948). A Mathematical Theory of Communication. *Bell System Technical Journal*.',
+          ),
         );
       },
     );
@@ -404,10 +406,8 @@ Formula: \$E=mc^2\$.
       },
     );
 
-    test(
-      'generates bibliography when non-bibliography heading or code block mentions References',
-      () {
-        const mdWithCodeAndSubheading = '''
+    test('generates bibliography when non-bibliography heading or code block mentions References', () {
+      const mdWithCodeAndSubheading = '''
 # Large Technical Guide
 
 ## References to external APIs
@@ -418,36 +418,32 @@ Formula: \$E=mc^2\$.
 
 As shown by @turing1950computing.
 ''';
-        final result = MarkdownRenderService.executeMarkdownRender(
-          MarkdownRenderPayload(
-            renderId: 1,
-            rawMarkdown: mdWithCodeAndSubheading,
-            citations: const [],
-            citationStyle: CitationStyle.authorYear,
-          ),
-        );
+      final result = MarkdownRenderService.executeMarkdownRender(
+        MarkdownRenderPayload(
+          renderId: 1,
+          rawMarkdown: mdWithCodeAndSubheading,
+          citations: const [],
+          citationStyle: CitationStyle.authorYear,
+        ),
+      );
 
-        expect(result.processedMarkdown, contains('### References'));
-        expect(result.processedMarkdown, contains('Turing (1950)'));
-      },
-    );
+      expect(result.processedMarkdown, contains('### References'));
+      expect(result.processedMarkdown, contains('Turing (1950)'));
+    });
 
-    test(
-      'skips auto-generated bibliography when standalone References heading exists with CRLF',
-      () {
-        const mdWithCrlfRefs =
-            '# Paper\r\n\r\nCited @turing1950computing.\r\n\r\n## References\r\n\r\n- Manual entry\r\n';
-        final result = MarkdownRenderService.executeMarkdownRender(
-          MarkdownRenderPayload(
-            renderId: 1,
-            rawMarkdown: mdWithCrlfRefs,
-            citations: const [],
-            citationStyle: CitationStyle.authorYear,
-          ),
-        );
+    test('skips auto-generated bibliography when standalone References heading exists with CRLF', () {
+      const mdWithCrlfRefs =
+          '# Paper\r\n\r\nCited @turing1950computing.\r\n\r\n## References\r\n\r\n- Manual entry\r\n';
+      final result = MarkdownRenderService.executeMarkdownRender(
+        MarkdownRenderPayload(
+          renderId: 1,
+          rawMarkdown: mdWithCrlfRefs,
+          citations: const [],
+          citationStyle: CitationStyle.authorYear,
+        ),
+      );
 
-        expect(result.processedMarkdown, isNot(contains('### References')));
-      },
-    );
+      expect(result.processedMarkdown, isNot(contains('### References')));
+    });
   });
 }

@@ -226,8 +226,10 @@ class CitationItem {
           ? const []
           : given.split(_whitespaceRegex).where((s) => s.isNotEmpty).toList();
     } else {
-      final parts =
-          trimmed.split(_whitespaceRegex).where((s) => s.isNotEmpty).toList();
+      final parts = trimmed
+          .split(_whitespaceRegex)
+          .where((s) => s.isNotEmpty)
+          .toList();
       if (parts.length <= 1) return trimmed;
       surname = parts.last;
       givenParts = parts.sublist(0, parts.length - 1);
@@ -235,19 +237,22 @@ class CitationItem {
 
     if (givenParts.isEmpty) return surname;
 
-    final initials = givenParts.map((part) {
-      // Preserve hyphenated given names like "Jean-Luc" -> "J.-L."
-      if (part.contains('-')) {
-        return part
-            .split('-')
-            .where((p) => p.isNotEmpty)
-            .map((p) => '${p[0].toUpperCase()}.')
-            .join('-');
-      }
-      final clean = part.replaceAll('.', '');
-      if (clean.isEmpty) return '';
-      return '${clean[0].toUpperCase()}.';
-    }).where((s) => s.isNotEmpty).join(' ');
+    final initials = givenParts
+        .map((part) {
+          // Preserve hyphenated given names like "Jean-Luc" -> "J.-L."
+          if (part.contains('-')) {
+            return part
+                .split('-')
+                .where((p) => p.isNotEmpty)
+                .map((p) => '${p[0].toUpperCase()}.')
+                .join('-');
+          }
+          final clean = part.replaceAll('.', '');
+          if (clean.isEmpty) return '';
+          return '${clean[0].toUpperCase()}.';
+        })
+        .where((s) => s.isNotEmpty)
+        .join(' ');
 
     return initials.isNotEmpty ? '$surname, $initials' : surname;
   }
@@ -334,8 +339,8 @@ class CitationItem {
     if (cleanDoi.isNotEmpty) {
       final doiUrl =
           cleanDoi.startsWith('http://') || cleanDoi.startsWith('https://')
-              ? cleanDoi
-              : 'https://doi.org/$cleanDoi';
+          ? cleanDoi
+          : 'https://doi.org/$cleanDoi';
       buf.write(' $doiUrl');
     } else if (cleanUrl.isNotEmpty) {
       buf.write(' $cleanUrl');
