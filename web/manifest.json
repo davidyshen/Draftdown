@@ -1,6 +1,6 @@
 {
-    "name": "draftdown",
-    "short_name": "draftdown",
+    "name": "Draftdown",
+    "short_name": "Draftdown",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

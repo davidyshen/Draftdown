@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../controllers/editor_controller.dart';
 import '../models/citation_item.dart';
+import 'markdown_render_service.dart';
 import 'pandoc_service.dart';
 
 /// Service generating publication-quality HTML and PDF documents directly
@@ -23,11 +24,6 @@ class DirectExportService {
   );
   static final RegExp _inTextRegex = RegExp(
     r'(?<![\w@])@([a-zA-Z0-9_\-:#\/]+)(?:\[([^\]]+)\])?',
-  );
-  static final RegExp _existingReferencesRegex = RegExp(
-    r'^(?:#{1,6}\s*(?:References|Bibliography)|<a\s+name="references">)',
-    caseSensitive: false,
-    multiLine: true,
   );
 
   String? _cachedBrowserExecutable;
@@ -245,7 +241,8 @@ class DirectExportService {
 
     // 4. Append References section if citations were present and no heading exists
     if (citedKeysInOrder.isNotEmpty) {
-      final hasExistingReferences = _existingReferencesRegex.hasMatch(markdown);
+      final hasExistingReferences =
+          MarkdownRenderService.hasExistingReferencesHeading(markdown);
 
       if (!hasExistingReferences) {
         final buffer = StringBuffer(processed);
@@ -257,32 +254,14 @@ class DirectExportService {
             final num = i + 1;
             final item = _resolveCitation(key, controller);
             if (item != null) {
-              final authors = item.bibliographyAuthorsSummary;
-              final yearStr = item.effectiveYear != 'n.d.'
-                  ? item.effectiveYear
-                  : (item.year != null && item.year!.isNotEmpty
-                        ? item.year!
-                        : '');
-              final yearDisplay = yearStr.isNotEmpty ? ' ($yearStr)' : '';
-              final title = item.title;
-              final venue =
-                  (item.venue != null && item.venue!.trim().isNotEmpty)
-                  ? ' *${item.venue}*.'
-                  : '';
-              final doi = (item.doi != null && item.doi!.trim().isNotEmpty)
-                  ? ' DOI: ${item.doi}.'
-                  : '';
-              final url =
-                  (item.url != null &&
-                      item.url!.trim().isNotEmpty &&
-                      item.doi == null)
-                  ? ' Available at: ${item.url}.'
-                  : '';
-              buffer.writeln(
-                '$num. **$authors**$yearDisplay. *$title*.$venue$doi$url',
-              );
+              buffer.writeln(item.formatBibliographyEntry(numericIndex: num));
             } else {
-              buffer.writeln('$num. **@$key**. Citekey: `$key`');
+              final seg = _formatCitationSegment(
+                '@$key',
+                bracketed: false,
+                controller: controller,
+              );
+              buffer.writeln('$num. $seg. `@$key`');
             }
           }
         } else {
@@ -308,37 +287,14 @@ class DirectExportService {
           for (final key in sortedKeys) {
             final item = _resolveCitation(key, controller);
             if (item != null) {
-              final authors = item.bibliographyAuthorsSummary;
-              final yearStr = item.effectiveYear != 'n.d.'
-                  ? item.effectiveYear
-                  : (item.year != null && item.year!.isNotEmpty
-                        ? item.year!
-                        : '');
-              final yearDisplay = yearStr.isNotEmpty ? ' ($yearStr)' : '';
-              final title = item.title;
-              final venue =
-                  (item.venue != null && item.venue!.trim().isNotEmpty)
-                  ? ' *${item.venue}*.'
-                  : '';
-              final doi = (item.doi != null && item.doi!.trim().isNotEmpty)
-                  ? ' DOI: ${item.doi}.'
-                  : '';
-              final url =
-                  (item.url != null &&
-                      item.url!.trim().isNotEmpty &&
-                      item.doi == null)
-                  ? ' Available at: ${item.url}.'
-                  : '';
-              buffer.writeln(
-                '- **$authors**$yearDisplay. *$title*.$venue$doi$url',
-              );
+              buffer.writeln(item.formatBibliographyEntry());
             } else {
               final seg = _formatCitationSegment(
                 '@$key',
                 bracketed: false,
                 controller: controller,
               );
-              buffer.writeln('- **$seg**. Citekey: `$key`');
+              buffer.writeln('- $seg. `@$key`');
             }
           }
         }

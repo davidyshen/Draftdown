@@ -185,11 +185,23 @@ class MarkdownRenderService {
   static final RegExp _citeRegex = RegExp(
     r'(?:\[(?:-?@[a-zA-Z0-9_\-:#\/]+(?:[^\n\]]*))\]|(?<![\w@])@([a-zA-Z0-9_\-:#\/]+))',
   );
+  static final RegExp _fencedCodeBlockRegex = RegExp(
+    r'^(?:```|~~~)[\s\S]*?^(?:```|~~~)[ \t]*\r?$',
+    multiLine: true,
+  );
   static final RegExp _existingRefHeadingRegex = RegExp(
-    r'^(?:#{1,6}\s*(?:References|Bibliography)|<a\s+name="references">)',
+    r'^(?:#{1,6}\s*(?:References|Bibliography)[ \t]*\r?$|<a\s+name="references">)',
     caseSensitive: false,
     multiLine: true,
   );
+
+  /// Returns true if [markdown] already contains a standalone References or
+  /// Bibliography heading outside fenced code blocks.
+  static bool hasExistingReferencesHeading(String markdown) {
+    final withoutCodeBlocks = markdown.replaceAll(_fencedCodeBlockRegex, '');
+    return _existingRefHeadingRegex.hasMatch(withoutCodeBlocks);
+  }
+
   static final RegExp _citeKeyExtractRegex = RegExp(r'@([a-zA-Z0-9_\-:#\/]+)');
   static final RegExp _leadingAtOrHyphenRegex = RegExp(r'^[@\-]+');
   static final RegExp _yearFallbackRegex = RegExp(r'(19\d\d|20\d\d)');
@@ -335,7 +347,7 @@ class MarkdownRenderService {
     }
 
     final matches = _citeRegex.allMatches(processed);
-    if (matches.isEmpty || _existingRefHeadingRegex.hasMatch(processed)) {
+    if (matches.isEmpty || hasExistingReferencesHeading(processed)) {
       return MarkdownRenderResult(
         renderId: payload.renderId,
         rawMarkdown: raw,
@@ -405,29 +417,12 @@ class MarkdownRenderService {
             .toLowerCase();
         final item = citationLookup[clean];
         if (item != null) {
-          final authors = item.bibliographyAuthorsSummary;
-          final yearStr = item.effectiveYear != 'n.d.'
-              ? item.effectiveYear
-              : (item.year != null && item.year!.isNotEmpty ? item.year! : '');
-          final yearDisplay = yearStr.isNotEmpty ? ' ($yearStr)' : '';
-          final title = item.title;
-          final venue = (item.venue != null && item.venue!.trim().isNotEmpty)
-              ? ' *${item.venue}*.'
-              : '';
-          final doi = (item.doi != null && item.doi!.trim().isNotEmpty)
-              ? ' DOI: ${item.doi}.'
-              : '';
-          final url =
-              (item.url != null &&
-                  item.url!.trim().isNotEmpty &&
-                  item.doi == null)
-              ? ' Available at: ${item.url}.'
-              : '';
-          buffer.writeln(
-            '$num. **$authors**$yearDisplay. *$title*.$venue$doi$url',
-          );
+          buffer.writeln(item.formatBibliographyEntry(numericIndex: num));
         } else {
-          buffer.writeln('$num. **@$key**. Citekey: `@$key`');
+          final authorsStr = CitationItem.inferAuthorFromKey(key);
+          final yearMatch = _yearFallbackRegex.firstMatch(key);
+          final yearStr = yearMatch?.group(0) ?? 'n.d.';
+          buffer.writeln('$num. $authorsStr ($yearStr). `@$key`');
         }
       }
     } else {
@@ -464,30 +459,12 @@ class MarkdownRenderService {
             .toLowerCase();
         final item = citationLookup[clean];
         if (item != null) {
-          final authors = item.bibliographyAuthorsSummary;
-          final yearStr = item.effectiveYear != 'n.d.'
-              ? item.effectiveYear
-              : (item.year != null && item.year!.isNotEmpty ? item.year! : '');
-          final yearDisplay = yearStr.isNotEmpty ? ' ($yearStr)' : '';
-          final title = item.title;
-          final venue = (item.venue != null && item.venue!.trim().isNotEmpty)
-              ? ' *${item.venue}*.'
-              : '';
-          final doi = (item.doi != null && item.doi!.trim().isNotEmpty)
-              ? ' DOI: ${item.doi}.'
-              : '';
-          final url =
-              (item.url != null &&
-                  item.url!.trim().isNotEmpty &&
-                  item.doi == null)
-              ? ' Available at: ${item.url}.'
-              : '';
-          buffer.writeln('- **$authors**$yearDisplay. *$title*.$venue$doi$url');
+          buffer.writeln(item.formatBibliographyEntry());
         } else {
           final authorsStr = CitationItem.inferAuthorFromKey(key);
           final yearMatch = _yearFallbackRegex.firstMatch(key);
           final yearStr = yearMatch?.group(0) ?? 'n.d.';
-          buffer.writeln('- **$authorsStr ($yearStr)**. Citekey: `@$key`');
+          buffer.writeln('- $authorsStr ($yearStr). `@$key`');
         }
       }
     }

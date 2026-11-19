@@ -111,6 +111,9 @@ class BibliographyService {
             fields['institution'] ??
             '',
       );
+      final volume = fields['volume'];
+      final issue = fields['number'] ?? fields['issue'];
+      final pages = fields['pages'];
       final doi = fields['doi'];
       final url = fields['url'];
       final abstractText = _cleanLatex(fields['abstract'] ?? '');
@@ -123,6 +126,9 @@ class BibliographyService {
           year: year,
           venue: venue.isNotEmpty ? venue : null,
           itemType: type,
+          volume: volume,
+          issue: issue,
+          pages: pages,
           doi: doi,
           url: url,
           abstractText: abstractText.isNotEmpty ? abstractText : null,
@@ -287,6 +293,9 @@ class BibliographyService {
         final type = raw['type']?.toString();
         final venue =
             raw['container-title']?.toString() ?? raw['publisher']?.toString();
+        final volume = raw['volume']?.toString();
+        final issue = raw['issue']?.toString();
+        final pages = raw['page']?.toString();
         final doi = raw['DOI']?.toString();
         final url = raw['URL']?.toString();
         final abstractText = raw['abstract']?.toString();
@@ -343,6 +352,9 @@ class BibliographyService {
             year: year,
             venue: venue,
             itemType: type,
+            volume: volume,
+            issue: issue,
+            pages: pages,
             doi: doi,
             url: url,
             abstractText: abstractText,

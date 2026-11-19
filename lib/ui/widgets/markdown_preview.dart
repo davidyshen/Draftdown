@@ -11,6 +11,7 @@ import 'package:path/path.dart' as p;
 
 import '../../controllers/editor_controller.dart';
 import '../../models/citation_item.dart';
+import '../../services/markdown_render_service.dart';
 import '../theme/app_theme.dart';
 
 // =============================================================================
@@ -1322,11 +1323,6 @@ class _MarkdownPreviewViewState extends State<MarkdownPreviewView> {
   static final RegExp _citeRegex = RegExp(
     r'(?:\[(?:-?@[a-zA-Z0-9_\-:#\/]+(?:[^\n\]]*))\]|(?<![\w@])@([a-zA-Z0-9_\-:#\/]+))',
   );
-  static final RegExp _existingRefHeadingRegex = RegExp(
-    r'^(?:#{1,6}\s*(?:References|Bibliography)|<a\s+name="references">)',
-    caseSensitive: false,
-    multiLine: true,
-  );
   static final RegExp _citeKeyExtractRegex = RegExp(r'@([a-zA-Z0-9_\-:#\/]+)');
 
   static final List<md.InlineSyntax> _inlineSyntaxes = <md.InlineSyntax>[
@@ -1483,7 +1479,9 @@ class _MarkdownPreviewViewState extends State<MarkdownPreviewView> {
     if (matches.isEmpty) return processed;
 
     // Do not append references if user already created a References or Bibliography heading
-    if (_existingRefHeadingRegex.hasMatch(processed)) return processed;
+    if (MarkdownRenderService.hasExistingReferencesHeading(processed)) {
+      return processed;
+    }
 
     // Collect unique cited keys in order of appearance
     final citedKeysInOrder = <String>[];
@@ -1524,30 +1522,14 @@ class _MarkdownPreviewViewState extends State<MarkdownPreviewView> {
         final num = i + 1;
         final item = helper.resolveItem(key);
         if (item != null) {
-          final authors = item.bibliographyAuthorsSummary;
-          final yearStr = item.effectiveYear != 'n.d.'
-              ? item.effectiveYear
-              : (item.year != null && item.year!.isNotEmpty ? item.year! : '');
-          final yearDisplay = yearStr.isNotEmpty ? ' ($yearStr)' : '';
-          final title = item.title;
-          final venue = (item.venue != null && item.venue!.trim().isNotEmpty)
-              ? ' *${item.venue}*.'
-              : '';
-          final doi = (item.doi != null && item.doi!.trim().isNotEmpty)
-              ? ' DOI: ${item.doi}.'
-              : '';
-          final url =
-              (item.url != null &&
-                  item.url!.trim().isNotEmpty &&
-                  item.doi == null)
-              ? ' Available at: ${item.url}.'
-              : '';
-          buffer.writeln(
-            '$num. **$authors**$yearDisplay. *$title*.$venue$doi$url',
-          );
+          buffer.writeln(item.formatBibliographyEntry(numericIndex: num));
         } else {
           // Fallback reference listing
-          buffer.writeln('$num. **@$key**. Citekey: `@$key`');
+          final seg = helper.formatSegment(
+            segmentText: '@$key',
+            bracketed: false,
+          );
+          buffer.writeln('$num. ${seg.rendered}. `@$key`');
         }
       }
     } else {
@@ -1572,32 +1554,14 @@ class _MarkdownPreviewViewState extends State<MarkdownPreviewView> {
       for (final key in sortedKeys) {
         final item = helper.resolveItem(key);
         if (item != null) {
-          final authors = item.bibliographyAuthorsSummary;
-          final yearStr = item.effectiveYear != 'n.d.'
-              ? item.effectiveYear
-              : (item.year != null && item.year!.isNotEmpty ? item.year! : '');
-          final yearDisplay = yearStr.isNotEmpty ? ' ($yearStr)' : '';
-          final title = item.title;
-          final venue = (item.venue != null && item.venue!.trim().isNotEmpty)
-              ? ' *${item.venue}*.'
-              : '';
-          final doi = (item.doi != null && item.doi!.trim().isNotEmpty)
-              ? ' DOI: ${item.doi}.'
-              : '';
-          final url =
-              (item.url != null &&
-                  item.url!.trim().isNotEmpty &&
-                  item.doi == null)
-              ? ' Available at: ${item.url}.'
-              : '';
-          buffer.writeln('- **$authors**$yearDisplay. *$title*.$venue$doi$url');
+          buffer.writeln(item.formatBibliographyEntry());
         } else {
           // Fallback reference listing
           final seg = helper.formatSegment(
             segmentText: '@$key',
             bracketed: false,
           );
-          buffer.writeln('- **${seg.rendered}**. Citekey: `@$key`');
+          buffer.writeln('- ${seg.rendered}. `@$key`');
         }
       }
     }
