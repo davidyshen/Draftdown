@@ -1263,6 +1263,8 @@ class MarkdownSyntaxHighlighter {
     return spans;
   }
 
+  static final RegExp _visibleSpaceRegex = RegExp(r' +(?=\r?\n|$)|(?<= ) +');
+
   /// Builds a complete TextSpan hierarchy for rendering in an editable TextField from tokens.
   /// When [windowStart] and [windowEnd] are provided (e.g. during active typing on large files),
   /// only tokens within `[windowStart, windowEnd)` are expanded into styled spans, drastically
@@ -1282,6 +1284,16 @@ class MarkdownSyntaxHighlighter {
       return TextSpan(text: '', style: baseStyle);
     }
 
+    // Preserve trailing spaces at line endings and consecutive spaces visually
+    // using non-breaking spaces (\u00A0, same UTF-16 length) so Flutter/Skia
+    // never collapses them at wrap boundaries or hides the cursor advance.
+    final displayText = text.contains(' ')
+        ? text.replaceAllMapped(
+            _visibleSpaceRegex,
+            (m) => '\u00A0' * m.group(0)!.length,
+          )
+        : text;
+
     final styles = theme.getResolvedStyles(baseStyle);
     final children = <TextSpan>[];
     int cursor = 0;
@@ -1292,7 +1304,7 @@ class MarkdownSyntaxHighlighter {
 
     void appendStyledSlice(int start, int end, TextStyle style) {
       if (start >= end) return;
-      final piece = text.substring(start, end);
+      final piece = displayText.substring(start, end);
 
       // Handle IME composing underline
       if (composingRange != null &&
@@ -1308,7 +1320,7 @@ class MarkdownSyntaxHighlighter {
           if (intersectStart > start) {
             children.add(
               TextSpan(
-                text: text.substring(start, intersectStart),
+                text: displayText.substring(start, intersectStart),
                 style: style,
               ),
             );
@@ -1316,14 +1328,17 @@ class MarkdownSyntaxHighlighter {
 
           children.add(
             TextSpan(
-              text: text.substring(intersectStart, intersectEnd),
+              text: displayText.substring(intersectStart, intersectEnd),
               style: style.copyWith(decoration: TextDecoration.underline),
             ),
           );
 
           if (end > intersectEnd) {
             children.add(
-              TextSpan(text: text.substring(intersectEnd, end), style: style),
+              TextSpan(
+                text: displayText.substring(intersectEnd, end),
+                style: style,
+              ),
             );
           }
           return;

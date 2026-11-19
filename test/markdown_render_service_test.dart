@@ -349,10 +349,10 @@ Formula: \$E=mc^2\$.
         );
         await tester.pump();
 
-        // Verify AstMarkdownBody received the pre-parsed AST nodes directly
-        final astFinder = find.byType(AstMarkdownBody);
+        // Verify SliverAstMarkdownList received the pre-parsed AST nodes directly
+        final astFinder = find.byType(SliverAstMarkdownList);
         expect(astFinder, findsOneWidget);
-        final astWidget = tester.widget<AstMarkdownBody>(astFinder);
+        final astWidget = tester.widget<SliverAstMarkdownList>(astFinder);
         expect(astWidget.astNodes, isNotNull);
         expect(astWidget.astNodes, equals(controller.astNodes));
       },

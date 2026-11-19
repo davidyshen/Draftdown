@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_math_fork/flutter_math.dart';
 import 'package:draftdown/controllers/editor_controller.dart';
@@ -194,29 +195,25 @@ Another reference to @holling1973resilience is cited here.
       );
       await tester.pumpAndSettle();
 
-      // Verify paper constraints: ConstrainedBox with maxWidth: 850
-      final constrainedBoxFinder = find.byWidgetPredicate((widget) {
-        if (widget is ConstrainedBox) {
-          return widget.constraints.maxWidth == 850.0;
-        }
-        return false;
-      });
-      expect(constrainedBoxFinder, findsOneWidget);
+      // Verify CustomScrollView for virtualised page scrolling
+      expect(find.byType(CustomScrollView), findsOneWidget);
 
-      // Verify SingleChildScrollView for continuous page scrolling
-      expect(find.byType(SingleChildScrollView), findsOneWidget);
-
-      // Verify paper Container decoration with border and drop shadow
-      final paperContainerFinder = find.byWidgetPredicate((widget) {
-        if (widget is Container && widget.decoration is BoxDecoration) {
+      // Verify DecoratedSliver page decoration with border and maxWidth: 850.0
+      final pageSliverFinder = find.byWidgetPredicate((widget) {
+        if (widget is DecoratedSliver && widget.decoration is BoxDecoration) {
           final dec = widget.decoration as BoxDecoration;
-          return dec.border != null &&
-              dec.boxShadow != null &&
-              dec.boxShadow!.isNotEmpty;
+          return dec.border != null;
         }
         return false;
       });
-      expect(paperContainerFinder, findsWidgets);
+      expect(pageSliverFinder, findsOneWidget);
+      expect(
+        tester
+            .renderObject<RenderSliver>(pageSliverFinder)
+            .constraints
+            .crossAxisExtent,
+        equals(850.0),
+      );
 
       // Verify rendered content inside MarkdownBody
       expect(find.textContaining('Document Title'), findsOneWidget);
@@ -366,16 +363,19 @@ Another reference to @holling1973resilience is cited here.
       expect(find.textContaining('Document is empty.'), findsOneWidget);
 
       // In split view (isFullView: false), desk horizontal padding is 16 on each side (32 total).
-      // The page container should take full width of available space: 700 - 32 = 668.0.
-      final pageContainerFinder = find.byWidgetPredicate(
+      // The page sliver should take full width of available space: 700 - 32 = 668.0.
+      final pageSliverFinder = find.byWidgetPredicate(
         (w) =>
-            w is Container &&
+            w is DecoratedSliver &&
             w.decoration is BoxDecoration &&
-            (w.decoration as BoxDecoration).boxShadow != null,
+            (w.decoration as BoxDecoration).border != null,
       );
-      expect(pageContainerFinder, findsOneWidget);
-      final size = tester.getSize(pageContainerFinder);
-      expect(size.width, equals(668.0));
+      expect(pageSliverFinder, findsOneWidget);
+      final crossAxisExtent = tester
+          .renderObject<RenderSliver>(pageSliverFinder)
+          .constraints
+          .crossAxisExtent;
+      expect(crossAxisExtent, equals(668.0));
     },
   );
 
@@ -524,6 +524,89 @@ Strikethrough: ~~deleted text~~
       // Verify superscript and subscript widgets are shifted up/down via Transform
       final transformFinders = find.byType(Transform);
       expect(transformFinders, findsWidgets);
+    },
+  );
+
+  testWidgets(
+    'MarkdownPreviewView virtualises blocks with SliverAstMarkdownList and preserves checkbox indices',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final controller = EditorController();
+      addTearDown(controller.dispose);
+
+      const markdown = '''
+- [ ] First task
+
+Some paragraph in between.
+
+- [ ] Second task
+''';
+      controller.textController.text = markdown;
+      controller.flushPendingRenderUpdate();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: MarkdownPreviewView(
+              markdown: controller.previewMarkdown,
+              controller: controller,
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(find.byType(CustomScrollView), findsOneWidget);
+      expect(find.byType(SliverAstMarkdownList), findsOneWidget);
+
+      final checkboxes = find.byIcon(Icons.check_box_outline_blank);
+      expect(checkboxes, findsNWidgets(2));
+
+      // Tap the second checkbox and verify only the second task is toggled
+      await tester.tap(checkboxes.at(1));
+      await tester.pump();
+
+      expect(controller.content, contains('- [ ] First task'));
+      expect(controller.content, contains('- [x] Second task'));
+    },
+  );
+
+  testWidgets(
+    'Inline citations and inline LaTeX merge into surrounding RichText without forcing line breaks',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final controller = EditorController();
+      addTearDown(controller.dispose);
+
+      const markdown =
+          'Both sub-models evaluate (\$f(\\mathbf{X})\$), while persistence [@partel2011]. Next sentence.';
+      controller.textController.text = markdown;
+      controller.flushPendingRenderUpdate();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: MarkdownPreviewView(
+              markdown: controller.previewMarkdown,
+              controller: controller,
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      // The paragraph should be merged into a single RichText (via Text.rich)
+      // containing the surrounding text and WidgetSpans for inline math & citation.
+      final mergedTextFinder = find.byWidgetPredicate((w) {
+        if (w is RichText && w.text is TextSpan) {
+          final plain = w.text.toPlainText();
+          return plain.contains('Both sub-models evaluate (') &&
+              plain.contains('), while persistence ') &&
+              plain.contains('. Next sentence.');
+        }
+        return false;
+      });
+      expect(mergedTextFinder, findsOneWidget);
     },
   );
 }

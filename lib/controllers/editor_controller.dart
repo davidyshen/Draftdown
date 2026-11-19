@@ -44,6 +44,11 @@ class OpenDocument {
   TextSelection selection;
   double scrollOffset;
   bool isModified;
+  bool hasConflict;
+  bool hasPromptedConflict;
+  String? lastKnownDiskContent;
+  DateTime? lastDiskModified;
+  int? lastDiskSize;
   String previewMarkdown;
   Map<String, int> numericIndices;
   List<md.Node>? astNodes;
@@ -61,6 +66,11 @@ class OpenDocument {
     this.selection = const TextSelection.collapsed(offset: 0),
     this.scrollOffset = 0.0,
     this.isModified = false,
+    this.hasConflict = false,
+    this.hasPromptedConflict = false,
+    this.lastKnownDiskContent,
+    this.lastDiskModified,
+    this.lastDiskSize,
     this.previewMarkdown = '',
     this.numericIndices = const {},
     this.astNodes,
@@ -97,6 +107,14 @@ class EditorController extends ChangeNotifier {
   String? _currentFilePath;
   String _currentFileName = 'Untitled.md';
   bool _isModified = false;
+  bool _hasConflict = false;
+  bool _hasPromptedConflict = false;
+  bool _isWatchingFiles = false;
+  bool _isCheckingFiles = false;
+  final Map<String, StreamSubscription<FileSystemEvent>> _directoryWatchers =
+      {};
+  final Map<String, Timer> _fileChangeDebounceTimers = {};
+  static const Duration fileWatchDebounce = Duration(milliseconds: 150);
   final MarkdownSyntaxEditingController textController =
       MarkdownSyntaxEditingController();
   final FocusNode focusNode = FocusNode();
@@ -154,6 +172,9 @@ class EditorController extends ChangeNotifier {
   String? get currentFilePath => _currentFilePath;
   String get currentFileName => _currentFileName;
   bool get isModified => _isModified;
+  bool get hasConflict => _hasConflict;
+  bool get shouldPromptConflict => _hasConflict && !_hasPromptedConflict;
+  bool get isFileWatchingActive => _isWatchingFiles;
   List<OpenDocument> get openDocuments => List.unmodifiable(_openDocuments);
   OpenDocument? get activeDocument =>
       (_activeDocumentIndex >= 0 &&
@@ -172,6 +193,18 @@ class EditorController extends ChangeNotifier {
   bool isFileModified(String path) {
     if (_pathsEqual(_currentFilePath, path)) return _isModified;
     return openDocumentForPath(path)?.isModified ?? false;
+  }
+
+  bool isFileConflicted(String path) {
+    if (_pathsEqual(_currentFilePath, path)) return _hasConflict;
+    return openDocumentForPath(path)?.hasConflict ?? false;
+  }
+
+  void markConflictPrompted() {
+    if (!_hasPromptedConflict) {
+      _hasPromptedConflict = true;
+      activeDocument?.hasPromptedConflict = true;
+    }
   }
 
   bool get isBackgroundRendering => _isBackgroundRendering;
@@ -259,6 +292,8 @@ class EditorController extends ChangeNotifier {
     } else {
       _loadWelcomeDocument();
     }
+
+    startFileWatching();
   }
 
   Future<void> _loadPreferences() async {
@@ -736,6 +771,8 @@ class EditorController extends ChangeNotifier {
         ? scrollController.offset
         : 0.0;
     doc.isModified = _isModified;
+    doc.hasConflict = _hasConflict;
+    doc.hasPromptedConflict = _hasPromptedConflict;
     doc.previewMarkdown = _previewMarkdown;
     doc.numericIndices = _numericIndices;
     doc.astNodes = _astNodes;
@@ -775,6 +812,8 @@ class EditorController extends ChangeNotifier {
     _readingTimeMinutes = doc.readingTimeMinutes;
     _citationStyle = doc.citationStyle;
     _isModified = doc.isModified;
+    _hasConflict = doc.hasConflict;
+    _hasPromptedConflict = doc.hasPromptedConflict;
     previewNotifier.value = doc.previewMarkdown;
     textController.invalidateSpellCheck();
 
@@ -815,6 +854,7 @@ class EditorController extends ChangeNotifier {
       _openDocuments.clear();
       _activeDocumentIndex = -1;
       newFile();
+      _syncDirectoryWatchers();
       return;
     }
 
@@ -830,6 +870,7 @@ class EditorController extends ChangeNotifier {
         _activeDocumentIndex--;
       }
     }
+    _syncDirectoryWatchers();
     notifyListeners();
   }
 
@@ -857,6 +898,8 @@ class EditorController extends ChangeNotifier {
     previewNotifier.value = '';
     _computeMetrics();
     _isModified = false;
+    _hasConflict = false;
+    _hasPromptedConflict = false;
     _citationStyle = CitationStyle.authorYear;
     if (scrollController.hasClients) {
       scrollController.jumpTo(0.0);
@@ -893,6 +936,7 @@ class EditorController extends ChangeNotifier {
 
     try {
       final content = await fileService.readFile(path);
+      final stat = await fileService.statFile(path);
       final fileCitationStyle = await _loadFileCitationStyle(path);
 
       if (_debounceTimer?.isActive ?? false) {
@@ -922,6 +966,8 @@ class EditorController extends ChangeNotifier {
       _lastObservedText = content;
       _computeMetrics();
       _isModified = false;
+      _hasConflict = false;
+      _hasPromptedConflict = false;
       _citationStyle = fileCitationStyle;
 
       final doc = OpenDocument(
@@ -930,6 +976,11 @@ class EditorController extends ChangeNotifier {
         fileName: _currentFileName,
         content: content,
         isModified: false,
+        hasConflict: false,
+        hasPromptedConflict: false,
+        lastKnownDiskContent: content,
+        lastDiskModified: stat?.modified,
+        lastDiskSize: stat?.size,
         wordCount: _wordCount,
         charCount: _charCount,
         lineCount: _lineCount,
@@ -947,6 +998,7 @@ class EditorController extends ChangeNotifier {
 
       flushPendingRenderUpdate();
       _syncActiveDocumentToStore();
+      _syncDirectoryWatchers();
 
       if (scrollController.hasClients) {
         scrollController.jumpTo(0.0);
@@ -993,8 +1045,15 @@ class EditorController extends ChangeNotifier {
       _computeMetrics();
       _previewMarkdown = textController.text;
       await fileService.writeFile(_currentFilePath!, textController.text);
+      final stat = await fileService.statFile(_currentFilePath!);
       _isModified = false;
+      _hasConflict = false;
+      _hasPromptedConflict = false;
+      activeDocument?.lastKnownDiskContent = textController.text;
+      activeDocument?.lastDiskModified = stat?.modified;
+      activeDocument?.lastDiskSize = stat?.size;
       _syncActiveDocumentToStore();
+      _syncDirectoryWatchers();
       await historyService.recordFileOpen(_currentFilePath!);
       notifyListeners();
       return true;
@@ -1019,10 +1078,13 @@ class EditorController extends ChangeNotifier {
       _computeMetrics();
       _previewMarkdown = textController.text;
       await fileService.writeFile(destination, textController.text);
+      final stat = await fileService.statFile(destination);
       _currentFilePath = destination;
       _currentFileName = File(destination).uri.pathSegments
           .lastWhere((s) => s.isNotEmpty);
       _isModified = false;
+      _hasConflict = false;
+      _hasPromptedConflict = false;
       // Remove any other open tab that already pointed to this destination
       for (int i = _openDocuments.length - 1; i >= 0; i--) {
         if (i != _activeDocumentIndex &&
@@ -1034,7 +1096,11 @@ class EditorController extends ChangeNotifier {
         }
       }
       activeDocument?.id = destination;
+      activeDocument?.lastKnownDiskContent = textController.text;
+      activeDocument?.lastDiskModified = stat?.modified;
+      activeDocument?.lastDiskSize = stat?.size;
       _syncActiveDocumentToStore();
+      _syncDirectoryWatchers();
       await _saveFileCitationStyle(destination, _citationStyle);
       await historyService.recordFileOpen(destination);
       notifyListeners();
@@ -1116,15 +1182,19 @@ class EditorController extends ChangeNotifier {
         await oldFile.rename(newPath);
       }
 
+      final stat = await fileService.statFile(newPath);
       _currentFilePath = newPath;
       _currentFileName = newFileName;
       activeDocument?.id = newPath;
       activeDocument?.filePath = newPath;
       activeDocument?.fileName = newFileName;
+      activeDocument?.lastDiskModified = stat?.modified;
+      activeDocument?.lastDiskSize = stat?.size;
       await _removeFileCitationStyle(oldPath);
       await _saveFileCitationStyle(newPath, _citationStyle);
       await historyService.removeEntry(oldPath);
       await historyService.recordFileOpen(newPath);
+      _syncDirectoryWatchers();
       notifyListeners();
       return null;
     } catch (e) {
@@ -1176,6 +1246,130 @@ class EditorController extends ChangeNotifier {
       _isModified = true;
       flushPendingRenderUpdate();
     }
+  }
+
+  /// Indent at the cursor by [spaces] spaces, or indent all lines in the
+  /// current selection by [spaces] spaces when a block of text is highlighted.
+  void indentSelection({int spaces = 2}) {
+    final indent = ' ' * spaces;
+    final currentText = textController.text;
+    final selection = textController.selection;
+
+    if (!selection.isValid) {
+      insertText(indent);
+      return;
+    }
+
+    if (selection.isCollapsed) {
+      final offset = selection.start;
+      final newText = currentText.replaceRange(offset, offset, indent);
+      textController.value = TextEditingValue(
+        text: newText,
+        selection: TextSelection.collapsed(offset: offset + spaces),
+      );
+      return;
+    }
+
+    final selStart = selection.start;
+    final selEnd = selection.end;
+    final isReversed = selection.baseOffset > selection.extentOffset;
+
+    final lineStart = selStart == 0
+        ? 0
+        : currentText.lastIndexOf('\n', selStart - 1) + 1;
+    final effectiveEnd = (selEnd > lineStart && currentText[selEnd - 1] == '\n')
+        ? selEnd - 1
+        : selEnd;
+    final nextNewline = currentText.indexOf('\n', effectiveEnd);
+    final blockEnd = nextNewline == -1 ? currentText.length : nextNewline;
+
+    final lines = currentText.substring(lineStart, blockEnd).split('\n');
+    final indentedBlock = lines.map((line) => '$indent$line').join('\n');
+    final newText = currentText.replaceRange(
+      lineStart,
+      blockEnd,
+      indentedBlock,
+    );
+
+    final newStart = selStart + spaces;
+    final newEnd = selEnd + (lines.length * spaces);
+    textController.value = TextEditingValue(
+      text: newText,
+      selection: isReversed
+          ? TextSelection(baseOffset: newEnd, extentOffset: newStart)
+          : TextSelection(baseOffset: newStart, extentOffset: newEnd),
+    );
+  }
+
+  /// Outdent (unindent) the current line or all lines in the selection by up to
+  /// [spaces] leading spaces.
+  void outdentSelection({int spaces = 2}) {
+    final currentText = textController.text;
+    final selection = textController.selection;
+    if (!selection.isValid) return;
+
+    final selStart = selection.start;
+    final selEnd = selection.end;
+    final isReversed = selection.baseOffset > selection.extentOffset;
+
+    final lineStart = selStart == 0
+        ? 0
+        : currentText.lastIndexOf('\n', selStart - 1) + 1;
+    final effectiveEnd =
+        (!selection.isCollapsed &&
+            selEnd > lineStart &&
+            currentText[selEnd - 1] == '\n')
+        ? selEnd - 1
+        : selEnd;
+    final nextNewline = currentText.indexOf('\n', effectiveEnd);
+    final blockEnd = nextNewline == -1 ? currentText.length : nextNewline;
+
+    final lines = currentText.substring(lineStart, blockEnd).split('\n');
+    int firstLineRemoved = 0;
+    int totalRemoved = 0;
+    final outdentedLines = <String>[];
+
+    for (int i = 0; i < lines.length; i++) {
+      final line = lines[i];
+      int removed = 0;
+      if (line.startsWith('\t')) {
+        removed = 1;
+      } else {
+        while (removed < spaces &&
+            removed < line.length &&
+            line[removed] == ' ') {
+          removed++;
+        }
+      }
+      if (i == 0) {
+        firstLineRemoved = removed;
+      }
+      totalRemoved += removed;
+      outdentedLines.add(line.substring(removed));
+    }
+
+    if (totalRemoved == 0) return;
+
+    final outdentedBlock = outdentedLines.join('\n');
+    final newText = currentText.replaceRange(
+      lineStart,
+      blockEnd,
+      outdentedBlock,
+    );
+
+    final newStart = (selStart - firstLineRemoved).clamp(
+      lineStart,
+      newText.length,
+    );
+    final newEnd = (selEnd - totalRemoved).clamp(newStart, newText.length);
+    textController.value = TextEditingValue(
+      text: newText,
+      selection: selection.isCollapsed
+          ? TextSelection.collapsed(offset: newStart)
+          : (isReversed
+                ? TextSelection(baseOffset: newEnd, extentOffset: newStart)
+                : TextSelection(baseOffset: newStart, extentOffset: newEnd)),
+    );
   }
 
   /// Format currently selected text with markdown prefix and optional suffix
@@ -1641,12 +1835,271 @@ Try writing your thoughts, inserting literature references, and exporting to Wor
     _previewMarkdown = textController.text;
     _computeMetrics();
     _isModified = false;
+    _hasConflict = false;
+    _hasPromptedConflict = false;
     _syncActiveDocumentToStore();
     notifyListeners();
   }
 
+  /// Start event-driven directory watching for open disk-backed files.
+  void startFileWatching() {
+    if (_isWatchingFiles) return;
+    _isWatchingFiles = true;
+    _syncDirectoryWatchers();
+  }
+
+  /// Stop all directory watchers and cancel any pending debounce timers.
+  void stopFileWatching() {
+    _isWatchingFiles = false;
+    for (final sub in _directoryWatchers.values) {
+      sub.cancel();
+    }
+    _directoryWatchers.clear();
+    for (final timer in _fileChangeDebounceTimers.values) {
+      timer.cancel();
+    }
+    _fileChangeDebounceTimers.clear();
+  }
+
+  void _syncDirectoryWatchers() {
+    if (!_isWatchingFiles) return;
+
+    final neededDirs = <String, String>{};
+    for (final doc in _openDocuments) {
+      final path = doc.filePath;
+      if (path == null) continue;
+      final dirPath = File(path).parent.path;
+      neededDirs[_normalizePathKey(dirPath)] = dirPath;
+    }
+
+    // Remove watchers for directories that no longer have open files
+    final staleKeys = _directoryWatchers.keys
+        .where((key) => !neededDirs.containsKey(key))
+        .toList();
+    for (final key in staleKeys) {
+      _directoryWatchers.remove(key)?.cancel();
+    }
+
+    // Add watchers for newly opened directories
+    for (final entry in neededDirs.entries) {
+      if (_directoryWatchers.containsKey(entry.key)) continue;
+      final dir = Directory(entry.value);
+      if (!dir.existsSync()) continue;
+      try {
+        final sub = dir
+            .watch(events: FileSystemEvent.all)
+            .listen(
+              _onDirectoryFileEvent,
+              onError: (Object error) {
+                debugPrint(
+                  '[EditorController] Directory watcher error for ${entry.value}: $error',
+                );
+                _directoryWatchers.remove(entry.key);
+              },
+              cancelOnError: true,
+            );
+        _directoryWatchers[entry.key] = sub;
+      } catch (e) {
+        debugPrint(
+          '[EditorController] Failed to watch directory ${entry.value}: $e',
+        );
+      }
+    }
+  }
+
+  void _onDirectoryFileEvent(FileSystemEvent event) {
+    final candidatePaths = <String>[
+      event.path,
+      if (event is FileSystemMoveEvent && event.destination != null)
+        event.destination!,
+    ];
+
+    for (final doc in _openDocuments) {
+      final docPath = doc.filePath;
+      if (docPath == null) continue;
+      if (candidatePaths.any((p) => _pathsEqual(p, docPath))) {
+        _scheduleFileChangeCheck(docPath);
+      }
+    }
+  }
+
+  void _scheduleFileChangeCheck(String filePath) {
+    final key = _normalizePathKey(filePath);
+    _fileChangeDebounceTimers[key]?.cancel();
+    _fileChangeDebounceTimers[key] = Timer(fileWatchDebounce, () {
+      _fileChangeDebounceTimers.remove(key);
+      checkFileForChanges(filePath);
+    });
+  }
+
+  /// Check a single open disk-backed document for external changes on disk.
+  Future<void> checkFileForChanges(String filePath) async {
+    final doc = openDocumentForPath(filePath);
+    if (doc == null) return;
+    await _checkDocumentForChanges(doc, forceRead: true);
+  }
+
+  /// Check all open disk-backed documents for external modifications on disk.
+  Future<void> checkOpenFilesForChanges({bool forceRead = false}) async {
+    if (_isCheckingFiles) return;
+    _isCheckingFiles = true;
+    try {
+      final docsSnapshot = List<OpenDocument>.from(_openDocuments);
+      for (final doc in docsSnapshot) {
+        await _checkDocumentForChanges(doc, forceRead: forceRead);
+      }
+    } catch (e) {
+      debugPrint('[EditorController] Error checking files for changes: $e');
+    } finally {
+      _isCheckingFiles = false;
+    }
+  }
+
+  Future<void> _checkDocumentForChanges(
+    OpenDocument doc, {
+    bool forceRead = false,
+  }) async {
+    final path = doc.filePath;
+    if (path == null) return;
+    if (!_openDocuments.contains(doc) || doc.filePath != path) return;
+
+    final stat = await fileService.statFile(path);
+    if (stat == null) return;
+
+    if (!forceRead) {
+      final metaChanged =
+          doc.lastDiskModified == null ||
+          doc.lastDiskSize == null ||
+          stat.modified != doc.lastDiskModified ||
+          stat.size != doc.lastDiskSize;
+      if (!metaChanged) return;
+    }
+
+    final diskContent = await fileService.readFile(path);
+    if (!_openDocuments.contains(doc) || doc.filePath != path) return;
+
+    doc.lastDiskModified = stat.modified;
+    doc.lastDiskSize = stat.size;
+
+    if (diskContent == doc.lastKnownDiskContent) {
+      return;
+    }
+
+    doc.lastKnownDiskContent = diskContent;
+
+    final isActive = identical(doc, activeDocument);
+    final isDocModified = isActive ? _isModified : doc.isModified;
+
+    if (!isDocModified) {
+      if (isActive) {
+        _applyDiskContentToActiveDocument(diskContent);
+      } else {
+        _applyDiskContentToBackgroundDocument(doc, diskContent);
+      }
+    } else {
+      if (isActive) {
+        final changed = !_hasConflict;
+        _hasConflict = true;
+        doc.hasConflict = true;
+        if (changed || !_hasPromptedConflict) {
+          notifyListeners();
+        }
+      } else if (!doc.hasConflict) {
+        doc.hasConflict = true;
+        doc.hasPromptedConflict = false;
+        notifyListeners();
+      }
+    }
+  }
+
+  void _applyDiskContentToActiveDocument(String diskContent) {
+    _debounceTimer?.cancel();
+    _debounceTimer = null;
+    _documentEpoch++;
+    _isBackgroundRendering = false;
+
+    final previousSelection = textController.selection;
+    final safeBase = previousSelection.baseOffset.clamp(0, diskContent.length);
+    final safeExtent = previousSelection.extentOffset.clamp(
+      0,
+      diskContent.length,
+    );
+
+    _isProgrammaticUpdate = true;
+    textController.isActivelyTyping = false;
+    textController.value = TextEditingValue(
+      text: diskContent,
+      selection: TextSelection(baseOffset: safeBase, extentOffset: safeExtent),
+    );
+    _isProgrammaticUpdate = false;
+    _lastObservedText = diskContent;
+    _isModified = false;
+    _hasConflict = false;
+    _hasPromptedConflict = false;
+    activeDocument?.hasConflict = false;
+    activeDocument?.hasPromptedConflict = false;
+
+    textController.reconcileFullHighlight();
+    textController.invalidateSpellCheck();
+    flushPendingRenderUpdate();
+    _syncActiveDocumentToStore();
+  }
+
+  void _applyDiskContentToBackgroundDocument(
+    OpenDocument doc,
+    String diskContent,
+  ) {
+    final safeBase = doc.selection.baseOffset.clamp(0, diskContent.length);
+    final safeExtent = doc.selection.extentOffset.clamp(0, diskContent.length);
+    doc.content = diskContent;
+    doc.selection = TextSelection(
+      baseOffset: safeBase,
+      extentOffset: safeExtent,
+    );
+    doc.isModified = false;
+    doc.hasConflict = false;
+    doc.hasPromptedConflict = false;
+
+    final result = MarkdownRenderService.executeMarkdownRender(
+      MarkdownRenderPayload(
+        renderId: 0,
+        rawMarkdown: diskContent,
+        citations: [...citations, ...zoteroCitations],
+        citationStyle: doc.citationStyle,
+      ),
+    );
+    doc.previewMarkdown = result.processedMarkdown;
+    doc.numericIndices = result.numericIndices;
+    doc.astNodes = result.astNodes;
+    doc.wordCount = result.wordCount;
+    doc.charCount = diskContent.length;
+    doc.lineCount = result.lineCount;
+    doc.readingTimeMinutes = result.readingTimeMinutes;
+    notifyListeners();
+  }
+
+  /// Discard in-app unsaved changes and reload the active file from disk.
+  Future<bool> discardChangesAndReloadFromDisk() async {
+    final path = _currentFilePath;
+    if (path == null) return false;
+
+    try {
+      final diskContent = await fileService.readFile(path);
+      final stat = await fileService.statFile(path);
+      activeDocument?.lastKnownDiskContent = diskContent;
+      activeDocument?.lastDiskModified = stat?.modified;
+      activeDocument?.lastDiskSize = stat?.size;
+      _applyDiskContentToActiveDocument(diskContent);
+      return true;
+    } catch (e) {
+      debugPrint('[EditorController] Error discarding changes: $e');
+      return false;
+    }
+  }
+
   @override
   void dispose() {
+    stopFileWatching();
     _debounceTimer?.cancel();
     previewNotifier.dispose();
     textController.removeListener(_onTextChanged);

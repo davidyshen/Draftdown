@@ -95,20 +95,29 @@ class MathElementBuilder extends MarkdownElementBuilder {
       );
     }
 
-    return Math.tex(
-      tex,
-      mathStyle: MathStyle.text,
-      textStyle: (preferredStyle ?? const TextStyle()).copyWith(
-        color: textColor,
-        fontSize: 14.5,
-      ),
-      onErrorFallback: (err) => Text(
-        '\$$tex\$',
-        style: TextStyle(
-          color: Colors.redAccent,
-          fontFamily: codeFont,
-          fontSize: 12,
-        ),
+    return RichText(
+      text: TextSpan(
+        children: [
+          WidgetSpan(
+            alignment: PlaceholderAlignment.middle,
+            child: Math.tex(
+              tex,
+              mathStyle: MathStyle.text,
+              textStyle: (preferredStyle ?? const TextStyle()).copyWith(
+                color: textColor,
+                fontSize: 14.5,
+              ),
+              onErrorFallback: (err) => Text(
+                '\$$tex\$',
+                style: TextStyle(
+                  color: Colors.redAccent,
+                  fontFamily: codeFont,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -393,9 +402,15 @@ class CitationElementBuilder extends MarkdownElementBuilder {
   CitationElementBuilder({required this.helper, required this.isDark});
 
   @override
-  Widget? visitElementAfter(md.Element element, TextStyle? preferredStyle) {
+  Widget? visitElementAfterWithContext(
+    BuildContext context,
+    md.Element element,
+    TextStyle? preferredStyle,
+    TextStyle? parentStyle,
+  ) {
     final raw = element.textContent;
     final isBracketed = element.attributes['bracketed'] != 'false';
+    final effectiveStyle = parentStyle ?? preferredStyle ?? const TextStyle();
 
     // Handle multiple citations in brackets e.g. [@smith2020; @doe2021]
     final segments = raw.split(';').map((s) => s.trim()).toList();
@@ -408,6 +423,7 @@ class CitationElementBuilder extends MarkdownElementBuilder {
     final linkColor = isDark ? AppTheme.darkAccent : AppTheme.lightAccent;
     final isNumeric = helper.controller?.citationStyle == CitationStyle.numeric;
 
+    final Widget pill;
     if (isBracketed) {
       final combined = isNumeric
           ? formattedSegments.map((s) => s.rendered).join(', ')
@@ -417,7 +433,7 @@ class CitationElementBuilder extends MarkdownElementBuilder {
           .join('\n---\n');
       final displayText = isNumeric ? '[$combined]' : '($combined)';
 
-      return Tooltip(
+      pill = Tooltip(
         message: tooltipCombined,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
@@ -427,7 +443,7 @@ class CitationElementBuilder extends MarkdownElementBuilder {
           ),
           child: Text(
             displayText,
-            style: (preferredStyle ?? const TextStyle()).copyWith(
+            style: effectiveStyle.copyWith(
               color: linkColor,
               fontWeight: FontWeight.w600,
             ),
@@ -436,7 +452,7 @@ class CitationElementBuilder extends MarkdownElementBuilder {
       );
     } else {
       final seg = formattedSegments.first;
-      return Tooltip(
+      pill = Tooltip(
         message: seg.tooltip,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
@@ -446,7 +462,7 @@ class CitationElementBuilder extends MarkdownElementBuilder {
           ),
           child: Text(
             seg.rendered,
-            style: (preferredStyle ?? const TextStyle()).copyWith(
+            style: effectiveStyle.copyWith(
               color: linkColor,
               fontWeight: FontWeight.w600,
             ),
@@ -454,6 +470,18 @@ class CitationElementBuilder extends MarkdownElementBuilder {
         ),
       );
     }
+
+    return RichText(
+      text: TextSpan(
+        children: [
+          WidgetSpan(
+            alignment: PlaceholderAlignment.baseline,
+            baseline: TextBaseline.alphabetic,
+            child: pill,
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -1021,6 +1049,194 @@ class _AstMarkdownBodyState extends State<AstMarkdownBody>
   }
 }
 
+/// Virtualised sliver Markdown renderer that parses/receives top-level AST
+/// nodes once and lazily builds, lays out, and paints only blocks visible in
+/// the viewport + cacheExtent.
+class SliverAstMarkdownList extends StatefulWidget {
+  final List<md.Node>? astNodes;
+  final String data;
+  final bool selectable;
+  final MarkdownStyleSheet? styleSheet;
+  final String? imageDirectory;
+  final List<md.InlineSyntax> inlineSyntaxes;
+  final Widget Function(bool isChecked, int checkboxIndex)? checkboxBuilder;
+  final Map<String, MarkdownElementBuilder> builders;
+  final bool fitContent;
+
+  const SliverAstMarkdownList({
+    super.key,
+    this.astNodes,
+    required this.data,
+    this.selectable = false,
+    this.styleSheet,
+    this.imageDirectory,
+    this.inlineSyntaxes = const [],
+    this.checkboxBuilder,
+    this.builders = const {},
+    this.fitContent = true,
+  });
+
+  @override
+  State<SliverAstMarkdownList> createState() => _SliverAstMarkdownListState();
+}
+
+class _SliverAstMarkdownListState extends State<SliverAstMarkdownList>
+    implements MarkdownBuilderDelegate {
+  List<md.Node> _nodes = const [];
+  List<int> _checkboxOffsets = const [];
+  final Map<int, Widget> _builtBlocks = {};
+  final List<GestureRecognizer> _recognizers = <GestureRecognizer>[];
+  MarkdownStyleSheet? _effectiveStyleSheet;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _prepareNodes();
+  }
+
+  @override
+  void didUpdateWidget(SliverAstMarkdownList oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.astNodes != oldWidget.astNodes ||
+        widget.data != oldWidget.data ||
+        widget.styleSheet != oldWidget.styleSheet ||
+        widget.imageDirectory != oldWidget.imageDirectory ||
+        widget.builders != oldWidget.builders) {
+      _prepareNodes();
+    }
+  }
+
+  @override
+  void dispose() {
+    _disposeRecognizers();
+    _builtBlocks.clear();
+    super.dispose();
+  }
+
+  void _disposeRecognizers() {
+    if (_recognizers.isEmpty) return;
+    final local = List<GestureRecognizer>.from(_recognizers);
+    _recognizers.clear();
+    for (final r in local) {
+      r.dispose();
+    }
+  }
+
+  @override
+  GestureRecognizer createLink(String text, String? href, String title) {
+    final recognizer = TapGestureRecognizer();
+    _recognizers.add(recognizer);
+    return recognizer;
+  }
+
+  @override
+  TextSpan formatText(MarkdownStyleSheet styleSheet, String code) {
+    code = code.replaceAll(RegExp(r'\n$'), '');
+    return TextSpan(style: styleSheet.code, text: code);
+  }
+
+  static int _countCheckboxesInNode(md.Node node) {
+    if (node is! md.Element) return 0;
+    int count = 0;
+    if (node.tag == 'input' && node.attributes['type'] == 'checkbox') {
+      count = 1;
+    }
+    final children = node.children;
+    if (children != null) {
+      for (final child in children) {
+        count += _countCheckboxesInNode(child);
+      }
+    }
+    return count;
+  }
+
+  void _prepareNodes() {
+    final theme = Theme.of(context);
+    final fallbackStyleSheet = MarkdownStyleSheet.fromTheme(theme);
+    _effectiveStyleSheet = widget.styleSheet != null
+        ? fallbackStyleSheet.merge(widget.styleSheet)
+        : fallbackStyleSheet;
+
+    _disposeRecognizers();
+    _builtBlocks.clear();
+
+    if (widget.astNodes != null) {
+      _nodes = widget.astNodes!;
+    } else {
+      final doc = md.Document(
+        extensionSet: md.ExtensionSet.gitHubFlavored,
+        inlineSyntaxes: widget.inlineSyntaxes,
+        encodeHtml: false,
+      );
+      final lines = const LineSplitter().convert(widget.data);
+      _nodes = doc.parseLines(lines);
+    }
+
+    final offsets = List<int>.filled(_nodes.length, 0);
+    int running = 0;
+    for (int i = 0; i < _nodes.length; i++) {
+      offsets[i] = running;
+      running += _countCheckboxesInNode(_nodes[i]);
+    }
+    _checkboxOffsets = offsets;
+  }
+
+  Widget _buildBlock(int index) {
+    return _builtBlocks.putIfAbsent(index, () {
+      int localCheckboxCounter = _checkboxOffsets[index];
+      final builder = MarkdownBuilder(
+        delegate: this,
+        selectable: widget.selectable,
+        styleSheet: _effectiveStyleSheet!,
+        imageDirectory: widget.imageDirectory,
+        imageBuilder: null,
+        checkboxBuilder: widget.checkboxBuilder == null
+            ? null
+            : (bool isChecked) =>
+                  widget.checkboxBuilder!(isChecked, localCheckboxCounter++),
+        bulletBuilder: null,
+        builders: widget.builders,
+        paddingBuilders: const {},
+        listItemCrossAxisAlignment: MarkdownListItemCrossAxisAlignment.baseline,
+        fitContent: widget.fitContent,
+      );
+
+      final widgets = builder.build([_nodes[index]]);
+      if (widgets.isEmpty) return const SizedBox.shrink();
+
+      final Widget block = widgets.length == 1
+          ? widgets.single
+          : Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: widget.fitContent
+                  ? CrossAxisAlignment.start
+                  : CrossAxisAlignment.stretch,
+              children: widgets,
+            );
+
+      final spacing = _effectiveStyleSheet!.blockSpacing ?? 8.0;
+      if (index < _nodes.length - 1 && spacing > 0) {
+        return Padding(
+          padding: EdgeInsets.only(bottom: spacing),
+          child: block,
+        );
+      }
+      return block;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_nodes.isEmpty) {
+      return const SliverToBoxAdapter(child: SizedBox.shrink());
+    }
+    return SliverList.builder(
+      itemCount: _nodes.length,
+      itemBuilder: (context, index) => _buildBlock(index),
+    );
+  }
+}
+
 // =============================================================================
 // Live Markdown Preview Widget
 // =============================================================================
@@ -1127,7 +1343,7 @@ class _MarkdownPreviewViewState extends State<MarkdownPreviewView> {
   CitationStyle? _memoCitationStyle;
   String? _memoResult;
 
-  // Cached MarkdownBody widget to prevent re-parsing and rebuilding when inputs are unchanged
+  // Cached preview configuration to prevent re-parsing and rebuilding when inputs are unchanged
   String? _cachedBodyMarkdown;
   bool? _cachedBodyIsDark;
   String? _cachedBodySchemeId;
@@ -1137,14 +1353,18 @@ class _MarkdownPreviewViewState extends State<MarkdownPreviewView> {
   String? _cachedImageDir;
   int? _cachedBodyCitationCount;
   CitationStyle? _cachedBodyCitationStyle;
-  Widget? _cachedMarkdownBody;
+  MarkdownStyleSheet? _cachedStyleSheet;
+  Map<String, MarkdownElementBuilder>? _cachedBuilders;
+  Widget Function(bool isChecked, int checkboxIndex)? _cachedCheckboxBuilder;
 
   @override
   void reassemble() {
     super.reassemble();
     _memoRawMarkdown = null;
     _memoResult = null;
-    _cachedMarkdownBody = null;
+    _cachedStyleSheet = null;
+    _cachedBuilders = null;
+    _cachedCheckboxBuilder = null;
     _cachedBodyMarkdown = null;
   }
 
@@ -1443,8 +1663,13 @@ class _MarkdownPreviewViewState extends State<MarkdownPreviewView> {
         (controller?.citations.length ?? 0) +
         (controller?.zoteroCitations.length ?? 0);
 
-    Widget markdownBody;
-    if (_cachedMarkdownBody != null &&
+    final MarkdownStyleSheet customStyle;
+    final Map<String, MarkdownElementBuilder> builders;
+    final Widget Function(bool isChecked, int checkboxIndex) checkboxBuilder;
+
+    if (_cachedStyleSheet != null &&
+        _cachedBuilders != null &&
+        _cachedCheckboxBuilder != null &&
         _cachedBodyMarkdown == effectiveMarkdown &&
         _cachedBodyIsDark == isDark &&
         _cachedBodySchemeId == activeScheme.id &&
@@ -1454,9 +1679,11 @@ class _MarkdownPreviewViewState extends State<MarkdownPreviewView> {
         _cachedImageDir == imgDir &&
         _cachedBodyCitationCount == citationCount &&
         _cachedBodyCitationStyle == controller?.citationStyle) {
-      markdownBody = _cachedMarkdownBody!;
+      customStyle = _cachedStyleSheet!;
+      builders = _cachedBuilders!;
+      checkboxBuilder = _cachedCheckboxBuilder!;
     } else {
-      final customStyle = MarkdownStyleSheet.fromTheme(theme).copyWith(
+      customStyle = MarkdownStyleSheet.fromTheme(theme).copyWith(
         p: TextStyle(
           fontFamily: bodyFont,
           fontSize: 14.5,
@@ -1561,86 +1788,66 @@ class _MarkdownPreviewViewState extends State<MarkdownPreviewView> {
       final totalCheckboxes = EditorController.findTaskCheckboxes(
         effectiveMarkdown,
       ).length;
-      int checkboxCounter = 0;
 
-      final astNodes = (controller?.previewMarkdown == effectiveMarkdown)
-          ? controller?.astNodes
-          : null;
+      checkboxBuilder = (bool isChecked, int checkboxIndex) {
+        final int targetIndex = totalCheckboxes > 0
+            ? (checkboxIndex % totalCheckboxes)
+            : checkboxIndex;
 
-      markdownBody = AstMarkdownBody(
-        key: ValueKey('preview_body_${isDark}_${activeScheme.id}'),
-        astNodes: astNodes,
-        data: effectiveMarkdown,
-        selectable: false,
-        imageDirectory: imgDir,
-        styleSheet: customStyle,
-        inlineSyntaxes: _inlineSyntaxes,
-        checkboxBuilder: (bool isChecked) {
-          final int targetIndex = totalCheckboxes > 0
-              ? (checkboxCounter % totalCheckboxes)
-              : checkboxCounter;
-          checkboxCounter++;
+        final Color iconColor = isChecked
+            ? (isDark ? activeScheme.accent : theme.colorScheme.primary)
+            : (isDark
+                  ? AppTheme.darkTextSecondary
+                  : AppTheme.lightTextSecondary);
 
-          final Color iconColor = isChecked
-              ? (isDark ? activeScheme.accent : theme.colorScheme.primary)
-              : (isDark
-                    ? AppTheme.darkTextSecondary
-                    : AppTheme.lightTextSecondary);
-
-          return MouseRegion(
-            cursor: SystemMouseCursors.click,
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () {
-                controller?.toggleCheckbox(targetIndex);
-              },
-              child: Padding(
-                padding: const EdgeInsets.only(
-                  right: 6.0,
-                  top: 1.0,
-                  bottom: 1.0,
-                ),
-                child: Icon(
-                  isChecked ? Icons.check_box : Icons.check_box_outline_blank,
-                  size: 17,
-                  color: iconColor,
-                ),
+        return MouseRegion(
+          cursor: SystemMouseCursors.click,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () {
+              controller?.toggleCheckbox(targetIndex);
+            },
+            child: Padding(
+              padding: const EdgeInsets.only(right: 6.0, top: 1.0, bottom: 1.0),
+              child: Icon(
+                isChecked ? Icons.check_box : Icons.check_box_outline_blank,
+                size: 17,
+                color: iconColor,
               ),
             ),
-          );
-        },
-        builders: {
-          'displaymath': MathElementBuilder(
-            isDisplay: true,
-            textColor: textColor,
-            codeFont: codeFont,
           ),
-          'inlinemath': MathElementBuilder(
-            isDisplay: false,
-            textColor: textColor,
-            codeFont: codeFont,
-          ),
-          'academiccitation': CitationElementBuilder(
-            helper: helper,
-            isDark: isDark,
-          ),
-          'code': MathCodeBlockBuilder(
-            textColor: textColor,
-            codeFont: codeFont,
-          ),
-          'img': MarkdownImageElementBuilder(
-            controller: controller,
-            imageDirectory: imgDir,
-            isDark: isDark,
-            codeFont: codeFont,
-            textColor: textColor,
-            mutedColor: mutedColor,
-          ),
-          'input': InputElementBuilder(),
-          'sup': SuperscriptElementBuilder(),
-          'sub': SubscriptElementBuilder(),
-        },
-      );
+        );
+      };
+
+      builders = {
+        'displaymath': MathElementBuilder(
+          isDisplay: true,
+          textColor: textColor,
+          codeFont: codeFont,
+        ),
+        'inlinemath': MathElementBuilder(
+          isDisplay: false,
+          textColor: textColor,
+          codeFont: codeFont,
+        ),
+        'academiccitation': CitationElementBuilder(
+          helper: helper,
+          isDark: isDark,
+        ),
+        'code': MathCodeBlockBuilder(textColor: textColor, codeFont: codeFont),
+        'img': MarkdownImageElementBuilder(
+          controller: controller,
+          imageDirectory: imgDir,
+          isDark: isDark,
+          codeFont: codeFont,
+          textColor: textColor,
+          mutedColor: mutedColor,
+        ),
+        'input': InputElementBuilder(),
+        'sup': SuperscriptElementBuilder(),
+        'sub': SubscriptElementBuilder(),
+      };
+
       _cachedBodyMarkdown = effectiveMarkdown;
       _cachedBodyIsDark = isDark;
       _cachedBodySchemeId = activeScheme.id;
@@ -1650,71 +1857,78 @@ class _MarkdownPreviewViewState extends State<MarkdownPreviewView> {
       _cachedImageDir = imgDir;
       _cachedBodyCitationCount = citationCount;
       _cachedBodyCitationStyle = controller?.citationStyle;
-      _cachedMarkdownBody = markdownBody;
+      _cachedStyleSheet = customStyle;
+      _cachedBuilders = builders;
+      _cachedCheckboxBuilder = checkboxBuilder;
     }
 
-    return RepaintBoundary(
-      child: Container(
-        color: canvasBg,
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final double minPageHeight =
-                (constraints.maxHeight - (deskVerticalPadding * 2)).clamp(
-                  120.0,
-                  double.infinity,
-                );
+    final astNodes = (controller?.previewMarkdown == effectiveMarkdown)
+        ? controller?.astNodes
+        : null;
 
-            return SelectionArea(
-              child: SingleChildScrollView(
-                padding: EdgeInsets.symmetric(
-                  horizontal: deskHorizontalPadding,
-                  vertical: deskVerticalPadding,
-                ),
-                child: Center(
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(
-                      maxWidth: maxPageWidth,
-                      minHeight: minPageHeight,
+    return Container(
+      color: canvasBg,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final double availableWidth =
+              (constraints.maxWidth - (deskHorizontalPadding * 2)).clamp(
+                0.0,
+                double.infinity,
+              );
+          final double pageWidth = maxPageWidth.isFinite
+              ? availableWidth.clamp(0.0, maxPageWidth)
+              : availableWidth;
+          final double sideMargin = ((constraints.maxWidth - pageWidth) / 2)
+              .clamp(deskHorizontalPadding, double.infinity);
+
+          return SelectionArea(
+            child: CustomScrollView(
+              slivers: [
+                SliverPadding(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: sideMargin,
+                    vertical: deskVerticalPadding,
+                  ),
+                  sliver: DecoratedSliver(
+                    decoration: BoxDecoration(
+                      color: pageBg,
+                      borderRadius: BorderRadius.circular(2),
+                      border: Border.all(color: pageBorder, width: 1.0),
                     ),
-                    child: Container(
-                      width: double.infinity,
-                      decoration: BoxDecoration(
-                        color: pageBg,
-                        borderRadius: BorderRadius.circular(2),
-                        border: Border.all(color: pageBorder, width: 1.0),
-                        boxShadow: [
-                          BoxShadow(
-                            color: isDark
-                                ? Colors.black.withValues(alpha: 0.40)
-                                : const Color(0xFF0F172A)
-                                      .withValues(alpha: 0.08),
-                            blurRadius: 16,
-                            spreadRadius: 1,
-                            offset: const Offset(0, 4),
+                    sliver: SliverMainAxisGroup(
+                      slivers: [
+                        SliverPadding(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: innerHorizontalPadding,
+                            vertical: innerVerticalPadding,
                           ),
-                          BoxShadow(
-                            color: isDark
-                                ? Colors.black.withValues(alpha: 0.20)
-                                : const Color(0xFF0F172A)
-                                      .withValues(alpha: 0.04),
-                            blurRadius: 4,
-                            spreadRadius: 0,
-                            offset: const Offset(0, 1),
+                          sliver: SliverAstMarkdownList(
+                            key: ValueKey(
+                              'preview_body_${isDark}_${activeScheme.id}',
+                            ),
+                            astNodes: astNodes,
+                            data: effectiveMarkdown,
+                            selectable: false,
+                            imageDirectory: imgDir,
+                            styleSheet: customStyle,
+                            inlineSyntaxes: _inlineSyntaxes,
+                            checkboxBuilder: checkboxBuilder,
+                            builders: builders,
+                            fitContent: true,
                           ),
-                        ],
-                      ),
-                      padding: EdgeInsets.symmetric(
-                        horizontal: innerHorizontalPadding,
-                        vertical: innerVerticalPadding,
-                      ),
-                      child: markdownBody,
+                        ),
+                        const SliverFillRemaining(
+                          hasScrollBody: false,
+                          child: SizedBox.shrink(),
+                        ),
+                      ],
                     ),
                   ),
                 ),
-              ),
-            );
-          },
-        ),
+              ],
+            ),
+          );
+        },
       ),
     );
   }

@@ -91,6 +91,19 @@ class FileService {
     return await file.readAsString();
   }
 
+  /// Get file stat metadata (modified timestamp and size), or null if unavailable.
+  Future<FileStat?> statFile(String filePath) async {
+    try {
+      final stat = await File(filePath).stat();
+      if (stat.type == FileSystemEntityType.notFound) {
+        return null;
+      }
+      return stat;
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Write string contents to file with UTF-8 encoding
   Future<void> writeFile(String filePath, String content) async {
     final file = File(filePath);

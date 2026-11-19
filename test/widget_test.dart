@@ -1114,4 +1114,152 @@ void main() {
       expect(betaY, lessThan(gammaY));
     },
   );
+
+  testWidgets(
+    'Conflict status shows red dot, Conflict badge, and popup dialog to discard or save as new file',
+    (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1400, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      SharedPreferences.setMockInitialValues({});
+      final tempDir = await tester.runAsync(
+        () => Directory.systemTemp.createTemp('draftdown_widget_conflict_'),
+      );
+      addTearDown(() async {
+        await tester.runAsync(() => tempDir!.delete(recursive: true));
+      });
+
+      final file = File(
+        '${tempDir!.path}${Platform.pathSeparator}ConflictDoc.md',
+      );
+      await tester.runAsync(() => file.writeAsString('# Original'));
+
+      final controller = EditorController();
+      addTearDown(controller.dispose);
+      await tester.runAsync(() => controller.openFile(file.path));
+      controller.toggleSidebar();
+
+      await tester.pumpWidget(
+        DraftdownApp(controller: controller, initialDarkMode: false),
+      );
+      await tester.pumpAndSettle();
+
+      // Make an unsaved edit in the app
+      controller.textController.text = '# Unsaved Local Edit';
+      await tester.pump();
+      expect(find.text('Unsaved'), findsOneWidget);
+
+      // Modify the file on disk externally
+      await tester.runAsync(() async {
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+        await file.writeAsString('# Modified On Disk By Agent');
+        await controller.checkOpenFilesForChanges();
+      });
+
+      await tester.pumpAndSettle();
+
+      // Conflict badge and popup dialog should be visible
+      expect(find.text('Conflict'), findsOneWidget);
+      expect(find.text('File Conflict'), findsOneWidget);
+      expect(find.textContaining('unsaved changes'), findsOneWidget);
+      expect(
+        find.textContaining('file on disk has been modified'),
+        findsOneWidget,
+      );
+      expect(find.text('Discard Changes'), findsOneWidget);
+      expect(find.text('Save as New File'), findsOneWidget);
+
+      // Verify red warning dot is rendered in toolbar/sidebar
+      final redDots = tester.widgetList<Container>(
+        find.byWidgetPredicate(
+          (w) =>
+              w is Container &&
+              w.decoration is BoxDecoration &&
+              (w.decoration as BoxDecoration).shape == BoxShape.circle &&
+              (w.decoration as BoxDecoration).color == Colors.red,
+        ),
+      );
+      expect(redDots.length, greaterThanOrEqualTo(1));
+
+      // Tap Discard Changes -> should reload disk content and clear conflict
+      await tester.tap(find.text('Discard Changes'));
+      await tester.pumpAndSettle();
+      for (int i = 0; i < 20 && controller.hasConflict; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 20)),
+        );
+        await tester.pump();
+      }
+      await tester.pumpAndSettle();
+
+      expect(controller.content, equals('# Modified On Disk By Agent'));
+      expect(controller.isModified, isFalse);
+      expect(controller.hasConflict, isFalse);
+      expect(find.text('Conflict'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'Tab inserts 2 spaces at cursor and indents highlighted blocks; Shift+Tab outdents',
+    (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1400, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      SharedPreferences.setMockInitialValues({});
+      final controller = EditorController();
+      addTearDown(controller.dispose);
+
+      await tester.pumpWidget(
+        DraftdownApp(controller: controller, initialDarkMode: false),
+      );
+      await tester.pumpAndSettle();
+
+      // Focus the editor TextField
+      final editorField = find.descendant(
+        of: find.byType(EditorView),
+        matching: find.byType(TextField),
+      );
+      await tester.tap(editorField);
+      await tester.pump();
+
+      // 1. Collapsed cursor: Tab inserts 2 spaces
+      controller.textController.value = const TextEditingValue(
+        text: 'Hello',
+        selection: TextSelection.collapsed(offset: 0),
+      );
+      await tester.pump();
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+
+      expect(controller.content, equals('  Hello'));
+      expect(
+        controller.textController.selection,
+        equals(const TextSelection.collapsed(offset: 2)),
+      );
+
+      // 2. Highlighted multi-line block: Tab indents each selected line by 2 spaces
+      controller.textController.value = const TextEditingValue(
+        text: 'Line 1\nLine 2\nLine 3',
+        selection: TextSelection(baseOffset: 0, extentOffset: 13),
+      );
+      await tester.pump();
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+
+      expect(controller.content, equals('  Line 1\n  Line 2\nLine 3'));
+
+      // 3. Shift+Tab outdents the selected lines
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.pump();
+
+      expect(controller.content, equals('Line 1\nLine 2\nLine 3'));
+      await tester.pump(const Duration(seconds: 2));
+    },
+  );
 }
