@@ -31,7 +31,6 @@ class _CitationDialogState extends State<CitationDialog> {
   final ScrollController _listScrollController = ScrollController();
 
   late CitationSource _activeSource;
-  late CitationStyle _activeCitationStyle;
   List<CitationItem> _filteredItems = [];
   List<CitationItem> _availableItems = const [];
   final List<CitationItem> _selectedCitations = [];
@@ -65,7 +64,6 @@ class _CitationDialogState extends State<CitationDialog> {
   void initState() {
     super.initState();
     _activeSource = widget.controller.citationSource;
-    _activeCitationStyle = widget.controller.citationStyle;
     _searchFocusNode.onKeyEvent = _handleKeyEvent;
     _editingCitation =
         widget.initialCitation ?? widget.controller.getCitationAtCursor();
@@ -289,17 +287,9 @@ class _CitationDialogState extends State<CitationDialog> {
     _searchFocusNode.requestFocus();
   }
 
-  void _onStyleChanged(CitationStyle newStyle) {
-    if (_activeCitationStyle == newStyle) return;
-    setState(() {
-      _activeCitationStyle = newStyle;
-    });
-    widget.controller.setCitationStyle(newStyle);
-  }
-
   String _formatRenderPreview(List<CitationItem> items) {
     if (items.isEmpty) return '';
-    final isNum = _activeCitationStyle == CitationStyle.numeric;
+    final isNum = widget.controller.activeCslStyle.isNumeric;
     final loc = _locatorController.text.trim();
     final locStr = loc.isNotEmpty ? ', $loc' : '';
 
@@ -565,62 +555,140 @@ class _CitationDialogState extends State<CitationDialog> {
                 ),
               ),
 
-              const SizedBox(height: 8),
+              const SizedBox(height: 10),
 
-              // Document Citation Style Switcher Row: Name-Year vs Numeric
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: isDark ? AppTheme.darkSidebar : AppTheme.lightSidebar,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: borderColor),
-                ),
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.format_list_bulleted,
-                        size: 15,
-                        color: mutedColor,
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        'Citation Style:',
-                        style: TextStyle(
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.w600,
+              // Document Citation Style Dropdown (installed CSL styles only)
+              Builder(
+                builder: (context) {
+                  final activeStyle = widget.controller.activeCslStyle;
+                  final styles = widget.controller.availableCslStyles;
+                  final dropdownStyles = styles.any((s) => s.id == activeStyle.id)
+                      ? styles
+                      : [activeStyle, ...styles];
+                  return Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? AppTheme.darkSidebar
+                          : AppTheme.lightSidebar,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: borderColor),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.format_list_bulleted,
+                          size: 16,
                           color: mutedColor,
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      _buildStyleTabButton(
-                        style: CitationStyle.authorYear,
-                        title: 'Name-Year (Surname et al., 2026)',
-                        icon: Icons.text_fields,
-                        isActive:
-                            _activeCitationStyle == CitationStyle.authorYear,
-                        theme: theme,
-                        isDark: isDark,
-                      ),
-                      const SizedBox(width: 4),
-                      _buildStyleTabButton(
-                        style: CitationStyle.numeric,
-                        title: 'Numeric ([1])',
-                        icon: Icons.tag,
-                        isActive: _activeCitationStyle == CitationStyle.numeric,
-                        theme: theme,
-                        isDark: isDark,
-                      ),
-                    ],
-                  ),
-                ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Citation Style:',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: mutedColor,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<String>(
+                              value: activeStyle.id,
+                              isDense: true,
+                              isExpanded: true,
+                              focusColor: Colors.transparent,
+                              borderRadius: BorderRadius.circular(8),
+                              dropdownColor: isDark
+                                  ? AppTheme.darkSurface
+                                  : AppTheme.lightSurface,
+                              icon: const Icon(
+                                Icons.keyboard_arrow_down,
+                                size: 20,
+                              ),
+                              style: TextStyle(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w500,
+                                color: theme.textTheme.bodyMedium?.color,
+                              ),
+                              items: dropdownStyles.map((style) {
+                                final isNum = style.isNumeric;
+                                final badgeBg = isNum
+                                    ? Colors.blue.withValues(
+                                        alpha: isDark ? 0.22 : 0.12,
+                                      )
+                                    : Colors.teal.withValues(
+                                        alpha: isDark ? 0.22 : 0.12,
+                                      );
+                                final badgeFg = isNum
+                                    ? (isDark
+                                          ? Colors.blue[200]
+                                          : Colors.blue[800])
+                                    : (isDark
+                                          ? Colors.teal[200]
+                                          : Colors.teal[800]);
+                                return DropdownMenuItem<String>(
+                                  value: style.id,
+                                  child: Row(
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          style.title,
+                                          style: const TextStyle(
+                                            fontSize: 12.5,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 6,
+                                          vertical: 2,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: badgeBg,
+                                          borderRadius: BorderRadius.circular(
+                                            4,
+                                          ),
+                                        ),
+                                        child: Text(
+                                          style.citationFormat,
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w600,
+                                            color: badgeFg,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              }).toList(),
+                              onChanged: (val) {
+                                if (val != null) {
+                                  widget.controller.setCslStyle(val);
+                                  setState(() {});
+                                }
+                              },
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
               ),
+
+              const SizedBox(height: 10),
 
               // Offline notice banner if Zotero is selected and disconnected
               if (_activeSource == CitationSource.zotero &&
                   !isZoteroConnected) ...[
-                const SizedBox(height: 10),
                 Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 12,
@@ -643,7 +711,7 @@ class _CitationDialogState extends State<CitationDialog> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          'Zotero desktop is not responding on 127.0.0.1:23119. Showing cached references with Zotero citekeys. Start Zotero with Better BibTeX to search live.',
+                          'Zotero is not running with Better BibTeX. Showing cached references — open Zotero to search your live library.',
                           style: TextStyle(
                             fontSize: 11.5,
                             color: isDark
@@ -667,9 +735,8 @@ class _CitationDialogState extends State<CitationDialog> {
                     ],
                   ),
                 ),
+                const SizedBox(height: 10),
               ],
-
-              const SizedBox(height: 10),
 
               // Selected Citations Basket (if any citations have been added)
               if (_selectedCitations.isNotEmpty) ...[
@@ -1117,7 +1184,7 @@ class _CitationDialogState extends State<CitationDialog> {
                                         ),
                                         const SizedBox(height: 8),
                                         Text(
-                                          'Document Render Preview (${_activeCitationStyle == CitationStyle.numeric ? "Numeric" : "Name-Year"}):',
+                                          'Document Render Preview (${widget.controller.activeCslStyle.title}):',
                                           style: TextStyle(
                                             fontSize: 10,
                                             fontWeight: FontWeight.bold,
@@ -1359,7 +1426,7 @@ class _CitationDialogState extends State<CitationDialog> {
                                     ),
                                     const SizedBox(height: 8),
                                     Text(
-                                      'Document Render Preview (${_activeCitationStyle == CitationStyle.numeric ? "Numeric" : "Name-Year"}):',
+                                      'Document Render Preview (${widget.controller.activeCslStyle.title}):',
                                       style: const TextStyle(
                                         fontSize: 10.5,
                                         fontWeight: FontWeight.bold,
@@ -1560,64 +1627,6 @@ class _CitationDialogState extends State<CitationDialog> {
                 const SizedBox(width: 6),
                 statusWidget,
               ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildStyleTabButton({
-    required CitationStyle style,
-    required String title,
-    required IconData icon,
-    required bool isActive,
-    required ThemeData theme,
-    required bool isDark,
-  }) {
-    final activeBg = isDark ? const Color(0xFF1E293B) : Colors.white;
-
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(6),
-        splashFactory: NoSplash.splashFactory,
-        focusColor: Colors.transparent,
-        onTap: () => _onStyleChanged(style),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-          decoration: BoxDecoration(
-            color: isActive ? activeBg : Colors.transparent,
-            borderRadius: BorderRadius.circular(6),
-            boxShadow: isActive
-                ? [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.05),
-                      blurRadius: 2,
-                      offset: const Offset(0, 1),
-                    ),
-                  ]
-                : null,
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                icon,
-                size: 14,
-                color: isActive ? theme.colorScheme.primary : Colors.grey,
-              ),
-              const SizedBox(width: 6),
-              Text(
-                title,
-                style: TextStyle(
-                  fontSize: 11.5,
-                  fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
-                  color: isActive
-                      ? (isDark ? Colors.white : Colors.black87)
-                      : (isDark ? Colors.grey[400] : Colors.grey[700]),
-                ),
-              ),
             ],
           ),
         ),

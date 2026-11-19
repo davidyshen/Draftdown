@@ -66,6 +66,7 @@ flutter:
 
   assets:
     - assets/bin/
+    - assets/csl/
     - assets/icon.svg
     - assets/wordmark.svg
 

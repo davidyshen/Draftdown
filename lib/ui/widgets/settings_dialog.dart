@@ -1,12 +1,15 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../../controllers/editor_controller.dart';
+import '../../models/csl_style.dart';
+import '../../services/csl_style_service.dart';
 import '../../services/spell_check_service.dart';
 import '../../services/system_font_service.dart';
 import '../theme/app_theme.dart';
 
 /// Settings dialog to configure typography (editor font,
-/// unified vs dual preview fonts), Zotero integration, and spellcheck.
+/// unified vs dual preview fonts), referencing / CSL styles, and spellcheck.
 class SettingsDialog extends StatefulWidget {
   final EditorController controller;
 
@@ -30,10 +33,18 @@ class _SettingsDialogState extends State<SettingsDialog>
   List<String> _renderFonts = const [];
   bool _isLoadingFonts = true;
 
-  // Zotero & Bibliography state
-  final TextEditingController _bibPathController = TextEditingController();
+  // Referencing, CSL & Zotero state
   String? _zoteroTestStatus;
   bool _isZoteroSuccess = false;
+  final TextEditingController _cslSearchController = TextEditingController();
+  String _cslSearchQuery = '';
+  String _cslFormatFilter = 'all';
+  List<ZoteroStyleEntry>? _zoteroStylesIndex;
+  bool _isLoadingZoteroIndex = false;
+  String? _zoteroIndexError;
+  final Set<String> _installingSlugs = {};
+  String? _cslFeedbackMessage;
+  bool _cslFeedbackIsError = false;
 
   // Spellcheck state
   late bool _spellCheckEnabled;
@@ -42,7 +53,7 @@ class _SettingsDialogState extends State<SettingsDialog>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
 
     _selectedColorSchemeId = widget.controller.activeColorSchemeId;
     _selectedEditorFont = widget.controller.editorFontFamily;
@@ -52,8 +63,8 @@ class _SettingsDialogState extends State<SettingsDialog>
     _spellCheckEnabled = widget.controller.isSpellCheckEnabled;
     _spellCheckLanguage = widget.controller.spellCheckLanguage;
 
-    _bibPathController.text = widget.controller.bibliographyPath ?? '';
     _initSystemFonts();
+    _loadZoteroStylesIndex();
   }
 
   void _initSystemFonts() {
@@ -80,7 +91,7 @@ class _SettingsDialogState extends State<SettingsDialog>
   @override
   void dispose() {
     _tabController.dispose();
-    _bibPathController.dispose();
+    _cslSearchController.dispose();
     super.dispose();
   }
 
@@ -122,12 +133,96 @@ class _SettingsDialogState extends State<SettingsDialog>
     });
   }
 
-  Future<void> _browseBib() async {
-    final path = await widget.controller.fileService.pickBibliographyFile();
-    if (path != null) {
-      _bibPathController.text = path;
-      await widget.controller.loadBibliographyFile(path);
-      setState(() {});
+  Future<void> _loadZoteroStylesIndex({bool forceRefresh = false}) async {
+    if (_isLoadingZoteroIndex) return;
+    setState(() {
+      _isLoadingZoteroIndex = true;
+      _zoteroIndexError = null;
+    });
+    try {
+      final index = await widget.controller.cslStyleService
+          .fetchZoteroStylesIndex(forceRefresh: forceRefresh);
+      if (!mounted) return;
+      setState(() {
+        _zoteroStylesIndex = index;
+        _isLoadingZoteroIndex = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _zoteroIndexError = e.toString();
+        _isLoadingZoteroIndex = false;
+      });
+    }
+  }
+
+  Future<void> _installZoteroStyle(String slug, {bool activate = false}) async {
+    setState(() {
+      _installingSlugs.add(slug);
+      _cslFeedbackMessage = null;
+    });
+    try {
+      final style = await widget.controller.installCslStyleFromZotero(slug);
+      if (activate) {
+        await widget.controller.setCslStyle(style.id);
+      }
+      if (!mounted) return;
+      setState(() {
+        _installingSlugs.remove(slug);
+        _cslFeedbackIsError = false;
+        _cslFeedbackMessage = 'Installed "${style.title}".';
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _installingSlugs.remove(slug);
+        _cslFeedbackIsError = true;
+        _cslFeedbackMessage = e.toString();
+      });
+    }
+  }
+
+  Future<void> _importLocalCsl() async {
+    final file = await FilePicker.pickFile(
+      dialogTitle: 'Import CSL Citation Style',
+      type: FileType.custom,
+      allowedExtensions: ['csl'],
+    );
+    final path = file?.path;
+    if (path == null) return;
+
+    setState(() => _cslFeedbackMessage = null);
+    try {
+      final style = await widget.controller.importLocalCslStyle(path);
+      if (!mounted) return;
+      setState(() {
+        _cslFeedbackIsError = false;
+        _cslFeedbackMessage = 'Imported "${style.title}".';
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _cslFeedbackIsError = true;
+        _cslFeedbackMessage = e.toString();
+      });
+    }
+  }
+
+  Future<void> _removeInstalledStyle(CslStyle style) async {
+    setState(() => _cslFeedbackMessage = null);
+    try {
+      await widget.controller.removeCslStyle(style.id);
+      if (!mounted) return;
+      setState(() {
+        _cslFeedbackIsError = false;
+        _cslFeedbackMessage = 'Removed "${style.title}".';
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _cslFeedbackIsError = true;
+        _cslFeedbackMessage = e.toString();
+      });
     }
   }
 
@@ -195,12 +290,16 @@ class _SettingsDialogState extends State<SettingsDialog>
                 }),
                 tabs: const [
                   Tab(
+                    icon: Icon(Icons.tune_outlined, size: 18),
+                    text: 'General',
+                  ),
+                  Tab(
                     icon: Icon(Icons.font_download_outlined, size: 18),
                     text: 'Typography',
                   ),
                   Tab(
                     icon: Icon(Icons.book_outlined, size: 18),
-                    text: 'Zotero',
+                    text: 'Referencing',
                   ),
                   Tab(
                     icon: Icon(Icons.spellcheck, size: 18),
@@ -216,13 +315,16 @@ class _SettingsDialogState extends State<SettingsDialog>
                 child: TabBarView(
                   controller: _tabController,
                   children: [
-                    // Tab 1: Typography & Fonts
+                    // Tab 1: General (Colour Scheme & About)
+                    _buildGeneralTab(theme, isDark, borderColor, mutedColor),
+
+                    // Tab 2: Typography & Fonts
                     _buildTypographyTab(theme, isDark, borderColor, mutedColor),
 
-                    // Tab 2: Zotero & Bibliography
-                    _buildZoteroTab(theme, isDark, borderColor, mutedColor),
+                    // Tab 3: Referencing & CSL Styles
+                    _buildReferencingTab(theme, isDark, borderColor, mutedColor),
 
-                    // Tab 3: Spellcheck
+                    // Tab 4: Spellcheck
                     _buildSpellcheckTab(theme, isDark, borderColor, mutedColor),
                   ],
                 ),
@@ -244,8 +346,8 @@ class _SettingsDialogState extends State<SettingsDialog>
     );
   }
 
-  /// Typography & Appearance Tab: Colour Scheme, Monospace Editor font & Unified vs Dual Render fonts
-  Widget _buildTypographyTab(
+  /// General Tab: Colour Scheme & About Draftdown
+  Widget _buildGeneralTab(
     ThemeData theme,
     bool isDark,
     Color borderColor,
@@ -258,7 +360,7 @@ class _SettingsDialogState extends State<SettingsDialog>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Section 0: Colour Scheme Dropdown
+          // Section 1: Colour Scheme Dropdown
           Row(
             children: [
               const Icon(Icons.palette_outlined, size: 18),
@@ -375,6 +477,99 @@ class _SettingsDialogState extends State<SettingsDialog>
 
           const Divider(height: 28),
 
+          // Section 2: About Draftdown
+          Row(
+            children: [
+              const Icon(Icons.info_outline, size: 18),
+              const SizedBox(width: 8),
+              const Text(
+                'About Draftdown',
+                style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: previewBg,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: borderColor),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Text(
+                      'Draftdown',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 7,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.primary.withValues(alpha: 0.14),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        'v1.1.1',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: theme.colorScheme.primary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Distraction-free academic Markdown editor with native citation support and Pandoc export.',
+                  style: TextStyle(fontSize: 11.5, color: mutedColor),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Icon(Icons.code, size: 14, color: mutedColor),
+                    const SizedBox(width: 6),
+                    SelectableText(
+                      'https://github.com/davidyshen/Draftdown',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        color: theme.colorScheme.primary,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Typography Tab: Monospace Editor font & Unified vs Dual Render fonts
+  Widget _buildTypographyTab(
+    ThemeData theme,
+    bool isDark,
+    Color borderColor,
+    Color mutedColor,
+  ) {
+    final previewBg = isDark ? AppTheme.darkSidebar : AppTheme.lightSidebar;
+
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
           // Section 1: Monospace Editor Font
           Row(
             children: [
@@ -716,42 +911,336 @@ class _SettingsDialogState extends State<SettingsDialog>
     );
   }
 
-  /// Zotero & Bibliography Tab
-  Widget _buildZoteroTab(
+  /// Referencing, CSL Styles & Zotero Tab
+  Widget _buildReferencingTab(
     ThemeData theme,
     bool isDark,
     Color borderColor,
     Color mutedColor,
   ) {
+    final installed = widget.controller.availableCslStyles;
+    final activeStyle = widget.controller.activeCslStyle;
+    final missingId = widget.controller.missingCslStyleId;
+    final installedIds = installed.map((s) => s.id).toSet();
+
+    final query = _cslSearchQuery.trim().toLowerCase();
+    final filteredOnline = (_zoteroStylesIndex ?? const <ZoteroStyleEntry>[])
+        .where((entry) {
+          if (_cslFormatFilter != 'all' && entry.format != _cslFormatFilter) {
+            return false;
+          }
+          if (query.isEmpty) return true;
+          return entry.title.toLowerCase().contains(query) ||
+              entry.name.toLowerCase().contains(query);
+        })
+        .toList(growable: false);
+    final displayedOnline = filteredOnline.take(50).toList(growable: false);
+
     return SingleChildScrollView(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // 1. Active Document Citation Style
           Row(
             children: [
-              const Icon(Icons.library_books_outlined, size: 18),
+              const Icon(Icons.article_outlined, size: 18),
               const SizedBox(width: 8),
-              const Text(
-                'Default Bibliography Database',
-                style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold),
+              Expanded(
+                child: Text(
+                  'Document Citation Style (${widget.controller.currentFileName})',
+                  style: const TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ],
           ),
           const SizedBox(height: 4),
           Text(
-            'Select a BibTeX (.bib) or CSL JSON (.json) file exported from Zotero to enable citeproc compilation and auto-complete.',
+            'Stored in this document\'s YAML frontmatter (csl: ${widget.controller.cslStyleId}) so each manuscript keeps its own journal style.',
             style: TextStyle(fontSize: 11.5, color: mutedColor),
           ),
           const SizedBox(height: 10),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: borderColor),
+            ),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                value: installedIds.contains(activeStyle.id)
+                    ? activeStyle.id
+                    : CslStyleService.defaultStyleId,
+                isExpanded: true,
+                style: TextStyle(
+                  fontSize: 12.5,
+                  color: theme.textTheme.bodyMedium?.color,
+                ),
+                items: installed.map((style) {
+                  return DropdownMenuItem<String>(
+                    value: style.id,
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            style.title,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        _buildFormatBadge(style.citationFormat, isDark),
+                      ],
+                    ),
+                  );
+                }).toList(),
+                onChanged: (val) {
+                  if (val != null) {
+                    widget.controller.setCslStyle(val);
+                    setState(() {});
+                  }
+                },
+              ),
+            ),
+          ),
+
+          if (missingId != null) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.amber.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: Colors.amber.withValues(alpha: 0.35)),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.warning_amber_rounded,
+                      size: 16, color: Colors.amber[700]),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'This document specifies "$missingId", which is not installed. Showing ${activeStyle.title} in preview.',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        color: isDark ? Colors.amber[200] : Colors.brown[800],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  FilledButton.tonal(
+                    onPressed: _installingSlugs.contains(missingId)
+                        ? null
+                        : () => _installZoteroStyle(missingId, activate: true),
+                    child: _installingSlugs.contains(missingId)
+                        ? const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text('Install', style: TextStyle(fontSize: 11)),
+                  ),
+                ],
+              ),
+            ),
+          ],
+
+          if (_cslFeedbackMessage != null) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: (_cslFeedbackIsError ? Colors.red : Colors.green)
+                    .withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    _cslFeedbackIsError
+                        ? Icons.error_outline
+                        : Icons.check_circle_outline,
+                    size: 16,
+                    color: _cslFeedbackIsError ? Colors.red : Colors.green,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _cslFeedbackMessage!,
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        color: _cslFeedbackIsError ? Colors.red : Colors.green,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close, size: 14),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    onPressed: () => setState(() => _cslFeedbackMessage = null),
+                  ),
+                ],
+              ),
+            ),
+          ],
+
+          const Divider(height: 28),
+
+          // 2. Installed Styles
+          Row(
+            children: [
+              const Icon(Icons.style_outlined, size: 18),
+              const SizedBox(width: 8),
+              const Text(
+                'Installed Styles',
+                style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold),
+              ),
+              const Spacer(),
+              OutlinedButton.icon(
+                icon: const Icon(Icons.file_open_outlined, size: 14),
+                label: const Text(
+                  'Import .csl…',
+                  style: TextStyle(fontSize: 11.5),
+                ),
+                onPressed: _importLocalCsl,
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Container(
+            constraints: const BoxConstraints(maxHeight: 165),
+            decoration: BoxDecoration(
+              border: Border.all(color: borderColor),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: ListView.separated(
+              shrinkWrap: true,
+              itemCount: installed.length,
+              separatorBuilder: (_, _) => Divider(height: 1, color: borderColor),
+              itemBuilder: (context, index) {
+                final style = installed[index];
+                final isActive = style.id == activeStyle.id && missingId == null;
+                return InkWell(
+                  onTap: () {
+                    widget.controller.setCslStyle(style.id);
+                    setState(() {});
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 7,
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          isActive
+                              ? Icons.check_circle
+                              : Icons.radio_button_unchecked,
+                          size: 15,
+                          color: isActive
+                              ? theme.colorScheme.primary
+                              : mutedColor,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                style.title,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: isActive
+                                      ? FontWeight.w600
+                                      : FontWeight.normal,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              if (style.isDependent)
+                                Text(
+                                  'Parent: ${style.independentParentId}',
+                                  style: TextStyle(
+                                    fontSize: 10.5,
+                                    color: mutedColor,
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        _buildFormatBadge(style.citationFormat, isDark),
+                        const SizedBox(width: 6),
+                        if (style.isBuiltIn)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: mutedColor.withValues(alpha: 0.14),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              'Built-in',
+                              style: TextStyle(fontSize: 10, color: mutedColor),
+                            ),
+                          )
+                        else
+                          IconButton(
+                            tooltip: 'Remove style',
+                            icon: Icon(
+                              Icons.delete_outline,
+                              size: 16,
+                              color: Colors.red[400],
+                            ),
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                            onPressed: () => _removeInstalledStyle(style),
+                          ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+
+          const Divider(height: 28),
+
+          // 3. Zotero Styles Library (Online)
+          Row(
+            children: [
+              const Icon(Icons.public, size: 18),
+              const SizedBox(width: 8),
+              const Text(
+                'Zotero Styles Library',
+                style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold),
+              ),
+              const Spacer(),
+              IconButton(
+                tooltip: 'Refresh online styles list',
+                icon: const Icon(Icons.refresh, size: 16),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                onPressed: _isLoadingZoteroIndex
+                    ? null
+                    : () => _loadZoteroStylesIndex(forceRefresh: true),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
           Row(
             children: [
               Expanded(
                 child: TextField(
-                  controller: _bibPathController,
-                  readOnly: true,
+                  controller: _cslSearchController,
                   style: const TextStyle(fontSize: 12),
                   decoration: InputDecoration(
-                    hintText: 'No bibliography chosen (using built-in sample)',
+                    hintText: 'Search 10,000+ journal styles (e.g. Ecology, PLOS, Nature)…',
+                    prefixIcon: const Icon(Icons.search, size: 16),
+                    isDense: true,
                     contentPadding: const EdgeInsets.symmetric(
                       horizontal: 10,
                       vertical: 8,
@@ -761,50 +1250,214 @@ class _SettingsDialogState extends State<SettingsDialog>
                       borderSide: BorderSide(color: borderColor),
                     ),
                   ),
+                  onChanged: (val) => setState(() => _cslSearchQuery = val),
                 ),
-              ),
-              const SizedBox(width: 8),
-              OutlinedButton.icon(
-                icon: const Icon(Icons.folder_open, size: 14),
-                label: const Text(
-                  'Browse...',
-                  style: TextStyle(fontSize: 11.5),
-                ),
-                onPressed: _browseBib,
               ),
             ],
           ),
           const SizedBox(height: 6),
-          Text(
-            widget.controller.bibliographyStatus,
-            style: TextStyle(fontSize: 11, color: mutedColor),
+          Wrap(
+            spacing: 6,
+            children: [
+              for (final entry in const [
+                ('all', 'All'),
+                ('author-date', 'Author-Date'),
+                ('numeric', 'Numeric'),
+                ('note', 'Note'),
+              ])
+                ChoiceChip(
+                  label: Text(entry.$2, style: const TextStyle(fontSize: 11)),
+                  selected: _cslFormatFilter == entry.$1,
+                  visualDensity: VisualDensity.compact,
+                  onSelected: (_) =>
+                      setState(() => _cslFormatFilter = entry.$1),
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Container(
+            height: 175,
+            decoration: BoxDecoration(
+              border: Border.all(color: borderColor),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: _isLoadingZoteroIndex
+                ? const Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                        SizedBox(height: 8),
+                        Text(
+                          'Loading Zotero Styles Library…',
+                          style: TextStyle(fontSize: 11.5),
+                        ),
+                      ],
+                    ),
+                  )
+                : _zoteroIndexError != null
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            'Could not load online styles. Check your internet connection.',
+                            style: TextStyle(fontSize: 11.5, color: mutedColor),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 6),
+                          OutlinedButton(
+                            onPressed: () =>
+                                _loadZoteroStylesIndex(forceRefresh: true),
+                            child: const Text(
+                              'Retry',
+                              style: TextStyle(fontSize: 11.5),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                : displayedOnline.isEmpty
+                ? Center(
+                    child: Text(
+                      'No matching styles found.',
+                      style: TextStyle(fontSize: 11.5, color: mutedColor),
+                    ),
+                  )
+                : ListView.separated(
+                    itemCount:
+                        displayedOnline.length +
+                        (filteredOnline.length > 50 ? 1 : 0),
+                    separatorBuilder: (_, _) =>
+                        Divider(height: 1, color: borderColor),
+                    itemBuilder: (context, index) {
+                      if (index >= displayedOnline.length) {
+                        return Padding(
+                          padding: const EdgeInsets.all(8),
+                          child: Text(
+                            'Showing first 50 of ${filteredOnline.length} matches — refine your search to narrow results.',
+                            style: TextStyle(fontSize: 11, color: mutedColor),
+                            textAlign: TextAlign.center,
+                          ),
+                        );
+                      }
+                      final entry = displayedOnline[index];
+                      final isInstalled = installedIds.contains(
+                        entry.name.toLowerCase(),
+                      );
+                      final isInstalling = _installingSlugs.contains(
+                        entry.name,
+                      );
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    entry.title,
+                                    style: const TextStyle(fontSize: 12),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  Text(
+                                    entry.name,
+                                    style: TextStyle(
+                                      fontSize: 10.5,
+                                      color: mutedColor,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            _buildFormatBadge(entry.format, isDark),
+                            const SizedBox(width: 8),
+                            if (isInstalled)
+                              const Text(
+                                'Installed ✓',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.green,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              )
+                            else
+                              FilledButton.tonal(
+                                style: FilledButton.styleFrom(
+                                  visualDensity: VisualDensity.compact,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 4,
+                                  ),
+                                ),
+                                onPressed: isInstalling
+                                    ? null
+                                    : () => _installZoteroStyle(entry.name),
+                                child: isInstalling
+                                    ? const SizedBox(
+                                        width: 12,
+                                        height: 12,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      )
+                                    : const Text(
+                                        'Install',
+                                        style: TextStyle(fontSize: 11),
+                                      ),
+                              ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
           ),
 
-          const Divider(height: 32),
+          const Divider(height: 28),
 
+          // 4. Zotero (Better BibTeX) guide + compact Test Connection
           Row(
             children: [
               const Icon(Icons.sync, size: 18),
               const SizedBox(width: 8),
               const Text(
-                'Zotero Live Integration (Better BibTeX)',
+                'Zotero Integration',
                 style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold),
               ),
             ],
           ),
           const SizedBox(height: 4),
-          Text(
-            'When Zotero is running with the Better BibTeX plugin enabled, Draftdown can connect to http://127.0.0.1:23119/better-bibtex/ for live bibliography sync.',
-            style: TextStyle(fontSize: 11.5, color: mutedColor),
-          ),
-          const SizedBox(height: 10),
-          FilledButton.tonalIcon(
-            icon: const Icon(Icons.wifi_find, size: 16),
-            label: const Text(
-              'Test Zotero Connection',
-              style: TextStyle(fontSize: 11.5),
-            ),
-            onPressed: _testZotero,
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'To use Zotero with Draftdown, install the Better BibTeX plugin in Zotero and keep Zotero open while writing.',
+                  style: TextStyle(fontSize: 11.5, color: mutedColor),
+                ),
+              ),
+              const SizedBox(width: 10),
+              OutlinedButton.icon(
+                icon: const Icon(Icons.wifi_find, size: 15),
+                label: const Text(
+                  'Test Zotero Connection',
+                  style: TextStyle(fontSize: 11.5),
+                ),
+                onPressed: _testZotero,
+              ),
+            ],
           ),
           if (_zoteroTestStatus != null) ...[
             const SizedBox(height: 8),
@@ -843,6 +1496,31 @@ class _SettingsDialogState extends State<SettingsDialog>
             ),
           ],
         ],
+      ),
+    );
+  }
+
+  Widget _buildFormatBadge(String format, bool isDark) {
+    final isNumeric = format == 'numeric';
+    final bgColor = isNumeric
+        ? Colors.blue.withValues(alpha: isDark ? 0.22 : 0.12)
+        : Colors.teal.withValues(alpha: isDark ? 0.22 : 0.12);
+    final fgColor = isNumeric
+        ? (isDark ? Colors.blue[200] : Colors.blue[800])
+        : (isDark ? Colors.teal[200] : Colors.teal[800]);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(
+        format,
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w600,
+          color: fgColor,
+        ),
       ),
     );
   }

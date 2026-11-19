@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../controllers/editor_controller.dart';
 import '../models/citation_item.dart';
+import '../utils/yaml_frontmatter_helper.dart';
 import 'markdown_render_service.dart';
 import 'pandoc_service.dart';
 
@@ -140,7 +141,7 @@ class DirectExportService {
       yearStr = yearMatch?.group(0) ?? 'n.d.';
     }
 
-    final isNumeric = controller.citationStyle == CitationStyle.numeric;
+    final isNumeric = controller.activeCslStyle.isNumeric;
     final num = isNumeric ? (keyToNumber?[key.toLowerCase()] ?? 1) : null;
     final yearDisplay = yearStr.isNotEmpty ? yearStr : 'n.d.';
     final locatorDisplay = (locator != null && locator.isNotEmpty)
@@ -175,15 +176,16 @@ class DirectExportService {
     required String markdown,
     required EditorController controller,
   }) {
-    if (!markdown.contains('@')) return markdown;
+    final stripped = YamlFrontmatterHelper.stripYamlFrontmatter(markdown);
+    if (!stripped.contains('@')) return stripped;
 
-    final isNumeric = controller.citationStyle == CitationStyle.numeric;
+    final isNumeric = controller.activeCslStyle.isNumeric;
     final citedKeysInOrder = <String>[];
     final citedKeysSet = <String>{};
     final Map<String, int> keyToNumber = {};
 
     // 1. Collect cited keys in order of appearance
-    for (final match in _bracketRegex.allMatches(markdown)) {
+    for (final match in _bracketRegex.allMatches(stripped)) {
       final inner = match.group(1)!;
       for (final s in inner.split(';')) {
         var clean = s.trim();
@@ -197,7 +199,7 @@ class DirectExportService {
         }
       }
     }
-    for (final match in _inTextRegex.allMatches(markdown)) {
+    for (final match in _inTextRegex.allMatches(stripped)) {
       final k = match.group(1)!;
       if (k.isNotEmpty && citedKeysSet.add(k.toLowerCase())) {
         citedKeysInOrder.add(k);
@@ -205,7 +207,7 @@ class DirectExportService {
       }
     }
 
-    var processed = markdown;
+    var processed = stripped;
 
     // 2. Replace bracketed citations: [@key1; @key2, p. 5]
     processed = processed.replaceAllMapped(_bracketRegex, (match) {

@@ -11,6 +11,7 @@ import 'package:path/path.dart' as p;
 
 import '../../controllers/editor_controller.dart';
 import '../../models/citation_item.dart';
+import '../../utils/yaml_frontmatter_helper.dart';
 import '../../services/markdown_render_service.dart';
 import '../theme/app_theme.dart';
 
@@ -348,7 +349,7 @@ class CitationHelper {
       yearStr = yearMatch?.group(0) ?? 'n.d.';
     }
 
-    final isNumeric = controller?.citationStyle == CitationStyle.numeric;
+    final isNumeric = controller?.activeCslStyle.isNumeric ?? false;
     final num = isNumeric ? (numericIndices[key.toLowerCase()] ?? 1) : null;
     final yearDisplay = yearStr.isNotEmpty ? yearStr : 'n.d.';
     final locatorDisplay = (locator != null && locator.isNotEmpty)
@@ -422,7 +423,7 @@ class CitationElementBuilder extends MarkdownElementBuilder {
         .toList();
 
     final linkColor = isDark ? AppTheme.darkAccent : AppTheme.lightAccent;
-    final isNumeric = helper.controller?.citationStyle == CitationStyle.numeric;
+    final isNumeric = helper.controller?.activeCslStyle.isNumeric ?? false;
 
     final Widget pill;
     if (isBracketed) {
@@ -1336,7 +1337,7 @@ class _MarkdownPreviewViewState extends State<MarkdownPreviewView> {
 
   String? _memoRawMarkdown;
   int? _memoCitationCount;
-  CitationStyle? _memoCitationStyle;
+  String? _memoCslStyleId;
   String? _memoResult;
 
   // Cached preview configuration to prevent re-parsing and rebuilding when inputs are unchanged
@@ -1348,7 +1349,7 @@ class _MarkdownPreviewViewState extends State<MarkdownPreviewView> {
   String? _cachedCodeFont;
   String? _cachedImageDir;
   int? _cachedBodyCitationCount;
-  CitationStyle? _cachedBodyCitationStyle;
+  String? _cachedBodyCslStyleId;
   MarkdownStyleSheet? _cachedStyleSheet;
   Map<String, MarkdownElementBuilder>? _cachedBuilders;
   Widget Function(bool isChecked, int checkboxIndex)? _cachedCheckboxBuilder;
@@ -1380,11 +1381,10 @@ class _MarkdownPreviewViewState extends State<MarkdownPreviewView> {
     final citationCount =
         (helper.controller?.citations.length ?? 0) +
         (helper.controller?.zoteroCitations.length ?? 0);
-    final citationStyle =
-        helper.controller?.citationStyle ?? CitationStyle.authorYear;
+    final cslStyleId = helper.controller?.activeCslStyle.id ?? 'apa';
     if (_memoRawMarkdown == widget.markdown &&
         _memoCitationCount == citationCount &&
-        _memoCitationStyle == citationStyle &&
+        _memoCslStyleId == cslStyleId &&
         _memoResult != null) {
       return _memoResult!;
     }
@@ -1392,7 +1392,7 @@ class _MarkdownPreviewViewState extends State<MarkdownPreviewView> {
     final result = _computeMarkdownWithReferences(helper);
     _memoRawMarkdown = widget.markdown;
     _memoCitationCount = citationCount;
-    _memoCitationStyle = citationStyle;
+    _memoCslStyleId = cslStyleId;
     _memoResult = result;
     return result;
   }
@@ -1402,7 +1402,9 @@ class _MarkdownPreviewViewState extends State<MarkdownPreviewView> {
     // In flutter_markdown_plus, an empty task list item causes `_inlines.isEmpty` assertion to fail
     // because <input type="checkbox"> has no children and no text node is generated.
     // Appending a non-breaking space ensures a text child exists, safely clearing inlines.
-    var processed = widget.markdown.replaceAllMapped(
+    var processed = YamlFrontmatterHelper.stripYamlFrontmatter(
+      widget.markdown,
+    ).replaceAllMapped(
       _emptyTaskRegex,
       (m) => '${m[1]} \u00A0',
     );
@@ -1513,7 +1515,7 @@ class _MarkdownPreviewViewState extends State<MarkdownPreviewView> {
     final buffer = StringBuffer(processed);
     buffer.writeln('\n\n---\n\n### References\n');
 
-    final isNumeric = helper.controller?.citationStyle == CitationStyle.numeric;
+    final isNumeric = helper.controller?.activeCslStyle.isNumeric ?? false;
 
     if (isNumeric) {
       // In numeric mode: order by appearance (index 1, 2, 3...)
@@ -1642,7 +1644,7 @@ class _MarkdownPreviewViewState extends State<MarkdownPreviewView> {
         _cachedCodeFont == codeFont &&
         _cachedImageDir == imgDir &&
         _cachedBodyCitationCount == citationCount &&
-        _cachedBodyCitationStyle == controller?.citationStyle) {
+        _cachedBodyCslStyleId == controller?.activeCslStyle.id) {
       customStyle = _cachedStyleSheet!;
       builders = _cachedBuilders!;
       checkboxBuilder = _cachedCheckboxBuilder!;
@@ -1820,7 +1822,7 @@ class _MarkdownPreviewViewState extends State<MarkdownPreviewView> {
       _cachedCodeFont = codeFont;
       _cachedImageDir = imgDir;
       _cachedBodyCitationCount = citationCount;
-      _cachedBodyCitationStyle = controller?.citationStyle;
+      _cachedBodyCslStyleId = controller?.activeCslStyle.id;
       _cachedStyleSheet = customStyle;
       _cachedBuilders = builders;
       _cachedCheckboxBuilder = checkboxBuilder;

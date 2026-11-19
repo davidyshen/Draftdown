@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:markdown/markdown.dart' as md;
 
 import '../models/citation_item.dart';
+import '../utils/yaml_frontmatter_helper.dart';
 
 // =============================================================================
 // Markdown Syntaxes for Off-Thread AST Generation
@@ -103,13 +104,13 @@ class MarkdownRenderPayload {
   final int renderId;
   final String rawMarkdown;
   final List<CitationItem> citations;
-  final CitationStyle citationStyle;
+  final bool isNumericCitation;
 
   const MarkdownRenderPayload({
     required this.renderId,
     required this.rawMarkdown,
     required this.citations,
-    required this.citationStyle,
+    this.isNumericCitation = false,
   });
 }
 
@@ -249,12 +250,15 @@ class MarkdownRenderService {
       );
     }
 
+    // Strip leading YAML frontmatter (e.g. `csl: apa`) before metrics and preview
+    final body = YamlFrontmatterHelper.stripYamlFrontmatter(raw);
+
     // High-performance single-pass metrics computation off the main UI thread
     int words = 0;
     int lines = 1;
     bool inWord = false;
-    for (int i = 0; i < raw.length; i++) {
-      final code = raw.codeUnitAt(i);
+    for (int i = 0; i < body.length; i++) {
+      final code = body.codeUnitAt(i);
       if (code == 10) {
         lines++;
       }
@@ -268,7 +272,7 @@ class MarkdownRenderService {
     final readingTime = (words / 200).ceil().clamp(1, 9999);
 
     // 0. Handle empty task list checkboxes (e.g. "- [ ] " or "- [x] ")
-    var processed = raw.replaceAllMapped(
+    var processed = body.replaceAllMapped(
       _emptyTaskRegex,
       (m) => '${m[1]} \u00A0',
     );
@@ -405,7 +409,7 @@ class MarkdownRenderService {
     final buffer = StringBuffer(processed);
     buffer.writeln('\n\n---\n\n### References\n');
 
-    final isNumeric = payload.citationStyle == CitationStyle.numeric;
+    final isNumeric = payload.isNumericCitation;
 
     if (isNumeric) {
       for (int i = 0; i < citedKeysInOrder.length; i++) {

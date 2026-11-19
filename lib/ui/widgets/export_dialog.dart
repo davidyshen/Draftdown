@@ -105,6 +105,7 @@ class _ExportDialogState extends State<ExportDialog> {
       tableOfContents: _tableOfContents,
       useCiteproc: _useCiteproc,
       bibliographyPath: widget.controller.bibliographyPath,
+      cslStylePath: widget.controller.activeEffectiveCslPath,
       customArguments: _customArgsController.text.trim(),
       pageSize: _selectedPageSize,
       marginSize: _selectedMarginSize,
