@@ -56,8 +56,8 @@ try {
         flutter pub get
         if ($LASTEXITCODE -ne 0) { throw "flutter pub get failed." }
 
-        Write-Host "Building Windows release ($Arch)..."
-        flutter build windows --release
+        Write-Host "Building Windows release ($Arch, v$appVersion)..."
+        flutter build windows --release --dart-define="APP_VERSION=$appVersion"
         if ($LASTEXITCODE -ne 0) { throw "flutter build windows --release failed." }
     }
 
