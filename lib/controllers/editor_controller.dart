@@ -1834,6 +1834,7 @@ class EditorController extends ChangeNotifier {
         controller: this,
         title: _currentFileName.replaceAll('.md', ''),
         pageSize: options.pageSize,
+        fontScale: options.fontScale,
       );
     }
 
@@ -1846,6 +1847,7 @@ class EditorController extends ChangeNotifier {
         title: _currentFileName.replaceAll('.md', ''),
         pageSize: options.pageSize,
         marginSize: options.marginSize,
+        fontScale: options.fontScale,
       );
     }
 

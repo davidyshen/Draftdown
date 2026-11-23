@@ -527,7 +527,7 @@ class _SettingsDialogState extends State<SettingsDialog>
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: Text(
-                        'v${const String.fromEnvironment('APP_VERSION', defaultValue: '1.2.0')}',
+                        'v${const String.fromEnvironment('APP_VERSION', defaultValue: '1.2.1')}',
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,

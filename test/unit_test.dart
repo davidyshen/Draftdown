@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -936,6 +937,149 @@ def shannon_index(counts):
       );
       expect(htmlThick, contains('margin: 1in 1.25in;'));
     });
+
+    test('generateHtmlDocument embeds local relative images as data URIs and applies fragment dimensions', () async {
+      final tempDir = await Directory.systemTemp.createTemp(
+        'draftdown_img_test_',
+      );
+      try {
+        // 1x1 transparent PNG
+        final pngBytes = base64Decode(
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
+        );
+        final imgDir = Directory(
+          '${tempDir.path}${Platform.pathSeparator}images',
+        );
+        await imgDir.create(recursive: true);
+        final imgFile = File(
+          '${imgDir.path}${Platform.pathSeparator}sample.png',
+        );
+        await imgFile.writeAsBytes(pngBytes);
+
+        final docFile = File('${tempDir.path}${Platform.pathSeparator}note.md');
+        await docFile.writeAsString('''# Image Test
+
+![Sample](images/sample.png#120x80)
+
+```html
+<img src="images/sample.png" alt="Inside code">
+```
+''');
+
+        final controller = EditorController();
+        await controller.openFile(docFile.path);
+
+        final html = controller.directExportService.generateHtmlDocument(
+          markdown: controller.content,
+          controller: controller,
+        );
+
+        expect(html, contains('src="data:image/png;base64,'));
+        expect(html, contains('width="120"'));
+        expect(html, contains('height="80"'));
+        // Code block should remain untouched
+        expect(html, contains('&lt;img src=&quot;images/sample.png&quot;'));
+      } finally {
+        await tempDir.delete(recursive: true);
+      }
+    });
+
+    test('exportPdf produces a valid PDF when document contains local relative images', () async {
+      final controller = EditorController();
+      final browser = await controller.directExportService
+          .findBrowserExecutable();
+      if (browser == null) return;
+
+      final tempDir = await Directory.systemTemp.createTemp(
+        'draftdown_pdf_img_test_',
+      );
+      try {
+        final pngBytes = base64Decode(
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
+        );
+        final imgFile = File(
+          '${tempDir.path}${Platform.pathSeparator}pixel.png',
+        );
+        await imgFile.writeAsBytes(pngBytes);
+
+        final docFile = File('${tempDir.path}${Platform.pathSeparator}doc.md');
+        await docFile.writeAsString('# PDF Image\n\n![Pixel](pixel.png)\n');
+        await controller.openFile(docFile.path);
+
+        final outPdfPath = '${tempDir.path}${Platform.pathSeparator}out.pdf';
+        final result = await controller.directExportService.exportPdf(
+          markdown: controller.content,
+          targetPath: outPdfPath,
+          controller: controller,
+        );
+
+        expect(result.success, isTrue, reason: result.errorMessage);
+        final outPdf = File(outPdfPath);
+        expect(await outPdf.exists(), isTrue);
+        expect(await outPdf.length(), greaterThan(0));
+      } finally {
+        await tempDir.delete(recursive: true);
+      }
+    });
+
+    test('generateHtmlDocument renders superscripts, subscripts, and math matching in-app preview', () {
+      final controller = EditorController();
+      const mdContent = '''## Authors and affiliations
+
+David Y. Shen^1,2^, Derek Corcoran^1,2^
+
+Chemical formula H~2~O and inline math \$x_1 + x_2 = y^2\$.
+
+\$\$
+E = mc^2
+\$\$
+
+```math
+a_1 + b_2 = c_3
+```
+''';
+
+      final html = controller.directExportService.generateHtmlDocument(
+        markdown: mdContent,
+        controller: controller,
+      );
+
+      expect(html, contains('David Y. Shen<sup>1,2</sup>'));
+      expect(html, contains('Derek Corcoran<sup>1,2</sup>'));
+      expect(html, isNot(contains('^1,2^')));
+      expect(html, contains('H<sub>2</sub>O'));
+      // Math underscores/carets must not be mangled into <em> or <sup>
+      expect(
+        html,
+        contains(r'<span class="math-inline">\(x_1 + x_2 = y^2\)</span>'),
+      );
+      expect(html, contains(r'<div class="math-display">$$E = mc^2$$</div>'));
+      expect(
+        html,
+        contains('<div class="math-display">\$\$\na_1 + b_2 = c_3\n\$\$</div>'),
+      );
+    });
+
+    test(
+      'generateHtmlDocument scales body font size according to fontScale',
+      () {
+        final controller = EditorController();
+        final service = controller.directExportService;
+
+        final htmlDefault = service.generateHtmlDocument(
+          markdown: '# Title',
+          controller: controller,
+        );
+        expect(htmlDefault, contains('font-size: 11.00pt;'));
+
+        final htmlScaled = service.generateHtmlDocument(
+          markdown: '# Title',
+          controller: controller,
+          fontScale: 1.25,
+        );
+        expect(htmlScaled, contains('font-size: 13.75pt;'));
+      },
+    );
   });
 
   group('Diacritic-Insensitive Citation Search', () {

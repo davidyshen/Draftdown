@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:markdown/markdown.dart' as md;
+import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import '../controllers/editor_controller.dart';
@@ -14,6 +16,34 @@ import 'pandoc_service.dart';
 /// Service generating publication-quality HTML and PDF documents directly
 /// from Markdown, matching the editor preview's typography, deep green code styling,
 /// and unaccented academic citations without requiring Pandoc or LaTeX.
+class _ExportDisplayMathSyntax extends md.InlineSyntax {
+  _ExportDisplayMathSyntax()
+    : super(r'(?:\$\$([\s\S]+?)\$\$|\\\[([\s\S]+?)\\\])');
+
+  @override
+  bool onMatch(md.InlineParser parser, Match match) {
+    final formula = (match[1] ?? match[2] ?? '').trim();
+    final el = md.Element('div', [md.Text('\$\$$formula\$\$')]);
+    el.attributes['class'] = 'math-display';
+    parser.addNode(el);
+    return true;
+  }
+}
+
+class _ExportInlineMathSyntax extends md.InlineSyntax {
+  _ExportInlineMathSyntax()
+    : super(r'(?:(?<!\\)\$(?!\$)(.+?)(?<!\\)\$|\\\((.+?)\\\))');
+
+  @override
+  bool onMatch(md.InlineParser parser, Match match) {
+    final formula = (match[1] ?? match[2] ?? '').trim();
+    final el = md.Element('span', [md.Text('\\($formula\\)')]);
+    el.attributes['class'] = 'math-inline';
+    parser.addNode(el);
+    return true;
+  }
+}
+
 class DirectExportService {
   /// Deep green colour specified for code blocks and inline code
   static const String codeGreenColor = '#166534';
@@ -25,6 +55,44 @@ class DirectExportService {
   );
   static final RegExp _inTextRegex = RegExp(
     r'(?<![\w@])@([a-zA-Z0-9_\-:#\/]+)(?:\[([^\]]+)\])?',
+  );
+  static final RegExp _winAbsRegex = RegExp(r'^[a-zA-Z]:[\\/]');
+  static final RegExp _codeMaskRegex = RegExp(
+    r'<pre\b[^>]*>[\s\S]*?</pre>|<code\b[^>]*>[\s\S]*?</code>',
+    caseSensitive: false,
+  );
+  static final RegExp _codeUnmaskRegex = RegExp(r'%%CODE_BLOCK_(\d+)%%');
+  static final RegExp _imgTagRegex = RegExp(
+    r'<img\b([^>]*)/?>',
+    caseSensitive: false,
+  );
+  static final RegExp _srcAttrRegex = RegExp(
+    r'''\bsrc\s*=\s*(?:"([^"]*)"|'([^']*)')''',
+    caseSensitive: false,
+  );
+  static final RegExp _widthAttrRegex = RegExp(
+    r'''\bwidth\s*=\s*(?:"([^"]*)"|'([^']*)'|(\S+))''',
+    caseSensitive: false,
+  );
+  static final RegExp _heightAttrRegex = RegExp(
+    r'''\bheight\s*=\s*(?:"([^"]*)"|'([^']*)'|(\S+))''',
+    caseSensitive: false,
+  );
+  static final RegExp _emptyTaskRegex = RegExp(
+    r'^([ \t]*(?:>\s*)*(?:[-*+]|\d+\.)[ \t]+\[[ xX]\])[ \t]*$',
+    multiLine: true,
+  );
+  static final RegExp _emptyBulletRegex = RegExp(
+    r'^([ \t]*)([-*+])([ \t]+)$',
+    multiLine: true,
+  );
+  static final RegExp _multiSpaceBulletRegex = RegExp(
+    r'^([ \t]*[-*+])[ \t]{2,}',
+    multiLine: true,
+  );
+  static final RegExp _mathCodeBlockRegex = RegExp(
+    r'<pre><code class="language-(?:math|latex)">([\s\S]*?)</code></pre>',
+    caseSensitive: false,
   );
 
   String? _cachedBrowserExecutable;
@@ -176,7 +244,32 @@ class DirectExportService {
     required String markdown,
     required EditorController controller,
   }) {
-    final stripped = YamlFrontmatterHelper.stripYamlFrontmatter(markdown);
+    if (markdown.trim().isEmpty) {
+      return '_Document is empty._';
+    }
+
+    var stripped = YamlFrontmatterHelper.stripYamlFrontmatter(markdown);
+
+    // Match in-app preview preprocessing for task checkboxes and bullet spacing
+    stripped = stripped.replaceAllMapped(
+      _emptyTaskRegex,
+      (m) => '${m[1]} \u00A0',
+    );
+    stripped = stripped.replaceAllMapped(_emptyBulletRegex, (m) {
+      final indent = m[1] ?? '';
+      final marker = m[2] ?? '*';
+      final spaces = m[3] ?? '';
+      final visibleSpaces = '\u00A0' * spaces.length;
+      return '$indent\\$marker$visibleSpaces';
+    });
+    stripped = stripped.replaceAllMapped(_multiSpaceBulletRegex, (m) {
+      final marker = m[1]!;
+      final totalMatch = m.group(0)!;
+      final spaceCount = totalMatch.length - marker.length;
+      final extraSpaces = '\u00A0' * (spaceCount - 1);
+      return '$marker $extraSpaces';
+    });
+
     if (!stripped.contains('@')) return stripped;
 
     final isNumeric = controller.activeCslStyle.isNumeric;
@@ -308,6 +401,204 @@ class DirectExportService {
     return processed;
   }
 
+  static String _imageMimeType(String filePath) {
+    switch (p.extension(filePath).toLowerCase()) {
+      case '.png':
+        return 'image/png';
+      case '.jpg':
+      case '.jpeg':
+        return 'image/jpeg';
+      case '.gif':
+        return 'image/gif';
+      case '.webp':
+        return 'image/webp';
+      case '.svg':
+        return 'image/svg+xml';
+      case '.bmp':
+        return 'image/bmp';
+      case '.ico':
+        return 'image/x-icon';
+      case '.tif':
+      case '.tiff':
+        return 'image/tiff';
+      case '.avif':
+        return 'image/avif';
+      default:
+        return 'image/png';
+    }
+  }
+
+  static String _unescapeHtmlAttr(String value) {
+    return value
+        .replaceAll('&amp;', '&')
+        .replaceAll('&quot;', '"')
+        .replaceAll('&#39;', "'")
+        .replaceAll('&lt;', '<')
+        .replaceAll('&gt;', '>');
+  }
+
+  static String _escapeHtmlAttr(String value) {
+    return value
+        .replaceAll('&', '&amp;')
+        .replaceAll('"', '&quot;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;');
+  }
+
+  File? _resolveLocalImageFile(String src, EditorController controller) {
+    var clean = src.trim();
+    if (clean.isEmpty) return null;
+
+    if (clean.startsWith('file://')) {
+      final uri = Uri.tryParse(clean);
+      if (uri != null) {
+        try {
+          return File(uri.toFilePath());
+        } catch (_) {}
+      }
+      clean = clean.substring(7);
+      if (Platform.isWindows && clean.startsWith('/')) {
+        clean = clean.substring(1);
+      }
+    }
+
+    if (clean.contains('%')) {
+      try {
+        final decoded = Uri.decodeFull(clean);
+        clean = decoded;
+      } catch (_) {}
+    }
+
+    final isWindowsAbs =
+        _winAbsRegex.hasMatch(clean) || clean.startsWith(r'\\');
+    final isPosixAbs = clean.startsWith('/');
+    if (isWindowsAbs || isPosixAbs || p.isAbsolute(clean)) {
+      return File(clean);
+    }
+
+    // 1. Try relative to current document directory
+    final currentDoc = controller.currentFilePath;
+    if (currentDoc != null && currentDoc.isNotEmpty) {
+      final docDir = p.dirname(currentDoc);
+      final candidate = File(p.normalize(p.join(docDir, clean)));
+      if (candidate.existsSync()) {
+        return candidate;
+      }
+    }
+
+    // 2. Try relative to current working directory
+    final cwdCandidate = File(
+      p.normalize(p.join(Directory.current.path, clean)),
+    );
+    if (cwdCandidate.existsSync()) {
+      return cwdCandidate;
+    }
+
+    // Fallback to document directory candidate if known
+    if (currentDoc != null && currentDoc.isNotEmpty) {
+      final docDir = p.dirname(currentDoc);
+      return File(p.normalize(p.join(docDir, clean)));
+    }
+    return cwdCandidate;
+  }
+
+  /// Resolve local image sources to embedded data URIs (or file URIs for very large files)
+  /// and convert `#widthxheight` dimension fragments into HTML `width`/`height` attributes.
+  String _resolveImagesInHtml(String htmlBody, EditorController controller) {
+    if (!htmlBody.contains('<img') &&
+        !htmlBody.contains('<IMG') &&
+        !htmlBody.contains('<Img')) {
+      return htmlBody;
+    }
+
+    final codeTokens = <String>[];
+    var processed = htmlBody.replaceAllMapped(_codeMaskRegex, (m) {
+      codeTokens.add(m.group(0)!);
+      return '%%CODE_BLOCK_${codeTokens.length - 1}%%';
+    });
+
+    processed = processed.replaceAllMapped(_imgTagRegex, (match) {
+      final fullTag = match.group(0)!;
+      final attrs = match.group(1) ?? '';
+      final srcMatch = _srcAttrRegex.firstMatch(attrs);
+      if (srcMatch == null) return fullTag;
+
+      final rawAttrVal = srcMatch.group(1) ?? srcMatch.group(2) ?? '';
+      var cleanSrc = _unescapeHtmlAttr(rawAttrVal).trim();
+      if (cleanSrc.isEmpty) return fullTag;
+
+      String? fragWidth;
+      String? fragHeight;
+      if (!cleanSrc.startsWith('data:')) {
+        final hashIndex = cleanSrc.lastIndexOf('#');
+        if (hashIndex != -1) {
+          final fragment = cleanSrc.substring(hashIndex + 1);
+          final dims = fragment.split('x');
+          if (dims.length == 2 &&
+              double.tryParse(dims[0]) != null &&
+              double.tryParse(dims[1]) != null) {
+            fragWidth = dims[0];
+            fragHeight = dims[1];
+            cleanSrc = cleanSrc.substring(0, hashIndex);
+          } else if (dims.length == 1 && double.tryParse(dims[0]) != null) {
+            fragWidth = dims[0];
+            cleanSrc = cleanSrc.substring(0, hashIndex);
+          }
+        }
+      }
+
+      String resolvedSrc = cleanSrc;
+      final lowerSrc = cleanSrc.toLowerCase();
+      final isRemoteOrData =
+          lowerSrc.startsWith('data:') ||
+          lowerSrc.startsWith('http://') ||
+          lowerSrc.startsWith('https://');
+
+      if (!isRemoteOrData) {
+        final file = _resolveLocalImageFile(cleanSrc, controller);
+        if (file != null && file.existsSync()) {
+          try {
+            // Embed files up to 25 MB as data URIs for reliable headless PDF rendering
+            if (file.lengthSync() <= 25 * 1024 * 1024) {
+              final mime = _imageMimeType(file.path);
+              final b64 = base64Encode(file.readAsBytesSync());
+              resolvedSrc = 'data:$mime;base64,$b64';
+            } else {
+              resolvedSrc = file.uri.toString();
+            }
+          } catch (_) {
+            resolvedSrc = file.uri.toString();
+          }
+        }
+      }
+
+      final escapedSrc = _escapeHtmlAttr(resolvedSrc);
+      var newAttrs = attrs.replaceFirst(
+        srcMatch.group(0)!,
+        'src="$escapedSrc"',
+      );
+
+      if (fragWidth != null && !_widthAttrRegex.hasMatch(newAttrs)) {
+        newAttrs = '$newAttrs width="${_escapeHtmlAttr(fragWidth)}"';
+      }
+      if (fragHeight != null && !_heightAttrRegex.hasMatch(newAttrs)) {
+        newAttrs = '$newAttrs height="${_escapeHtmlAttr(fragHeight)}"';
+      }
+
+      final selfClosing = fullTag.trimRight().endsWith('/>') ? ' /' : '';
+      return '<img$newAttrs$selfClosing>';
+    });
+
+    if (codeTokens.isNotEmpty) {
+      processed = processed.replaceAllMapped(
+        _codeUnmaskRegex,
+        (m) => codeTokens[int.parse(m.group(1)!)],
+      );
+    }
+
+    return processed;
+  }
+
   /// Generate a complete, standalone HTML document mimicking the preview styles
   String generateHtmlDocument({
     required String markdown,
@@ -315,6 +606,7 @@ class DirectExportService {
     String? title,
     String pageSize = 'a4',
     String marginSize = 'medium',
+    double fontScale = 1.0,
   }) {
     final docTitle = title ?? controller.currentFileName.replaceAll('.md', '');
     final processedMarkdown = _processMarkdownForExport(
@@ -322,11 +614,28 @@ class DirectExportService {
       controller: controller,
     );
 
-    // Convert markdown to HTML using GitHub Flavored Markdown
-    final htmlBody = md.markdownToHtml(
+    // Convert markdown to HTML using GitHub Flavored Markdown + preview inline syntaxes
+    var rawHtmlBody = md.markdownToHtml(
       processedMarkdown,
       extensionSet: md.ExtensionSet.gitHubFlavored,
+      inlineSyntaxes: [
+        _ExportDisplayMathSyntax(),
+        _ExportInlineMathSyntax(),
+        SuperscriptSyntax(),
+        SubscriptSyntax(),
+      ],
     );
+
+    // Convert fenced ```math and ```latex code blocks into display math containers
+    if (rawHtmlBody.contains('language-math') ||
+        rawHtmlBody.contains('language-latex')) {
+      rawHtmlBody = rawHtmlBody.replaceAllMapped(
+        _mathCodeBlockRegex,
+        (m) => '<div class="math-display">\$\$\n${m[1]!.trim()}\n\$\$</div>',
+      );
+    }
+
+    final htmlBody = _resolveImagesInHtml(rawHtmlBody, controller);
 
     final bodyFont = controller.renderBodyFont;
     final headerFont = controller.effectiveRenderHeaderFont;
@@ -335,6 +644,8 @@ class DirectExportService {
         ? 'letter'
         : 'A4';
     final effectiveMargin = resolvePageMargin(marginSize);
+    final effectiveScale = fontScale.clamp(0.5, 2.0);
+    final effectiveFontSizePt = (11.0 * effectiveScale).toStringAsFixed(2);
 
     return '''<!DOCTYPE html>
 <html lang="en-GB">
@@ -347,7 +658,7 @@ class DirectExportService {
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
-          onload="renderMathInElement(document.body, {delimiters: [{left: '\$\$', right: '\$\$', display: true}, {left: '\$', right: '\$', display: false}]});"></script>
+          onload="renderMathInElement(document.body, {delimiters: [{left: '\$\$', right: '\$\$', display: true}, {left: '\\\\[', right: '\\\\]', display: true}, {left: '\$', right: '\$', display: false}, {left: '\\\\(', right: '\\\\)', display: false}]});"></script>
 
   <style>
     :root {
@@ -368,7 +679,7 @@ class DirectExportService {
 
     body {
       font-family: var(--body-font);
-      font-size: 11pt;
+      font-size: ${effectiveFontSizePt}pt;
       line-height: 1.6;
       color: #0f172a;
       background: #f8fafc;
@@ -519,6 +830,43 @@ class DirectExportService {
       margin: 32px 0;
     }
 
+    /* Images */
+    img {
+      max-width: 100%;
+      height: auto;
+      display: inline-block;
+    }
+
+    /* Superscripts & Subscripts (matching in-app preview) */
+    sup, sub {
+      font-size: 0.75em;
+      line-height: 0;
+      position: relative;
+      vertical-align: baseline;
+    }
+
+    sup {
+      top: -0.45em;
+    }
+
+    sub {
+      bottom: -0.25em;
+    }
+
+    /* Display Math */
+    .math-display {
+      text-align: center;
+      margin: 14px 0;
+      overflow-x: auto;
+    }
+
+    /* Task List Checkboxes */
+    input[type="checkbox"] {
+      margin-right: 0.45em;
+      accent-color: #2563eb;
+      vertical-align: middle;
+    }
+
     /* Print Stylesheet for exact Word Processor fidelity */
     @media print {
       body {
@@ -531,6 +879,12 @@ class DirectExportService {
         padding: 0 !important;
         max-width: none !important;
         margin: 0 !important;
+      }
+      img {
+        max-width: 100%;
+        height: auto;
+        page-break-inside: avoid;
+        break-inside: avoid;
       }
       pre, pre code, p code, li code, td code {
         background: transparent !important;
@@ -561,6 +915,7 @@ class DirectExportService {
     required EditorController controller,
     String? title,
     String pageSize = 'a4',
+    double fontScale = 1.0,
   }) async {
     final stopwatch = Stopwatch()..start();
     try {
@@ -574,6 +929,7 @@ class DirectExportService {
         controller: controller,
         title: title,
         pageSize: pageSize,
+        fontScale: fontScale,
       );
 
       await targetFile.writeAsString(html);
@@ -610,6 +966,7 @@ class DirectExportService {
     String? title,
     String pageSize = 'a4',
     String marginSize = 'medium',
+    double fontScale = 1.0,
   }) async {
     final stopwatch = Stopwatch()..start();
     final browserExe = await findBrowserExecutable();
@@ -638,6 +995,7 @@ class DirectExportService {
         title: title,
         pageSize: pageSize,
         marginSize: marginSize,
+        fontScale: fontScale,
       );
 
       final tempDir = await getTemporaryDirectory();
@@ -665,6 +1023,7 @@ class DirectExportService {
       final args = [
         '--headless=new',
         '--disable-gpu',
+        '--allow-file-access-from-files',
         '--no-pdf-header-footer',
         '--log-level=3',
         '--silent-debugger-extension-api',
