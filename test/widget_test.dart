@@ -561,7 +561,10 @@ void main() {
       expect(find.text('Thick'), findsOneWidget);
 
       // Verify first-page preview and Font Size slider are visible for PDF
-      expect(find.byKey(const ValueKey('export-first-page-preview')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('export-first-page-preview')),
+        findsOneWidget,
+      );
       expect(find.text('First Page Preview'), findsOneWidget);
       expect(find.byKey(const ValueKey('font-scale-slider')), findsOneWidget);
       expect(find.text('100%'), findsOneWidget);
@@ -574,7 +577,10 @@ void main() {
       expect(find.text('Margins:'), findsNothing);
       expect(find.byKey(const ValueKey('page-size-dropdown')), findsNothing);
       expect(find.byKey(const ValueKey('margin-size-dropdown')), findsNothing);
-      expect(find.byKey(const ValueKey('export-first-page-preview')), findsNothing);
+      expect(
+        find.byKey(const ValueKey('export-first-page-preview')),
+        findsNothing,
+      );
 
       // Switch back to PDF Document and verify they reappear
       await tester.tap(find.text('PDF Document'));
@@ -582,7 +588,10 @@ void main() {
 
       expect(find.text('Page Size:'), findsOneWidget);
       expect(find.text('Margins:'), findsOneWidget);
-      expect(find.byKey(const ValueKey('export-first-page-preview')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('export-first-page-preview')),
+        findsOneWidget,
+      );
     },
   );
 

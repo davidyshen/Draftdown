@@ -8,10 +8,7 @@ import 'package:path/path.dart' as p;
 import '../../controllers/editor_controller.dart';
 import '../../models/export_format.dart';
 import '../../services/markdown_render_service.dart'
-    show
-        MarkdownRenderPayload,
-        MarkdownRenderResult,
-        MarkdownRenderService;
+    show MarkdownRenderPayload, MarkdownRenderResult, MarkdownRenderService;
 import '../../services/pandoc_service.dart';
 import '../theme/app_theme.dart';
 import 'markdown_preview.dart';
@@ -293,474 +290,553 @@ class _ExportDialogState extends State<ExportDialog> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-              // Export destination field
-              const Text(
-                'Destination File',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(height: 6),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _targetPathController,
-                      style: const TextStyle(fontSize: 12),
-                      decoration: InputDecoration(
-                        hintText: 'Target output path...',
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 8,
-                        ),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(6),
-                          borderSide: BorderSide(color: borderColor),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  OutlinedButton.icon(
-                    icon: const Icon(Icons.folder_open, size: 16),
-                    label: const Text(
-                      'Browse...',
-                      style: TextStyle(fontSize: 12),
-                    ),
-                    onPressed: _browseDestination,
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 12),
-
-              // Options: Citeproc, Standalone, TOC
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  border: Border.all(color: borderColor),
-                  borderRadius: BorderRadius.circular(8),
-                  color: isDark ? AppTheme.darkSidebar : AppTheme.lightBg,
-                ),
-                child: Wrap(
-                  spacing: 16,
-                  runSpacing: 4,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Checkbox(
-                          value: _useCiteproc,
-                          visualDensity: VisualDensity.compact,
-                          onChanged: (val) =>
-                              setState(() => _useCiteproc = val ?? true),
-                        ),
-                        const Text(
-                          'Include Citations & References',
-                          style: TextStyle(fontSize: 12),
-                        ),
-                      ],
-                    ),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Checkbox(
-                          value: _standalone,
-                          visualDensity: VisualDensity.compact,
-                          onChanged: (val) =>
-                              setState(() => _standalone = val ?? true),
-                        ),
-                        const Text(
-                          'Standalone Document',
-                          style: TextStyle(fontSize: 12),
-                        ),
-                      ],
-                    ),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Checkbox(
-                          value: _tableOfContents,
-                          visualDensity: VisualDensity.compact,
-                          onChanged: (val) =>
-                              setState(() => _tableOfContents = val ?? false),
-                        ),
-                        const Text(
-                          'Table of Contents',
-                          style: TextStyle(fontSize: 12),
-                        ),
-                      ],
-                    ),
-                    if (_selectedFormat.type == ExportFormatType.pdf) ...[
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
+                          // Export destination field
                           const Text(
-                            'Page Size:',
-                            style: TextStyle(fontSize: 12),
-                          ),
-                          const SizedBox(width: 8),
-                          Container(
-                            height: 28,
-                            padding: const EdgeInsets.symmetric(horizontal: 8),
-                            decoration: BoxDecoration(
-                              border: Border.all(color: borderColor),
-                              borderRadius: BorderRadius.circular(4),
-                              color: isDark
-                                  ? AppTheme.darkBg
-                                  : AppTheme.lightSurface,
-                            ),
-                            child: DropdownButtonHideUnderline(
-                              child: DropdownButton<String>(
-                                key: const ValueKey('page-size-dropdown'),
-                                value: _selectedPageSize,
-                                isDense: true,
-                                focusColor: Colors.transparent,
-                                icon: const Icon(
-                                  Icons.keyboard_arrow_down,
-                                  size: 16,
-                                ),
-                                items: const [
-                                  DropdownMenuItem(
-                                    value: 'a4',
-                                    child: Text(
-                                      'A4',
-                                      style: TextStyle(fontSize: 12),
-                                    ),
-                                  ),
-                                  DropdownMenuItem(
-                                    value: 'letter',
-                                    child: Text(
-                                      'Letter',
-                                      style: TextStyle(fontSize: 12),
-                                    ),
-                                  ),
-                                ],
-                                onChanged: (val) {
-                                  if (val != null) {
-                                    setState(() => _selectedPageSize = val);
-                                  }
-                                },
-                              ),
+                            'Destination File',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
                             ),
                           ),
-                        ],
-                      ),
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Text(
-                            'Margins:',
-                            style: TextStyle(fontSize: 12),
-                          ),
-                          const SizedBox(width: 8),
-                          Container(
-                            height: 28,
-                            padding: const EdgeInsets.symmetric(horizontal: 8),
-                            decoration: BoxDecoration(
-                              border: Border.all(color: borderColor),
-                              borderRadius: BorderRadius.circular(4),
-                              color: isDark
-                                  ? AppTheme.darkBg
-                                  : AppTheme.lightSurface,
-                            ),
-                            child: DropdownButtonHideUnderline(
-                              child: DropdownButton<String>(
-                                key: const ValueKey('margin-size-dropdown'),
-                                value: _selectedMarginSize,
-                                isDense: true,
-                                focusColor: Colors.transparent,
-                                icon: const Icon(
-                                  Icons.keyboard_arrow_down,
-                                  size: 16,
-                                ),
-                                items: const [
-                                  DropdownMenuItem(
-                                    value: 'medium',
-                                    child: Text(
-                                      'Medium',
-                                      style: TextStyle(fontSize: 12),
-                                    ),
-                                  ),
-                                  DropdownMenuItem(
-                                    value: 'thin',
-                                    child: Text(
-                                      'Thin',
-                                      style: TextStyle(fontSize: 12),
-                                    ),
-                                  ),
-                                  DropdownMenuItem(
-                                    value: 'thick',
-                                    child: Text(
-                                      'Thick',
-                                      style: TextStyle(fontSize: 12),
-                                    ),
-                                  ),
-                                ],
-                                onChanged: (val) {
-                                  if (val != null) {
-                                    setState(() => _selectedMarginSize = val);
-                                  }
-                                },
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                    if (showPreview) ...[
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Text(
-                            'Font Size:',
-                            style: TextStyle(fontSize: 12),
-                          ),
-                          SizedBox(
-                            width: 115,
-                            child: SliderTheme(
-                              data: SliderTheme.of(context).copyWith(
-                                trackHeight: 2.5,
-                                thumbShape: const RoundSliderThumbShape(
-                                  enabledThumbRadius: 6,
-                                ),
-                                overlayShape: const RoundSliderOverlayShape(
-                                  overlayRadius: 12,
-                                ),
-                              ),
-                              child: Slider(
-                                key: const ValueKey('font-scale-slider'),
-                                value: _fontScale,
-                                min: 0.7,
-                                max: 1.5,
-                                divisions: 16,
-                                onChanged: (val) {
-                                  setState(() => _fontScale = val);
-                                },
-                              ),
-                            ),
-                          ),
-                          SizedBox(
-                            width: 38,
-                            child: Text(
-                              '${(_fontScale * 100).round()}%',
-                              style: const TextStyle(
-                                fontSize: 11.5,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 10),
-
-              // Advanced Options (Optional)
-              InkWell(
-                borderRadius: BorderRadius.circular(4),
-                onTap: () => setState(
-                  () => _showAdvancedOptions = !_showAdvancedOptions,
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 2.0),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        _showAdvancedOptions
-                            ? Icons.keyboard_arrow_down
-                            : Icons.keyboard_arrow_right,
-                        size: 16,
-                        color: mutedColor,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        'Advanced Options',
-                        style: TextStyle(fontSize: 11, color: mutedColor),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
-              if (_showAdvancedOptions) ...[
-                const SizedBox(height: 6),
-                TextField(
-                  controller: _customArgsController,
-                  style: const TextStyle(
-                    fontFamily: 'Consolas, monospace',
-                    fontSize: 11.5,
-                  ),
-                  decoration: InputDecoration(
-                    labelText: 'Additional Arguments (Optional)',
-                    labelStyle: const TextStyle(fontSize: 11),
-                    hintText: 'e.g. --number-sections',
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 6,
-                    ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(6),
-                      borderSide: BorderSide(color: borderColor),
-                    ),
-                  ),
-                ),
-              ],
-
-              const SizedBox(height: 10),
-
-              // Execution / Status Log Area
-              Expanded(
-                child: Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: isDark ? AppTheme.darkBg : AppTheme.lightSidebar,
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: borderColor),
-                  ),
-                  child: _isExporting
-                      ? const Center(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
+                          const SizedBox(height: 6),
+                          Row(
                             children: [
-                              CircularProgressIndicator(strokeWidth: 2),
-                              SizedBox(height: 12),
-                              Text(
-                                'Exporting document...',
-                                style: TextStyle(fontSize: 12),
+                              Expanded(
+                                child: TextField(
+                                  controller: _targetPathController,
+                                  style: const TextStyle(fontSize: 12),
+                                  decoration: InputDecoration(
+                                    hintText: 'Target output path...',
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 8,
+                                    ),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(6),
+                                      borderSide: BorderSide(
+                                        color: borderColor,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              OutlinedButton.icon(
+                                icon: const Icon(Icons.folder_open, size: 16),
+                                label: const Text(
+                                  'Browse...',
+                                  style: TextStyle(fontSize: 12),
+                                ),
+                                onPressed: _browseDestination,
                               ),
                             ],
                           ),
-                        )
-                      : _lastResult == null
-                      ? Center(
-                          child: Text(
-                            'Ready to export ${_selectedFormat.name}. Click "Export Now" below.',
-                            style: TextStyle(fontSize: 12, color: mutedColor),
-                          ),
-                        )
-                      : SingleChildScrollView(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Icon(
-                                    _lastResult!.success
-                                        ? Icons.check_circle
-                                        : Icons.error_outline,
-                                    size: 16,
-                                    color: _lastResult!.success
-                                        ? Colors.green
-                                        : Colors.red,
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    _lastResult!.success
-                                        ? 'Export completed successfully in ${_lastResult!.duration.inMilliseconds}ms!'
-                                        : 'Export failed with exit code ${_lastResult!.exitCode}',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.bold,
-                                      color: _lastResult!.success
-                                          ? Colors.green
-                                          : Colors.red,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              if (_lastResult!.success) ...[
-                                const SizedBox(height: 6),
+
+                          const SizedBox(height: 12),
+
+                          // Options: Citeproc, Standalone, TOC
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 6,
+                            ),
+                            decoration: BoxDecoration(
+                              border: Border.all(color: borderColor),
+                              borderRadius: BorderRadius.circular(8),
+                              color: isDark
+                                  ? AppTheme.darkSidebar
+                                  : AppTheme.lightBg,
+                            ),
+                            child: Wrap(
+                              spacing: 16,
+                              runSpacing: 4,
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              children: [
                                 Row(
+                                  mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    ElevatedButton.icon(
-                                      icon: const Icon(
-                                        Icons.open_in_new,
-                                        size: 14,
+                                    Checkbox(
+                                      value: _useCiteproc,
+                                      visualDensity: VisualDensity.compact,
+                                      onChanged: (val) => setState(
+                                        () => _useCiteproc = val ?? true,
                                       ),
-                                      label: const Text(
-                                        'Open File',
-                                        style: TextStyle(fontSize: 11),
-                                      ),
-                                      style: ElevatedButton.styleFrom(
-                                        visualDensity: VisualDensity.compact,
-                                      ),
-                                      onPressed: () => widget
-                                          .controller
-                                          .fileService
-                                          .openFileWithSystemDefault(
-                                            _lastResult!.targetFile,
-                                          ),
                                     ),
-                                    const SizedBox(width: 8),
-                                    OutlinedButton.icon(
-                                      icon: const Icon(
-                                        Icons.folder_open,
-                                        size: 14,
-                                      ),
-                                      label: const Text(
-                                        'Reveal in Explorer',
-                                        style: TextStyle(fontSize: 11),
-                                      ),
-                                      style: OutlinedButton.styleFrom(
-                                        visualDensity: VisualDensity.compact,
-                                      ),
-                                      onPressed: () => widget
-                                          .controller
-                                          .fileService
-                                          .revealInExplorer(
-                                            _lastResult!.targetFile,
-                                          ),
+                                    const Text(
+                                      'Include Citations & References',
+                                      style: TextStyle(fontSize: 12),
                                     ),
                                   ],
                                 ),
-                              ],
-                              if (!_lastResult!.success &&
-                                  _lastResult!.stderr.isNotEmpty) ...[
-                                const SizedBox(height: 8),
-                                Text(
-                                  _lastResult!.stderr,
-                                  style: const TextStyle(
-                                    fontFamily: 'Consolas, monospace',
-                                    fontSize: 10.5,
-                                    color: Colors.redAccent,
-                                  ),
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Checkbox(
+                                      value: _standalone,
+                                      visualDensity: VisualDensity.compact,
+                                      onChanged: (val) => setState(
+                                        () => _standalone = val ?? true,
+                                      ),
+                                    ),
+                                    const Text(
+                                      'Standalone Document',
+                                      style: TextStyle(fontSize: 12),
+                                    ),
+                                  ],
                                 ),
-                              ],
-                              if (_lastResult!.success &&
-                                  _lastResult!.stderr.isNotEmpty) ...[
-                                const SizedBox(height: 8),
-                                Text(
-                                  _lastResult!.stderr,
-                                  style: TextStyle(
-                                    fontFamily: 'Consolas, monospace',
-                                    fontSize: 10.5,
-                                    color: mutedColor,
-                                  ),
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Checkbox(
+                                      value: _tableOfContents,
+                                      visualDensity: VisualDensity.compact,
+                                      onChanged: (val) => setState(
+                                        () => _tableOfContents = val ?? false,
+                                      ),
+                                    ),
+                                    const Text(
+                                      'Table of Contents',
+                                      style: TextStyle(fontSize: 12),
+                                    ),
+                                  ],
                                 ),
-                              ],
-                              if (_lastResult!.stdout.isNotEmpty) ...[
-                                const SizedBox(height: 8),
-                                Text(
-                                  _lastResult!.stdout,
-                                  style: TextStyle(
-                                    fontFamily: 'Consolas, monospace',
-                                    fontSize: 10.5,
-                                    color: mutedColor,
+                                if (_selectedFormat.type ==
+                                    ExportFormatType.pdf) ...[
+                                  Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Text(
+                                        'Page Size:',
+                                        style: TextStyle(fontSize: 12),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Container(
+                                        height: 28,
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          border: Border.all(
+                                            color: borderColor,
+                                          ),
+                                          borderRadius: BorderRadius.circular(
+                                            4,
+                                          ),
+                                          color: isDark
+                                              ? AppTheme.darkBg
+                                              : AppTheme.lightSurface,
+                                        ),
+                                        child: DropdownButtonHideUnderline(
+                                          child: DropdownButton<String>(
+                                            key: const ValueKey(
+                                              'page-size-dropdown',
+                                            ),
+                                            value: _selectedPageSize,
+                                            isDense: true,
+                                            focusColor: Colors.transparent,
+                                            icon: const Icon(
+                                              Icons.keyboard_arrow_down,
+                                              size: 16,
+                                            ),
+                                            items: const [
+                                              DropdownMenuItem(
+                                                value: 'a4',
+                                                child: Text(
+                                                  'A4',
+                                                  style: TextStyle(
+                                                    fontSize: 12,
+                                                  ),
+                                                ),
+                                              ),
+                                              DropdownMenuItem(
+                                                value: 'letter',
+                                                child: Text(
+                                                  'Letter',
+                                                  style: TextStyle(
+                                                    fontSize: 12,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                            onChanged: (val) {
+                                              if (val != null) {
+                                                setState(
+                                                  () => _selectedPageSize = val,
+                                                );
+                                              }
+                                            },
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                   ),
-                                ),
+                                  Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Text(
+                                        'Margins:',
+                                        style: TextStyle(fontSize: 12),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Container(
+                                        height: 28,
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          border: Border.all(
+                                            color: borderColor,
+                                          ),
+                                          borderRadius: BorderRadius.circular(
+                                            4,
+                                          ),
+                                          color: isDark
+                                              ? AppTheme.darkBg
+                                              : AppTheme.lightSurface,
+                                        ),
+                                        child: DropdownButtonHideUnderline(
+                                          child: DropdownButton<String>(
+                                            key: const ValueKey(
+                                              'margin-size-dropdown',
+                                            ),
+                                            value: _selectedMarginSize,
+                                            isDense: true,
+                                            focusColor: Colors.transparent,
+                                            icon: const Icon(
+                                              Icons.keyboard_arrow_down,
+                                              size: 16,
+                                            ),
+                                            items: const [
+                                              DropdownMenuItem(
+                                                value: 'medium',
+                                                child: Text(
+                                                  'Medium',
+                                                  style: TextStyle(
+                                                    fontSize: 12,
+                                                  ),
+                                                ),
+                                              ),
+                                              DropdownMenuItem(
+                                                value: 'thin',
+                                                child: Text(
+                                                  'Thin',
+                                                  style: TextStyle(
+                                                    fontSize: 12,
+                                                  ),
+                                                ),
+                                              ),
+                                              DropdownMenuItem(
+                                                value: 'thick',
+                                                child: Text(
+                                                  'Thick',
+                                                  style: TextStyle(
+                                                    fontSize: 12,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                            onChanged: (val) {
+                                              if (val != null) {
+                                                setState(
+                                                  () =>
+                                                      _selectedMarginSize = val,
+                                                );
+                                              }
+                                            },
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                                if (showPreview) ...[
+                                  Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Text(
+                                        'Font Size:',
+                                        style: TextStyle(fontSize: 12),
+                                      ),
+                                      SizedBox(
+                                        width: 115,
+                                        child: SliderTheme(
+                                          data: SliderTheme.of(context).copyWith(
+                                            trackHeight: 2.5,
+                                            thumbShape:
+                                                const RoundSliderThumbShape(
+                                                  enabledThumbRadius: 6,
+                                                ),
+                                            overlayShape:
+                                                const RoundSliderOverlayShape(
+                                                  overlayRadius: 12,
+                                                ),
+                                          ),
+                                          child: Slider(
+                                            key: const ValueKey(
+                                              'font-scale-slider',
+                                            ),
+                                            value: _fontScale,
+                                            min: 0.7,
+                                            max: 1.5,
+                                            divisions: 16,
+                                            onChanged: (val) {
+                                              setState(() => _fontScale = val);
+                                            },
+                                          ),
+                                        ),
+                                      ),
+                                      SizedBox(
+                                        width: 38,
+                                        child: Text(
+                                          '${(_fontScale * 100).round()}%',
+                                          style: const TextStyle(
+                                            fontSize: 11.5,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
                               ],
-                            ],
+                            ),
                           ),
-                        ),
-                ),
-              ),
+
+                          const SizedBox(height: 10),
+
+                          // Advanced Options (Optional)
+                          InkWell(
+                            borderRadius: BorderRadius.circular(4),
+                            onTap: () => setState(
+                              () =>
+                                  _showAdvancedOptions = !_showAdvancedOptions,
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                vertical: 2.0,
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    _showAdvancedOptions
+                                        ? Icons.keyboard_arrow_down
+                                        : Icons.keyboard_arrow_right,
+                                    size: 16,
+                                    color: mutedColor,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'Advanced Options',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: mutedColor,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+
+                          if (_showAdvancedOptions) ...[
+                            const SizedBox(height: 6),
+                            TextField(
+                              controller: _customArgsController,
+                              style: const TextStyle(
+                                fontFamily: 'Consolas, monospace',
+                                fontSize: 11.5,
+                              ),
+                              decoration: InputDecoration(
+                                labelText: 'Additional Arguments (Optional)',
+                                labelStyle: const TextStyle(fontSize: 11),
+                                hintText: 'e.g. --number-sections',
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 6,
+                                ),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(6),
+                                  borderSide: BorderSide(color: borderColor),
+                                ),
+                              ),
+                            ),
+                          ],
+
+                          const SizedBox(height: 10),
+
+                          // Execution / Status Log Area
+                          Expanded(
+                            child: Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: isDark
+                                    ? AppTheme.darkBg
+                                    : AppTheme.lightSidebar,
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(color: borderColor),
+                              ),
+                              child: _isExporting
+                                  ? const Center(
+                                      child: Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                          ),
+                                          SizedBox(height: 12),
+                                          Text(
+                                            'Exporting document...',
+                                            style: TextStyle(fontSize: 12),
+                                          ),
+                                        ],
+                                      ),
+                                    )
+                                  : _lastResult == null
+                                  ? Center(
+                                      child: Text(
+                                        'Ready to export ${_selectedFormat.name}. Click "Export Now" below.',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: mutedColor,
+                                        ),
+                                      ),
+                                    )
+                                  : SingleChildScrollView(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Row(
+                                            children: [
+                                              Icon(
+                                                _lastResult!.success
+                                                    ? Icons.check_circle
+                                                    : Icons.error_outline,
+                                                size: 16,
+                                                color: _lastResult!.success
+                                                    ? Colors.green
+                                                    : Colors.red,
+                                              ),
+                                              const SizedBox(width: 6),
+                                              Text(
+                                                _lastResult!.success
+                                                    ? 'Export completed successfully in ${_lastResult!.duration.inMilliseconds}ms!'
+                                                    : 'Export failed with exit code ${_lastResult!.exitCode}',
+                                                style: TextStyle(
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: _lastResult!.success
+                                                      ? Colors.green
+                                                      : Colors.red,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                          if (_lastResult!.success) ...[
+                                            const SizedBox(height: 6),
+                                            Row(
+                                              children: [
+                                                ElevatedButton.icon(
+                                                  icon: const Icon(
+                                                    Icons.open_in_new,
+                                                    size: 14,
+                                                  ),
+                                                  label: const Text(
+                                                    'Open File',
+                                                    style: TextStyle(
+                                                      fontSize: 11,
+                                                    ),
+                                                  ),
+                                                  style:
+                                                      ElevatedButton.styleFrom(
+                                                        visualDensity:
+                                                            VisualDensity
+                                                                .compact,
+                                                      ),
+                                                  onPressed: () => widget
+                                                      .controller
+                                                      .fileService
+                                                      .openFileWithSystemDefault(
+                                                        _lastResult!.targetFile,
+                                                      ),
+                                                ),
+                                                const SizedBox(width: 8),
+                                                OutlinedButton.icon(
+                                                  icon: const Icon(
+                                                    Icons.folder_open,
+                                                    size: 14,
+                                                  ),
+                                                  label: const Text(
+                                                    'Reveal in Explorer',
+                                                    style: TextStyle(
+                                                      fontSize: 11,
+                                                    ),
+                                                  ),
+                                                  style:
+                                                      OutlinedButton.styleFrom(
+                                                        visualDensity:
+                                                            VisualDensity
+                                                                .compact,
+                                                      ),
+                                                  onPressed: () => widget
+                                                      .controller
+                                                      .fileService
+                                                      .revealInExplorer(
+                                                        _lastResult!.targetFile,
+                                                      ),
+                                                ),
+                                              ],
+                                            ),
+                                          ],
+                                          if (!_lastResult!.success &&
+                                              _lastResult!
+                                                  .stderr
+                                                  .isNotEmpty) ...[
+                                            const SizedBox(height: 8),
+                                            Text(
+                                              _lastResult!.stderr,
+                                              style: const TextStyle(
+                                                fontFamily:
+                                                    'Consolas, monospace',
+                                                fontSize: 10.5,
+                                                color: Colors.redAccent,
+                                              ),
+                                            ),
+                                          ],
+                                          if (_lastResult!.success &&
+                                              _lastResult!
+                                                  .stderr
+                                                  .isNotEmpty) ...[
+                                            const SizedBox(height: 8),
+                                            Text(
+                                              _lastResult!.stderr,
+                                              style: TextStyle(
+                                                fontFamily:
+                                                    'Consolas, monospace',
+                                                fontSize: 10.5,
+                                                color: mutedColor,
+                                              ),
+                                            ),
+                                          ],
+                                          if (_lastResult!
+                                              .stdout
+                                              .isNotEmpty) ...[
+                                            const SizedBox(height: 8),
+                                            Text(
+                                              _lastResult!.stdout,
+                                              style: TextStyle(
+                                                fontFamily:
+                                                    'Consolas, monospace',
+                                                fontSize: 10.5,
+                                                color: mutedColor,
+                                              ),
+                                            ),
+                                          ],
+                                        ],
+                                      ),
+                                    ),
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -821,7 +897,10 @@ class _ExportDialogState extends State<ExportDialog> {
         ? const EdgeInsets.all(56.0)
         : switch (_selectedMarginSize) {
             'thin' => const EdgeInsets.all(36.0),
-            'thick' => const EdgeInsets.symmetric(vertical: 72.0, horizontal: 90.0),
+            'thick' => const EdgeInsets.symmetric(
+              vertical: 72.0,
+              horizontal: 90.0,
+            ),
             _ => const EdgeInsets.all(72.0),
           };
 
@@ -834,96 +913,101 @@ class _ExportDialogState extends State<ExportDialog> {
     const quoteTextColor = Color(0xFF475569);
 
     final lightTheme = AppTheme.lightTheme();
-    final previewStyle = MarkdownStyleSheet.fromTheme(
-      Theme.of(context),
-    ).copyWith(
-      p: TextStyle(
-        fontFamily: bodyFont,
-        fontSize: baseFont,
-        height: 1.6,
-        color: textColor,
-      ),
-      h1: TextStyle(
-        fontFamily: headerFont,
-        fontSize: baseFont * 2.1,
-        fontWeight: FontWeight.bold,
-        color: textColor,
-        height: 1.35,
-      ),
-      h2: TextStyle(
-        fontFamily: headerFont,
-        fontSize: baseFont * 1.55,
-        fontWeight: FontWeight.bold,
-        color: textColor,
-        height: 1.35,
-      ),
-      h3: TextStyle(
-        fontFamily: headerFont,
-        fontSize: baseFont * 1.25,
-        fontWeight: FontWeight.bold,
-        color: textColor,
-        height: 1.35,
-      ),
-      h4: TextStyle(
-        fontFamily: headerFont,
-        fontSize: baseFont * 1.1,
-        fontWeight: FontWeight.bold,
-        color: textColor,
-        height: 1.35,
-      ),
-      h5: TextStyle(
-        fontFamily: headerFont,
-        fontSize: baseFont,
-        fontWeight: FontWeight.bold,
-        color: textColor,
-        height: 1.35,
-      ),
-      h6: TextStyle(
-        fontFamily: headerFont,
-        fontSize: baseFont * 0.9,
-        fontWeight: FontWeight.bold,
-        color: const Color(0xFF64748B),
-        height: 1.35,
-      ),
-      blockquote: TextStyle(
-        fontFamily: bodyFont,
-        fontSize: baseFont,
-        fontStyle: FontStyle.italic,
-        color: quoteTextColor,
-      ),
-      blockquoteDecoration: const BoxDecoration(
-        color: Color(0xFFF8FAFC),
-        border: Border(
-          left: BorderSide(color: Color(0xFF2563EB), width: 3.5),
-        ),
-        borderRadius: BorderRadius.only(
-          topRight: Radius.circular(4),
-          bottomRight: Radius.circular(4),
-        ),
-      ),
-      code: TextStyle(
-        fontFamily: codeFont,
-        fontFamilyFallback: AppTheme.editorFontFamilyFallback,
-        fontSize: baseFont * 0.92,
-        backgroundColor: Colors.transparent,
-        color: codeGreen,
-      ),
-      codeblockDecoration: const BoxDecoration(color: Colors.transparent),
-      tableBody: TextStyle(
-        fontFamily: bodyFont,
-        fontSize: baseFont * 0.95,
-        color: textColor,
-      ),
-      tableHead: TextStyle(
-        fontFamily: headerFont,
-        fontSize: baseFont * 0.95,
-        fontWeight: FontWeight.bold,
-        color: textColor,
-      ),
-      tableBorder: TableBorder.all(color: const Color(0xFFCBD5E1), width: 1),
-      tableCellsPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      tableColumnWidth: const FlexColumnWidth(),
-    );
+    final previewStyle = MarkdownStyleSheet.fromTheme(Theme.of(context))
+        .copyWith(
+          p: TextStyle(
+            fontFamily: bodyFont,
+            fontSize: baseFont,
+            height: 1.6,
+            color: textColor,
+          ),
+          h1: TextStyle(
+            fontFamily: headerFont,
+            fontSize: baseFont * 2.1,
+            fontWeight: FontWeight.bold,
+            color: textColor,
+            height: 1.35,
+          ),
+          h2: TextStyle(
+            fontFamily: headerFont,
+            fontSize: baseFont * 1.55,
+            fontWeight: FontWeight.bold,
+            color: textColor,
+            height: 1.35,
+          ),
+          h3: TextStyle(
+            fontFamily: headerFont,
+            fontSize: baseFont * 1.25,
+            fontWeight: FontWeight.bold,
+            color: textColor,
+            height: 1.35,
+          ),
+          h4: TextStyle(
+            fontFamily: headerFont,
+            fontSize: baseFont * 1.1,
+            fontWeight: FontWeight.bold,
+            color: textColor,
+            height: 1.35,
+          ),
+          h5: TextStyle(
+            fontFamily: headerFont,
+            fontSize: baseFont,
+            fontWeight: FontWeight.bold,
+            color: textColor,
+            height: 1.35,
+          ),
+          h6: TextStyle(
+            fontFamily: headerFont,
+            fontSize: baseFont * 0.9,
+            fontWeight: FontWeight.bold,
+            color: const Color(0xFF64748B),
+            height: 1.35,
+          ),
+          blockquote: TextStyle(
+            fontFamily: bodyFont,
+            fontSize: baseFont,
+            fontStyle: FontStyle.italic,
+            color: quoteTextColor,
+          ),
+          blockquoteDecoration: const BoxDecoration(
+            color: Color(0xFFF8FAFC),
+            border: Border(
+              left: BorderSide(color: Color(0xFF2563EB), width: 3.5),
+            ),
+            borderRadius: BorderRadius.only(
+              topRight: Radius.circular(4),
+              bottomRight: Radius.circular(4),
+            ),
+          ),
+          code: TextStyle(
+            fontFamily: codeFont,
+            fontFamilyFallback: AppTheme.editorFontFamilyFallback,
+            fontSize: baseFont * 0.92,
+            backgroundColor: Colors.transparent,
+            color: codeGreen,
+          ),
+          codeblockDecoration: const BoxDecoration(color: Colors.transparent),
+          tableBody: TextStyle(
+            fontFamily: bodyFont,
+            fontSize: baseFont * 0.95,
+            color: textColor,
+          ),
+          tableHead: TextStyle(
+            fontFamily: headerFont,
+            fontSize: baseFont * 0.95,
+            fontWeight: FontWeight.bold,
+            color: textColor,
+          ),
+          tableBorder: TableBorder.all(
+            color: const Color(0xFFCBD5E1),
+            width: 1,
+          ),
+          tableCellsPadding: const EdgeInsets.symmetric(
+            horizontal: 10,
+            vertical: 6,
+          ),
+          tableColumnWidth: const FlexColumnWidth(),
+        );
 
     final currentDoc = widget.controller.currentFilePath;
     final imgDir = (currentDoc != null && currentDoc.isNotEmpty)

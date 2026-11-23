@@ -573,7 +573,10 @@ class DirectExportService {
       }
 
       final escapedSrc = _escapeHtmlAttr(resolvedSrc);
-      var newAttrs = attrs.replaceFirst(srcMatch.group(0)!, 'src="$escapedSrc"');
+      var newAttrs = attrs.replaceFirst(
+        srcMatch.group(0)!,
+        'src="$escapedSrc"',
+      );
 
       if (fragWidth != null && !_widthAttrRegex.hasMatch(newAttrs)) {
         newAttrs = '$newAttrs width="${_escapeHtmlAttr(fragWidth)}"';
