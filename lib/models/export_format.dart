@@ -112,6 +112,7 @@ class ExportOptions {
   final String customArguments;
   final String pageSize;
   final String marginSize;
+  final double fontScale;
 
   const ExportOptions({
     required this.format,
@@ -124,6 +125,7 @@ class ExportOptions {
     this.customArguments = '',
     this.pageSize = 'a4',
     this.marginSize = 'medium',
+    this.fontScale = 1.0,
   });
 
   ExportOptions copyWith({
@@ -137,6 +139,7 @@ class ExportOptions {
     String? customArguments,
     String? pageSize,
     String? marginSize,
+    double? fontScale,
   }) {
     return ExportOptions(
       format: format ?? this.format,
@@ -149,6 +152,7 @@ class ExportOptions {
       customArguments: customArguments ?? this.customArguments,
       pageSize: pageSize ?? this.pageSize,
       marginSize: marginSize ?? this.marginSize,
+      fontScale: fontScale ?? this.fontScale,
     );
   }
 }
