@@ -818,8 +818,7 @@ class _EditorViewState extends State<EditorView> with WidgetsBindingObserver {
                   Listener(
                     onPointerSignal: (pointerSignal) {
                       if (pointerSignal is PointerScrollEvent) {
-                        final position =
-                            widget.controller.activeScrollPosition;
+                        final position = widget.controller.activeScrollPosition;
                         if (position != null) {
                           final targetOffset =
                               (position.pixels + pointerSignal.scrollDelta.dy)

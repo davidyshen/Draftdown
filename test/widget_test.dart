@@ -1353,10 +1353,7 @@ void main() {
 
         if (mode != EditorViewMode.preview) {
           expect(find.text('Frontmatter'), findsOneWidget);
-          expect(
-            controller.scrollController.positions.length,
-            equals(1),
-          );
+          expect(controller.scrollController.positions.length, equals(1));
         }
       }
 

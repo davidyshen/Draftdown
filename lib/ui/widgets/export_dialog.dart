@@ -423,77 +423,78 @@ class _ExportDialogState extends State<ExportDialog> {
                                   runSpacing: 4,
                                   crossAxisAlignment: WrapCrossAlignment.center,
                                   children: [
-                                Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Checkbox(
-                                      value: _useCiteproc,
-                                      visualDensity: VisualDensity.compact,
-                                      onChanged: (val) => setState(
-                                        () => _useCiteproc = val ?? true,
-                                      ),
-                                    ),
-                                    const Text(
-                                      'Include Citations & References',
-                                      style: TextStyle(fontSize: 12),
-                                    ),
-                                  ],
-                                ),
-                                Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Checkbox(
-                                      value: _standalone,
-                                      visualDensity: VisualDensity.compact,
-                                      onChanged: (val) => setState(
-                                        () => _standalone = val ?? true,
-                                      ),
-                                    ),
-                                    const Text(
-                                      'Standalone Document',
-                                      style: TextStyle(fontSize: 12),
-                                    ),
-                                  ],
-                                ),
                                     Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Checkbox(
-                                      value: _tableOfContents,
-                                      visualDensity: VisualDensity.compact,
-                                      onChanged: (val) => setState(
-                                        () => _tableOfContents = val ?? false,
-                                      ),
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Checkbox(
+                                          value: _useCiteproc,
+                                          visualDensity: VisualDensity.compact,
+                                          onChanged: (val) => setState(
+                                            () => _useCiteproc = val ?? true,
+                                          ),
+                                        ),
+                                        const Text(
+                                          'Include Citations & References',
+                                          style: TextStyle(fontSize: 12),
+                                        ),
+                                      ],
                                     ),
-                                    const Text(
-                                      'Table of Contents',
-                                      style: TextStyle(fontSize: 12),
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Checkbox(
+                                          value: _standalone,
+                                          visualDensity: VisualDensity.compact,
+                                          onChanged: (val) => setState(
+                                            () => _standalone = val ?? true,
+                                          ),
+                                        ),
+                                        const Text(
+                                          'Standalone Document',
+                                          style: TextStyle(fontSize: 12),
+                                        ),
+                                      ],
                                     ),
-                                  ],
-                                ),
-                                Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Checkbox(
-                                      key: const ValueKey(
-                                        'hr-page-break-checkbox',
-                                      ),
-                                      value: _useHrAsPageBreak,
-                                      visualDensity: VisualDensity.compact,
-                                      onChanged: (val) {
-                                        setState(
-                                          () =>
-                                              _useHrAsPageBreak = val ?? false,
-                                        );
-                                        _schedulePreviewUpdate();
-                                      },
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Checkbox(
+                                          value: _tableOfContents,
+                                          visualDensity: VisualDensity.compact,
+                                          onChanged: (val) => setState(
+                                            () =>
+                                                _tableOfContents = val ?? false,
+                                          ),
+                                        ),
+                                        const Text(
+                                          'Table of Contents',
+                                          style: TextStyle(fontSize: 12),
+                                        ),
+                                      ],
                                     ),
-                                    const Text(
-                                      'Use --- as page breaks',
-                                      style: TextStyle(fontSize: 12),
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Checkbox(
+                                          key: const ValueKey(
+                                            'hr-page-break-checkbox',
+                                          ),
+                                          value: _useHrAsPageBreak,
+                                          visualDensity: VisualDensity.compact,
+                                          onChanged: (val) {
+                                            setState(
+                                              () => _useHrAsPageBreak =
+                                                  val ?? false,
+                                            );
+                                            _schedulePreviewUpdate();
+                                          },
+                                        ),
+                                        const Text(
+                                          'Use --- as page breaks',
+                                          style: TextStyle(fontSize: 12),
+                                        ),
+                                      ],
                                     ),
-                                  ],
-                                ),
                                   ],
                                 ),
                                 if (showPreview) ...[
@@ -504,252 +505,263 @@ class _ExportDialogState extends State<ExportDialog> {
                                     crossAxisAlignment:
                                         WrapCrossAlignment.center,
                                     children: [
-                                if (_selectedFormat.type ==
-                                    ExportFormatType.pdf) ...[
-                                  Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      const Text(
-                                        'Page Size:',
-                                        style: TextStyle(fontSize: 12),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Container(
-                                        height: 28,
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 8,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          border: Border.all(
-                                            color: borderColor,
-                                          ),
-                                          borderRadius: BorderRadius.circular(
-                                            4,
-                                          ),
-                                          color: isDark
-                                              ? AppTheme.darkBg
-                                              : AppTheme.lightSurface,
-                                        ),
-                                        child: DropdownButtonHideUnderline(
-                                          child: DropdownButton<String>(
-                                            key: const ValueKey(
-                                              'page-size-dropdown',
-                                            ),
-                                            value: _selectedPageSize,
-                                            isDense: true,
-                                            focusColor: Colors.transparent,
-                                            icon: const Icon(
-                                              Icons.keyboard_arrow_down,
-                                              size: 16,
-                                            ),
-                                            items: const [
-                                              DropdownMenuItem(
-                                                value: 'a4',
-                                                child: Text(
-                                                  'A4',
-                                                  style: TextStyle(
-                                                    fontSize: 12,
-                                                  ),
-                                                ),
-                                              ),
-                                              DropdownMenuItem(
-                                                value: 'letter',
-                                                child: Text(
-                                                  'Letter',
-                                                  style: TextStyle(
-                                                    fontSize: 12,
-                                                  ),
-                                                ),
-                                              ),
-                                            ],
-                                            onChanged: (val) {
-                                              if (val != null) {
-                                                setState(
-                                                  () => _selectedPageSize = val,
-                                                );
-                                                _schedulePreviewUpdate();
-                                              }
-                                            },
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      const Text(
-                                        'Margins:',
-                                        style: TextStyle(fontSize: 12),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Container(
-                                        height: 28,
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 8,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          border: Border.all(
-                                            color: borderColor,
-                                          ),
-                                          borderRadius: BorderRadius.circular(
-                                            4,
-                                          ),
-                                          color: isDark
-                                              ? AppTheme.darkBg
-                                              : AppTheme.lightSurface,
-                                        ),
-                                        child: DropdownButtonHideUnderline(
-                                          child: DropdownButton<String>(
-                                            key: const ValueKey(
-                                              'margin-size-dropdown',
-                                            ),
-                                            value: _selectedMarginSize,
-                                            isDense: true,
-                                            focusColor: Colors.transparent,
-                                            icon: const Icon(
-                                              Icons.keyboard_arrow_down,
-                                              size: 16,
-                                            ),
-                                            items: const [
-                                              DropdownMenuItem(
-                                                value: 'medium',
-                                                child: Text(
-                                                  'Medium',
-                                                  style: TextStyle(
-                                                    fontSize: 12,
-                                                  ),
-                                                ),
-                                              ),
-                                              DropdownMenuItem(
-                                                value: 'thin',
-                                                child: Text(
-                                                  'Thin',
-                                                  style: TextStyle(
-                                                    fontSize: 12,
-                                                  ),
-                                                ),
-                                              ),
-                                              DropdownMenuItem(
-                                                value: 'thick',
-                                                child: Text(
-                                                  'Thick',
-                                                  style: TextStyle(
-                                                    fontSize: 12,
-                                                  ),
-                                                ),
-                                              ),
-                                            ],
-                                            onChanged: (val) {
-                                              if (val != null) {
-                                                setState(
-                                                  () =>
-                                                      _selectedMarginSize = val,
-                                                );
-                                                _schedulePreviewUpdate();
-                                              }
-                                            },
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                                if (showPreview) ...[
-                                  Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      const Text(
-                                        'Zoom:',
-                                        style: TextStyle(fontSize: 12),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Container(
-                                        height: 28,
-                                        decoration: BoxDecoration(
-                                          border: Border.all(
-                                            color: borderColor,
-                                          ),
-                                          borderRadius: BorderRadius.circular(
-                                            4,
-                                          ),
-                                          color: isDark
-                                              ? AppTheme.darkBg
-                                              : AppTheme.lightSurface,
-                                        ),
-                                        child: Row(
+                                      if (_selectedFormat.type ==
+                                          ExportFormatType.pdf) ...[
+                                        Row(
                                           mainAxisSize: MainAxisSize.min,
                                           children: [
-                                            InkWell(
-                                              key: const ValueKey(
-                                                'zoom-out-button',
+                                            const Text(
+                                              'Page Size:',
+                                              style: TextStyle(fontSize: 12),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Container(
+                                              height: 28,
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 8,
+                                                  ),
+                                              decoration: BoxDecoration(
+                                                border: Border.all(
+                                                  color: borderColor,
+                                                ),
+                                                borderRadius:
+                                                    BorderRadius.circular(4),
+                                                color: isDark
+                                                    ? AppTheme.darkBg
+                                                    : AppTheme.lightSurface,
                                               ),
-                                              onTap: _fontScale > 0.701
-                                                  ? () {
+                                              child: DropdownButtonHideUnderline(
+                                                child: DropdownButton<String>(
+                                                  key: const ValueKey(
+                                                    'page-size-dropdown',
+                                                  ),
+                                                  value: _selectedPageSize,
+                                                  isDense: true,
+                                                  focusColor:
+                                                      Colors.transparent,
+                                                  icon: const Icon(
+                                                    Icons.keyboard_arrow_down,
+                                                    size: 16,
+                                                  ),
+                                                  items: const [
+                                                    DropdownMenuItem(
+                                                      value: 'a4',
+                                                      child: Text(
+                                                        'A4',
+                                                        style: TextStyle(
+                                                          fontSize: 12,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    DropdownMenuItem(
+                                                      value: 'letter',
+                                                      child: Text(
+                                                        'Letter',
+                                                        style: TextStyle(
+                                                          fontSize: 12,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                  onChanged: (val) {
+                                                    if (val != null) {
                                                       setState(
-                                                        () => _fontScale =
-                                                            ((_fontScale -
-                                                                        0.05) *
-                                                                    100)
-                                                                .round() /
-                                                            100.0,
+                                                        () =>
+                                                            _selectedPageSize =
+                                                                val,
                                                       );
                                                       _schedulePreviewUpdate();
                                                     }
-                                                  : null,
-                                              child: const Padding(
-                                                padding: EdgeInsets.symmetric(
-                                                  horizontal: 6,
-                                                  vertical: 4,
+                                                  },
                                                 ),
-                                                child: Icon(
-                                                  Icons.remove,
-                                                  size: 14,
-                                                ),
-                                              ),
-                                            ),
-                                            SizedBox(
-                                              width: 40,
-                                              child: Text(
-                                                '${(_fontScale * 100).round()}%',
-                                                textAlign: TextAlign.center,
-                                                style: const TextStyle(
-                                                  fontSize: 11.5,
-                                                  fontWeight: FontWeight.w600,
-                                                ),
-                                              ),
-                                            ),
-                                            InkWell(
-                                              key: const ValueKey(
-                                                'zoom-in-button',
-                                              ),
-                                              onTap: _fontScale < 1.499
-                                                  ? () {
-                                                      setState(
-                                                        () => _fontScale =
-                                                            ((_fontScale +
-                                                                        0.05) *
-                                                                    100)
-                                                                .round() /
-                                                            100.0,
-                                                      );
-                                                      _schedulePreviewUpdate();
-                                                    }
-                                                  : null,
-                                              child: const Padding(
-                                                padding: EdgeInsets.symmetric(
-                                                  horizontal: 6,
-                                                  vertical: 4,
-                                                ),
-                                                child: Icon(Icons.add, size: 14),
                                               ),
                                             ),
                                           ],
                                         ),
-                                      ),
-                                    ],
-                                  ),
-                                ],
+                                        Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            const Text(
+                                              'Margins:',
+                                              style: TextStyle(fontSize: 12),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Container(
+                                              height: 28,
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 8,
+                                                  ),
+                                              decoration: BoxDecoration(
+                                                border: Border.all(
+                                                  color: borderColor,
+                                                ),
+                                                borderRadius:
+                                                    BorderRadius.circular(4),
+                                                color: isDark
+                                                    ? AppTheme.darkBg
+                                                    : AppTheme.lightSurface,
+                                              ),
+                                              child: DropdownButtonHideUnderline(
+                                                child: DropdownButton<String>(
+                                                  key: const ValueKey(
+                                                    'margin-size-dropdown',
+                                                  ),
+                                                  value: _selectedMarginSize,
+                                                  isDense: true,
+                                                  focusColor:
+                                                      Colors.transparent,
+                                                  icon: const Icon(
+                                                    Icons.keyboard_arrow_down,
+                                                    size: 16,
+                                                  ),
+                                                  items: const [
+                                                    DropdownMenuItem(
+                                                      value: 'medium',
+                                                      child: Text(
+                                                        'Medium',
+                                                        style: TextStyle(
+                                                          fontSize: 12,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    DropdownMenuItem(
+                                                      value: 'thin',
+                                                      child: Text(
+                                                        'Thin',
+                                                        style: TextStyle(
+                                                          fontSize: 12,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    DropdownMenuItem(
+                                                      value: 'thick',
+                                                      child: Text(
+                                                        'Thick',
+                                                        style: TextStyle(
+                                                          fontSize: 12,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                  onChanged: (val) {
+                                                    if (val != null) {
+                                                      setState(
+                                                        () =>
+                                                            _selectedMarginSize =
+                                                                val,
+                                                      );
+                                                      _schedulePreviewUpdate();
+                                                    }
+                                                  },
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                      if (showPreview) ...[
+                                        Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            const Text(
+                                              'Zoom:',
+                                              style: TextStyle(fontSize: 12),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Container(
+                                              height: 28,
+                                              decoration: BoxDecoration(
+                                                border: Border.all(
+                                                  color: borderColor,
+                                                ),
+                                                borderRadius:
+                                                    BorderRadius.circular(4),
+                                                color: isDark
+                                                    ? AppTheme.darkBg
+                                                    : AppTheme.lightSurface,
+                                              ),
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  InkWell(
+                                                    key: const ValueKey(
+                                                      'zoom-out-button',
+                                                    ),
+                                                    onTap: _fontScale > 0.701
+                                                        ? () {
+                                                            setState(
+                                                              () => _fontScale =
+                                                                  ((_fontScale -
+                                                                              0.05) *
+                                                                          100)
+                                                                      .round() /
+                                                                  100.0,
+                                                            );
+                                                            _schedulePreviewUpdate();
+                                                          }
+                                                        : null,
+                                                    child: const Padding(
+                                                      padding:
+                                                          EdgeInsets.symmetric(
+                                                            horizontal: 6,
+                                                            vertical: 4,
+                                                          ),
+                                                      child: Icon(
+                                                        Icons.remove,
+                                                        size: 14,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  SizedBox(
+                                                    width: 40,
+                                                    child: Text(
+                                                      '${(_fontScale * 100).round()}%',
+                                                      textAlign:
+                                                          TextAlign.center,
+                                                      style: const TextStyle(
+                                                        fontSize: 11.5,
+                                                        fontWeight:
+                                                            FontWeight.w600,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  InkWell(
+                                                    key: const ValueKey(
+                                                      'zoom-in-button',
+                                                    ),
+                                                    onTap: _fontScale < 1.499
+                                                        ? () {
+                                                            setState(
+                                                              () => _fontScale =
+                                                                  ((_fontScale +
+                                                                              0.05) *
+                                                                          100)
+                                                                      .round() /
+                                                                  100.0,
+                                                            );
+                                                            _schedulePreviewUpdate();
+                                                          }
+                                                        : null,
+                                                    child: const Padding(
+                                                      padding:
+                                                          EdgeInsets.symmetric(
+                                                            horizontal: 6,
+                                                            vertical: 4,
+                                                          ),
+                                                      child: Icon(
+                                                        Icons.add,
+                                                        size: 14,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
                                     ],
                                   ),
                                 ],

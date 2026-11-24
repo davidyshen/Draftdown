@@ -1081,13 +1081,11 @@ a_1 + b_2 = c_3
       },
     );
 
-    test(
-      'generateHtmlDocument treats --- as page breaks without rendering hr when useHrAsPageBreak is true',
-      () {
-        final controller = EditorController();
-        final service = controller.directExportService;
+    test('generateHtmlDocument treats --- as page breaks without rendering hr when useHrAsPageBreak is true', () {
+      final controller = EditorController();
+      final service = controller.directExportService;
 
-        const doc = '''Page one content
+      const doc = '''Page one content
 
 ---
 
@@ -1098,34 +1096,33 @@ Page two content
 ```
 ''';
 
-        final htmlDefault = service.generateHtmlDocument(
-          markdown: doc,
-          controller: controller,
-          useHrAsPageBreak: false,
-        );
-        expect(htmlDefault, contains('<hr />'));
-        expect(htmlDefault, isNot(contains('<div class="page-break"></div>')));
+      final htmlDefault = service.generateHtmlDocument(
+        markdown: doc,
+        controller: controller,
+        useHrAsPageBreak: false,
+      );
+      expect(htmlDefault, contains('<hr />'));
+      expect(htmlDefault, isNot(contains('<div class="page-break"></div>')));
 
-        final htmlPageBreak = service.generateHtmlDocument(
-          markdown: doc,
-          controller: controller,
-          useHrAsPageBreak: true,
-        );
-        expect(htmlPageBreak, isNot(contains('<hr />')));
-        expect(htmlPageBreak, contains('<div class="page-break"></div>'));
-        // Code block --- must remain untouched
-        expect(htmlPageBreak, contains('<code class="language-markdown">---'));
+      final htmlPageBreak = service.generateHtmlDocument(
+        markdown: doc,
+        controller: controller,
+        useHrAsPageBreak: true,
+      );
+      expect(htmlPageBreak, isNot(contains('<hr />')));
+      expect(htmlPageBreak, contains('<div class="page-break"></div>'));
+      // Code block --- must remain untouched
+      expect(htmlPageBreak, contains('<code class="language-markdown">---'));
 
-        // Word (.docx) OpenXML page break replacement
-        final docxMd = DirectExportService.replaceHrWithPageBreaks(
-          doc,
-          pageBreakMarkup:
-              '```{=openxml}\n<w:p><w:r><w:br w:type="page"/></w:r></w:p>\n```',
-        );
-        expect(docxMd, contains('<w:br w:type="page"/>'));
-        expect(docxMd, contains('```markdown\n---\n```'));
-      },
-    );
+      // Word (.docx) OpenXML page break replacement
+      final docxMd = DirectExportService.replaceHrWithPageBreaks(
+        doc,
+        pageBreakMarkup:
+            '```{=openxml}\n<w:p><w:r><w:br w:type="page"/></w:r></w:p>\n```',
+      );
+      expect(docxMd, contains('<w:br w:type="page"/>'));
+      expect(docxMd, contains('```markdown\n---\n```'));
+    });
   });
 
   group('Diacritic-Insensitive Citation Search', () {

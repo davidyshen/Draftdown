@@ -746,8 +746,7 @@ class EditorController extends ChangeNotifier {
             _isBackgroundRendering = false;
           } else if (activeScrollPosition?.isScrollingNotifier.value ?? false) {
             // If user is actively scrolling the editor, defer applying until scroll gesture finishes
-            final scrollingNotifier =
-                activeScrollPosition!.isScrollingNotifier;
+            final scrollingNotifier = activeScrollPosition!.isScrollingNotifier;
             void onScrollEnd() {
               if (!scrollingNotifier.value) {
                 scrollingNotifier.removeListener(onScrollEnd);
