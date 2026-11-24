@@ -51,17 +51,22 @@ class MathElementBuilder extends MarkdownElementBuilder {
   final bool isDisplay;
   final Color textColor;
   final String codeFont;
+  final double? baseFontSize;
 
   MathElementBuilder({
     required this.isDisplay,
     required this.textColor,
     required this.codeFont,
+    this.baseFontSize,
   });
 
   @override
   Widget? visitElementAfter(md.Element element, TextStyle? preferredStyle) {
     final tex = element.textContent.trim();
     if (tex.isEmpty) return const SizedBox.shrink();
+
+    final inlineSize = baseFontSize ?? 14.5;
+    final displaySize = baseFontSize != null ? baseFontSize! * 1.15 : 16.5;
 
     if (isDisplay) {
       return Container(
@@ -75,7 +80,7 @@ class MathElementBuilder extends MarkdownElementBuilder {
             mathStyle: MathStyle.display,
             textStyle: (preferredStyle ?? const TextStyle()).copyWith(
               color: textColor,
-              fontSize: 16.5,
+              fontSize: displaySize,
             ),
             onErrorFallback: (err) => Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -88,7 +93,7 @@ class MathElementBuilder extends MarkdownElementBuilder {
                 style: TextStyle(
                   color: Colors.redAccent,
                   fontFamily: codeFont,
-                  fontSize: 13,
+                  fontSize: inlineSize * 0.9,
                 ),
               ),
             ),
@@ -107,14 +112,14 @@ class MathElementBuilder extends MarkdownElementBuilder {
               mathStyle: MathStyle.text,
               textStyle: (preferredStyle ?? const TextStyle()).copyWith(
                 color: textColor,
-                fontSize: 14.5,
+                fontSize: inlineSize,
               ),
               onErrorFallback: (err) => Text(
                 '\$$tex\$',
                 style: TextStyle(
                   color: Colors.redAccent,
                   fontFamily: codeFont,
-                  fontSize: 12,
+                  fontSize: inlineSize * 0.85,
                 ),
               ),
             ),
@@ -491,14 +496,20 @@ class CitationElementBuilder extends MarkdownElementBuilder {
 class MathCodeBlockBuilder extends MarkdownElementBuilder {
   final Color textColor;
   final String codeFont;
+  final double? baseFontSize;
 
-  MathCodeBlockBuilder({required this.textColor, required this.codeFont});
+  MathCodeBlockBuilder({
+    required this.textColor,
+    required this.codeFont,
+    this.baseFontSize,
+  });
 
   @override
   Widget? visitElementAfter(md.Element element, TextStyle? preferredStyle) {
     final language = element.attributes['class'];
     if (language == 'language-math' || language == 'language-latex') {
       final tex = element.textContent.trim();
+      final displaySize = baseFontSize != null ? baseFontSize! * 1.15 : 16.0;
       return Container(
         width: double.infinity,
         alignment: Alignment.center,
@@ -508,7 +519,7 @@ class MathCodeBlockBuilder extends MarkdownElementBuilder {
           child: Math.tex(
             tex,
             mathStyle: MathStyle.display,
-            textStyle: TextStyle(color: textColor, fontSize: 16),
+            textStyle: TextStyle(color: textColor, fontSize: displaySize),
             onErrorFallback: (err) => Text(
               tex,
               style: TextStyle(fontFamily: codeFont, color: Colors.redAccent),

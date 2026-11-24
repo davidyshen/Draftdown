@@ -818,17 +818,14 @@ class _EditorViewState extends State<EditorView> with WidgetsBindingObserver {
                   Listener(
                     onPointerSignal: (pointerSignal) {
                       if (pointerSignal is PointerScrollEvent) {
-                        final scrollController =
-                            widget.controller.scrollController;
-                        if (scrollController.hasClients) {
+                        final position = widget.controller.activeScrollPosition;
+                        if (position != null) {
                           final targetOffset =
-                              (scrollController.offset +
-                                      pointerSignal.scrollDelta.dy)
-                                  .clamp(
-                                    0.0,
-                                    scrollController.position.maxScrollExtent,
-                                  );
-                          scrollController.jumpTo(targetOffset);
+                              (position.pixels + pointerSignal.scrollDelta.dy)
+                                  .clamp(0.0, position.maxScrollExtent);
+                          widget.controller.scrollController.jumpTo(
+                            targetOffset,
+                          );
                         }
                       }
                     },
@@ -845,9 +842,7 @@ class _EditorViewState extends State<EditorView> with WidgetsBindingObserver {
                         ]),
                         builder: (context, _) {
                           final scrollOffset =
-                              widget.controller.scrollController.hasClients
-                              ? widget.controller.scrollController.offset
-                              : 0.0;
+                              widget.controller.safeScrollOffset;
                           final currentText =
                               widget.controller.textController.text;
                           final fontFamily = widget.controller.editorFontFamily;
@@ -970,15 +965,7 @@ class _EditorViewState extends State<EditorView> with WidgetsBindingObserver {
                                         widget.controller.scrollController,
                                     builder: (context, child) {
                                       final scrollOffset =
-                                          widget
-                                              .controller
-                                              .scrollController
-                                              .hasClients
-                                          ? widget
-                                                .controller
-                                                .scrollController
-                                                .offset
-                                          : 0.0;
+                                          widget.controller.safeScrollOffset;
                                       return Positioned(
                                         top: _contentPaddingTop - scrollOffset,
                                         left: _contentPaddingHorizontal,

@@ -268,6 +268,17 @@ class EditorController extends ChangeNotifier {
   Set<String> get customDictionaryWords => spellCheckService.customWords;
   List<SpellErrorRange> get spellErrors => textController.spellErrors;
 
+  /// Returns the currently active [ScrollPosition] without throwing if two
+  /// positions are momentarily attached during a widget tree reparenting frame.
+  ScrollPosition? get activeScrollPosition {
+    final positions = scrollController.positions;
+    if (positions.isEmpty) return null;
+    return positions.length == 1 ? positions.first : positions.last;
+  }
+
+  /// Current editor scroll offset, or `0.0` when no [ScrollPosition] is attached.
+  double get safeScrollOffset => activeScrollPosition?.pixels ?? 0.0;
+
   EditorController({
     FileService? fileService,
     HistoryService? historyService,
@@ -733,21 +744,17 @@ class EditorController extends ChangeNotifier {
             _lineCount = result.lineCount;
             _readingTimeMinutes = result.readingTimeMinutes;
             _isBackgroundRendering = false;
-          } else if (scrollController.hasClients &&
-              scrollController.position.isScrollingNotifier.value) {
+          } else if (activeScrollPosition?.isScrollingNotifier.value ?? false) {
             // If user is actively scrolling the editor, defer applying until scroll gesture finishes
+            final scrollingNotifier = activeScrollPosition!.isScrollingNotifier;
             void onScrollEnd() {
-              if (!scrollController.position.isScrollingNotifier.value) {
-                scrollController.position.isScrollingNotifier.removeListener(
-                  onScrollEnd,
-                );
+              if (!scrollingNotifier.value) {
+                scrollingNotifier.removeListener(onScrollEnd);
                 applyResult();
               }
             }
 
-            scrollController.position.isScrollingNotifier.addListener(
-              onScrollEnd,
-            );
+            scrollingNotifier.addListener(onScrollEnd);
           } else {
             applyResult();
           }
@@ -893,9 +900,7 @@ class EditorController extends ChangeNotifier {
     doc.fileName = _currentFileName;
     doc.content = textController.text;
     doc.selection = textController.selection;
-    doc.scrollOffset = scrollController.hasClients
-        ? scrollController.offset
-        : 0.0;
+    doc.scrollOffset = safeScrollOffset;
     doc.isModified = _isModified;
     doc.hasConflict = _hasConflict;
     doc.hasPromptedConflict = _hasPromptedConflict;
@@ -945,8 +950,9 @@ class EditorController extends ChangeNotifier {
     previewNotifier.value = doc.previewMarkdown;
     textController.invalidateSpellCheck();
 
-    if (scrollController.hasClients) {
-      final maxExtent = scrollController.position.maxScrollExtent;
+    final position = activeScrollPosition;
+    if (position != null) {
+      final maxExtent = position.maxScrollExtent;
       scrollController.jumpTo(doc.scrollOffset.clamp(0.0, maxExtent));
     }
   }
@@ -1835,6 +1841,7 @@ class EditorController extends ChangeNotifier {
         title: _currentFileName.replaceAll('.md', ''),
         pageSize: options.pageSize,
         fontScale: options.fontScale,
+        useHrAsPageBreak: options.useHrAsPageBreak,
       );
     }
 
@@ -1848,6 +1855,7 @@ class EditorController extends ChangeNotifier {
         pageSize: options.pageSize,
         marginSize: options.marginSize,
         fontScale: options.fontScale,
+        useHrAsPageBreak: options.useHrAsPageBreak,
       );
     }
 
@@ -1857,7 +1865,25 @@ class EditorController extends ChangeNotifier {
     File? tempBibFile;
 
     try {
-      if (_currentFilePath == null || _isModified) {
+      final needsHrPageBreaks =
+          options.useHrAsPageBreak &&
+          options.format.type == ExportFormatType.docx;
+
+      if (needsHrPageBreaks) {
+        final split = YamlFrontmatterHelper.splitFrontmatter(
+          fullDocumentContent,
+        );
+        final transformedBody = DirectExportService.replaceHrWithPageBreaks(
+          split.body,
+          pageBreakMarkup:
+              '```{=openxml}\n<w:p><w:r><w:br w:type="page"/></w:r></w:p>\n```',
+        );
+        final exportContent = split.frontmatter.isNotEmpty
+            ? '${split.frontmatter}\n$transformedBody'
+            : transformedBody;
+        tempSourceFile = await fileService.createTemporaryFile(exportContent);
+        sourcePath = tempSourceFile.path;
+      } else if (_currentFilePath == null || _isModified) {
         tempSourceFile = await fileService.createTemporaryFile(
           fullDocumentContent,
         );

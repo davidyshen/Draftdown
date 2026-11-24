@@ -317,10 +317,12 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
+  final GlobalKey _editorViewKey = GlobalKey();
   Widget? _cachedEditorView;
 
   Widget _getEditorView() {
     return _cachedEditorView ??= RepaintBoundary(
+      key: _editorViewKey,
       child: EditorView(
         controller: widget.controller,
         onOpenCitation: _openCitationDialog,
