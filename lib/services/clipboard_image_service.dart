@@ -11,10 +11,7 @@ class ClipboardImageData {
   /// Lowercase file extension without leading dot (e.g. `png`, `jpg`).
   final String extension;
 
-  const ClipboardImageData({
-    required this.bytes,
-    required this.extension,
-  });
+  const ClipboardImageData({required this.bytes, required this.extension});
 }
 
 /// Service for reading raw images or copied image files from the system clipboard.

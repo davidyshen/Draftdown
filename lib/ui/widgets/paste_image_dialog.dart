@@ -12,10 +12,7 @@ class PasteImageResult {
   final String filename;
   final String altText;
 
-  const PasteImageResult({
-    required this.filename,
-    required this.altText,
-  });
+  const PasteImageResult({required this.filename, required this.altText});
 }
 
 /// Modal dialog prompting the user to name a pasted clipboard image (and
@@ -95,9 +92,8 @@ class PasteImageDialog extends StatefulWidget {
       );
     } catch (e) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to save image: $e')),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Failed to save image: $e')));
     }
   }
 
@@ -190,7 +186,8 @@ class _PasteImageDialogState extends State<PasteImageDialog> {
       widget.defaultExtension,
     );
     final error = PasteImageDialog.validateFilename(normalised);
-    final exists = error == null &&
+    final exists =
+        error == null &&
         File(p.join(widget.mediaDirectory, normalised)).existsSync();
 
     if (normalised != _normalisedName ||
@@ -238,10 +235,12 @@ class _PasteImageDialogState extends State<PasteImageDialog> {
     final surfaceColor = isDark ? AppTheme.darkSurface : AppTheme.lightSurface;
     final sidebarColor = isDark ? AppTheme.darkSidebar : AppTheme.lightSidebar;
     final borderColor = isDark ? AppTheme.darkBorder : AppTheme.lightBorder;
-    final mutedColor =
-        isDark ? AppTheme.darkTextMuted : AppTheme.lightTextMuted;
-    final hasSpacesToNormalise =
-        _spacesRegex.hasMatch(_filenameController.text.trim());
+    final mutedColor = isDark
+        ? AppTheme.darkTextMuted
+        : AppTheme.lightTextMuted;
+    final hasSpacesToNormalise = _spacesRegex.hasMatch(
+      _filenameController.text.trim(),
+    );
 
     return Dialog(
       backgroundColor: surfaceColor,
@@ -408,8 +407,9 @@ class _PasteImageDialogState extends State<PasteImageDialog> {
                   onPressed: _validationError == null ? _submit : null,
                   style: _fileExists
                       ? FilledButton.styleFrom(
-                          backgroundColor:
-                              isDark ? Colors.amber[700] : Colors.amber[800],
+                          backgroundColor: isDark
+                              ? Colors.amber[700]
+                              : Colors.amber[800],
                           foregroundColor: Colors.white,
                         )
                       : null,

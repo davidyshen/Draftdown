@@ -14,7 +14,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 void main() {
   group('YamlFrontmatterHelper.readMediaPathFromFrontmatter', () {
     test('returns null when frontmatter or draftdown.media is absent', () {
-      expect(YamlFrontmatterHelper.readMediaPathFromFrontmatter('# Hello'), isNull);
+      expect(
+        YamlFrontmatterHelper.readMediaPathFromFrontmatter('# Hello'),
+        isNull,
+      );
       expect(
         YamlFrontmatterHelper.readMediaPathFromFrontmatter(
           '---\ntitle: Test\n---\nBody',
@@ -89,7 +92,18 @@ void main() {
       expect(
         ClipboardImageService.detectExtension(
           Uint8List.fromList([
-            0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x45, 0x42, 0x50,
+            0x52,
+            0x49,
+            0x46,
+            0x46,
+            0,
+            0,
+            0,
+            0,
+            0x57,
+            0x45,
+            0x42,
+            0x50,
           ]),
         ),
         'webp',
@@ -143,65 +157,70 @@ void main() {
       }
     });
 
-    test('saves to default media folder and inserts ![](path) at cursor', () async {
-      final mdPath = p.join(tempDir.path, 'notes.md');
-      await File(mdPath).writeAsString('Hello world');
+    test(
+      'saves to default media folder and inserts ![](path) at cursor',
+      () async {
+        final mdPath = p.join(tempDir.path, 'notes.md');
+        await File(mdPath).writeAsString('Hello world');
 
-      final controller = EditorController();
-      await controller.openFile(mdPath);
-      controller.textController.selection = const TextSelection.collapsed(
-        offset: 5,
-      );
+        final controller = EditorController();
+        await controller.openFile(mdPath);
+        controller.textController.selection = const TextSelection.collapsed(
+          offset: 5,
+        );
 
-      final bytes = Uint8List.fromList([0x89, 0x50, 0x4E, 0x47, 1, 2, 3, 4]);
-      final insertedPath = await controller.savePastedImage(
-        bytes: bytes,
-        filename: 'diagram.png',
-      );
+        final bytes = Uint8List.fromList([0x89, 0x50, 0x4E, 0x47, 1, 2, 3, 4]);
+        final insertedPath = await controller.savePastedImage(
+          bytes: bytes,
+          filename: 'diagram.png',
+        );
 
-      expect(insertedPath, 'media/diagram.png');
-      expect(
-        controller.textController.text,
-        'Hello![](media/diagram.png) world',
-      );
-      final savedFile = File(p.join(tempDir.path, 'media', 'diagram.png'));
-      expect(await savedFile.exists(), isTrue);
-      expect(await savedFile.readAsBytes(), bytes);
-      controller.dispose();
-    });
+        expect(insertedPath, 'media/diagram.png');
+        expect(
+          controller.textController.text,
+          'Hello![](media/diagram.png) world',
+        );
+        final savedFile = File(p.join(tempDir.path, 'media', 'diagram.png'));
+        expect(await savedFile.exists(), isTrue);
+        expect(await savedFile.readAsBytes(), bytes);
+        controller.dispose();
+      },
+    );
 
-    test('respects custom draftdown.media frontmatter path and alt text', () async {
-      final mdPath = p.join(tempDir.path, 'paper.md');
-      await File(mdPath).writeAsString(
-        '---\ndraftdown:\n  media: assets/figures\n---\nIntro ',
-      );
+    test(
+      'respects custom draftdown.media frontmatter path and alt text',
+      () async {
+        final mdPath = p.join(tempDir.path, 'paper.md');
+        await File(mdPath).writeAsString(
+          '---\ndraftdown:\n  media: assets/figures\n---\nIntro ',
+        );
 
-      final controller = EditorController();
-      await controller.openFile(mdPath);
-      controller.textController.selection = TextSelection.collapsed(
-        offset: controller.textController.text.length,
-      );
+        final controller = EditorController();
+        await controller.openFile(mdPath);
+        controller.textController.selection = TextSelection.collapsed(
+          offset: controller.textController.text.length,
+        );
 
-      final bytes = Uint8List.fromList([1, 2, 3, 4]);
-      final insertedPath = await controller.savePastedImage(
-        bytes: bytes,
-        filename: 'chart.png',
-        altText: 'Results chart',
-      );
+        final bytes = Uint8List.fromList([1, 2, 3, 4]);
+        final insertedPath = await controller.savePastedImage(
+          bytes: bytes,
+          filename: 'chart.png',
+          altText: 'Results chart',
+        );
 
-      expect(insertedPath, 'assets/figures/chart.png');
-      expect(
-        controller.textController.text,
-        'Intro ![Results chart](assets/figures/chart.png)',
-      );
-      expect(
-        await File(
-          p.join(tempDir.path, 'assets', 'figures', 'chart.png'),
-        ).exists(),
-        isTrue,
-      );
-      controller.dispose();
-    });
+        expect(insertedPath, 'assets/figures/chart.png');
+        expect(
+          controller.textController.text,
+          'Intro ![Results chart](assets/figures/chart.png)',
+        );
+        expect(
+          await File(p.join(tempDir.path, 'assets', 'figures', 'chart.png'))
+              .exists(),
+          isTrue,
+        );
+        controller.dispose();
+      },
+    );
   });
 
   group('PasteImageDialog widget', () {
@@ -219,113 +238,114 @@ void main() {
       }
     });
 
-    testWidgets('returns normalised filename & alt text, and detects collisions',
-        (tester) async {
-      final existingFile = File(p.join(tempDir.path, 'existing.png'));
-      existingFile.writeAsBytesSync([1, 2, 3]);
+    testWidgets(
+      'returns normalised filename & alt text, and detects collisions',
+      (tester) async {
+        final existingFile = File(p.join(tempDir.path, 'existing.png'));
+        existingFile.writeAsBytesSync([1, 2, 3]);
 
-      PasteImageResult? dialogResult;
+        PasteImageResult? dialogResult;
 
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Builder(
-            builder: (context) => Scaffold(
-              body: ElevatedButton(
-                onPressed: () async {
-                  dialogResult = await showDialog<PasteImageResult>(
-                    context: context,
-                    builder: (_) => PasteImageDialog(
-                      imageBytes: Uint8List.fromList([1, 2, 3, 4]),
-                      defaultExtension: 'png',
-                      mediaDirectory: tempDir.path,
-                      mediaFolderDisplay: 'media',
-                      initialFilename: 'existing.png',
-                    ),
-                  );
-                },
-                child: const Text('Open'),
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Builder(
+              builder: (context) => Scaffold(
+                body: ElevatedButton(
+                  onPressed: () async {
+                    dialogResult = await showDialog<PasteImageResult>(
+                      context: context,
+                      builder: (_) => PasteImageDialog(
+                        imageBytes: Uint8List.fromList([1, 2, 3, 4]),
+                        defaultExtension: 'png',
+                        mediaDirectory: tempDir.path,
+                        mediaFolderDisplay: 'media',
+                        initialFilename: 'existing.png',
+                      ),
+                    );
+                  },
+                  child: const Text('Open'),
+                ),
               ),
             ),
           ),
-        ),
-      );
+        );
 
-      await tester.tap(find.text('Open'));
-      await tester.pumpAndSettle();
+        await tester.tap(find.text('Open'));
+        await tester.pumpAndSettle();
 
-      // Collision warning & Overwrite button should be visible for existing.png
-      expect(find.text('Overwrite'), findsOneWidget);
-      expect(
-        find.textContaining('already exists'),
-        findsOneWidget,
-      );
+        // Collision warning & Overwrite button should be visible for existing.png
+        expect(find.text('Overwrite'), findsOneWidget);
+        expect(find.textContaining('already exists'), findsOneWidget);
 
-      // Change filename to include spaces -> normalises and switches back to Save & Insert
-      await tester.enterText(
-        find.widgetWithText(TextField, 'Filename'),
-        'new shot',
-      );
-      await tester.enterText(
-        find.widgetWithText(TextField, 'Alt text (optional)'),
-        'My screenshot',
-      );
-      await tester.pump();
+        // Change filename to include spaces -> normalises and switches back to Save & Insert
+        await tester.enterText(
+          find.widgetWithText(TextField, 'Filename'),
+          'new shot',
+        );
+        await tester.enterText(
+          find.widgetWithText(TextField, 'Alt text (optional)'),
+          'My screenshot',
+        );
+        await tester.pump();
 
-      expect(find.text('Save & Insert'), findsOneWidget);
-      expect(
-        find.text('Spaces will be saved as: new-shot.png'),
-        findsOneWidget,
-      );
+        expect(find.text('Save & Insert'), findsOneWidget);
+        expect(
+          find.text('Spaces will be saved as: new-shot.png'),
+          findsOneWidget,
+        );
 
-      await tester.tap(find.text('Save & Insert'));
-      await tester.pumpAndSettle();
+        await tester.tap(find.text('Save & Insert'));
+        await tester.pumpAndSettle();
 
-      expect(dialogResult, isNotNull);
-      expect(dialogResult!.filename, 'new-shot.png');
-      expect(dialogResult!.altText, 'My screenshot');
-    });
+        expect(dialogResult, isNotNull);
+        expect(dialogResult!.filename, 'new-shot.png');
+        expect(dialogResult!.altText, 'My screenshot');
+      },
+    );
   });
 
   group('AppToolbar Insert Image button', () {
-    testWidgets('renders Insert Image button between Table and Cite and triggers callback',
-        (tester) async {
-      SharedPreferences.setMockInitialValues({});
-      final controller = EditorController();
-      var insertImageTapped = false;
+    testWidgets(
+      'renders Insert Image button between Table and Cite and triggers callback',
+      (tester) async {
+        SharedPreferences.setMockInitialValues({});
+        final controller = EditorController();
+        var insertImageTapped = false;
 
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: AppToolbar(
-              controller: controller,
-              onInsertImage: () => insertImageTapped = true,
-              onOpenCitationDialog: () {},
-              onOpenExportDialog: () {},
-              isDarkMode: false,
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: AppToolbar(
+                controller: controller,
+                onInsertImage: () => insertImageTapped = true,
+                onOpenCitationDialog: () {},
+                onOpenExportDialog: () {},
+                isDarkMode: false,
+              ),
             ),
           ),
-        ),
-      );
+        );
 
-      final tableFinder = find.byIcon(Icons.table_chart_outlined);
-      final imageFinder = find.byIcon(Icons.image_outlined);
-      final citeFinder = find.text('Cite');
+        final tableFinder = find.byIcon(Icons.table_chart_outlined);
+        final imageFinder = find.byIcon(Icons.image_outlined);
+        final citeFinder = find.text('Cite');
 
-      expect(tableFinder, findsOneWidget);
-      expect(imageFinder, findsOneWidget);
-      expect(citeFinder, findsOneWidget);
+        expect(tableFinder, findsOneWidget);
+        expect(imageFinder, findsOneWidget);
+        expect(citeFinder, findsOneWidget);
 
-      final tableX = tester.getCenter(tableFinder).dx;
-      final imageX = tester.getCenter(imageFinder).dx;
-      final citeX = tester.getCenter(citeFinder).dx;
-      expect(imageX, greaterThan(tableX));
-      expect(imageX, lessThan(citeX));
+        final tableX = tester.getCenter(tableFinder).dx;
+        final imageX = tester.getCenter(imageFinder).dx;
+        final citeX = tester.getCenter(citeFinder).dx;
+        expect(imageX, greaterThan(tableX));
+        expect(imageX, lessThan(citeX));
 
-      await tester.tap(imageFinder);
-      await tester.pump();
-      expect(insertImageTapped, isTrue);
+        await tester.tap(imageFinder);
+        await tester.pump();
+        expect(insertImageTapped, isTrue);
 
-      controller.dispose();
-    });
+        controller.dispose();
+      },
+    );
   });
 }

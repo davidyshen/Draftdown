@@ -93,7 +93,9 @@ class YamlFrontmatterHelper {
     final body = match.group(1) ?? '';
     final lines = body.replaceAll('\r\n', '\n').split('\n');
 
-    final draftdownKeyRegex = RegExp(r'^([ \t]*)draftdown[ \t]*:[ \t]*(?:#.*)?$');
+    final draftdownKeyRegex = RegExp(
+      r'^([ \t]*)draftdown[ \t]*:[ \t]*(?:#.*)?$',
+    );
     final mediaKeyRegex = RegExp(r'^([ \t]*)media[ \t]*:[ \t]*(.*?)[ \t]*$');
 
     int? blockIndent;
@@ -122,8 +124,10 @@ class YamlFrontmatterHelper {
         var value = (mediaMatch.group(2) ?? '').trim();
         if (value.isEmpty) return null;
 
-        final doubleQuoted = RegExp(r'^"([^"]*)"[ \t]*(?:#.*)?$').firstMatch(value);
-        final singleQuoted = RegExp(r"^'([^']*)'[ \t]*(?:#.*)?$").firstMatch(value);
+        final doubleQuoted = RegExp(r'^"([^"]*)"[ \t]*(?:#.*)?$')
+            .firstMatch(value);
+        final singleQuoted = RegExp(r"^'([^']*)'[ \t]*(?:#.*)?$")
+            .firstMatch(value);
         if (doubleQuoted != null) {
           value = doubleQuoted.group(1)!.trim();
         } else if (singleQuoted != null) {
