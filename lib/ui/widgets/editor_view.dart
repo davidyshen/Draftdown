@@ -6,9 +6,11 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 
 import '../../controllers/editor_controller.dart';
+import '../../services/clipboard_image_service.dart';
 import '../../services/spell_check_service.dart';
 import '../../utils/yaml_frontmatter_helper.dart';
 import '../theme/app_theme.dart';
+import 'paste_image_dialog.dart';
 
 /// The core Markdown text editor widget with precision-synchronised
 /// monospace line-number gutter and desktop keyboard shortcuts.
@@ -75,6 +77,7 @@ class _EditorViewState extends State<EditorView> with WidgetsBindingObserver {
   int? _lastGutterLineOffset;
   late String _lastEditorFontFamily;
   late String _lastFrontmatter;
+  final ClipboardImageService _clipboardImageService = ClipboardImageService();
 
   @override
   void initState() {
@@ -678,7 +681,19 @@ class _EditorViewState extends State<EditorView> with WidgetsBindingObserver {
     BuildContext context,
     EditableTextState editableTextState,
   ) {
-    final defaultItems = editableTextState.contextMenuButtonItems;
+    final defaultItems = editableTextState.contextMenuButtonItems.map((item) {
+      if (item.type == ContextMenuButtonType.paste) {
+        return ContextMenuButtonItem(
+          type: item.type,
+          label: item.label,
+          onPressed: () {
+            editableTextState.hideToolbar();
+            _handlePaste();
+          },
+        );
+      }
+      return item;
+    }).toList();
 
     if (!widget.controller.isSpellCheckEnabled) {
       return AdaptiveTextSelectionToolbar.buttonItems(
@@ -727,6 +742,27 @@ class _EditorViewState extends State<EditorView> with WidgetsBindingObserver {
     return AdaptiveTextSelectionToolbar.buttonItems(
       anchors: editableTextState.contextMenuAnchors,
       buttonItems: items,
+    );
+  }
+
+  Future<void> _handlePaste() async {
+    final imageData = await _clipboardImageService.readImageFromClipboard();
+    if (imageData == null) {
+      final textData = await Clipboard.getData(Clipboard.kTextPlain);
+      final text = textData?.text;
+      if (text != null && text.isNotEmpty) {
+        widget.controller.insertText(text);
+      }
+      return;
+    }
+
+    if (!mounted) return;
+
+    await PasteImageDialog.promptAndSaveImage(
+      context: context,
+      controller: widget.controller,
+      imageBytes: imageData.bytes,
+      defaultExtension: imageData.extension,
     );
   }
 
@@ -933,9 +969,19 @@ class _EditorViewState extends State<EditorView> with WidgetsBindingObserver {
                                 widget.controller.outdentSelection();
                               },
                             },
-                            child: Stack(
-                              clipBehavior: Clip.hardEdge,
-                              children: [
+                            child: Actions(
+                              actions: <Type, Action<Intent>>{
+                                PasteTextIntent:
+                                    CallbackAction<PasteTextIntent>(
+                                  onInvoke: (_) {
+                                    _handlePaste();
+                                    return null;
+                                  },
+                                ),
+                              },
+                              child: Stack(
+                                clipBehavior: Clip.hardEdge,
+                                children: [
                                 TextField(
                                   key: _textFieldKey,
                                   controller: widget.controller.textController,
@@ -1023,6 +1069,7 @@ class _EditorViewState extends State<EditorView> with WidgetsBindingObserver {
                                     ),
                                   ),
                               ],
+                            ),
                             ),
                           ),
                         ),

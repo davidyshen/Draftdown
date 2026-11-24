@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:markdown/markdown.dart' as md;
+import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/citation_item.dart';
@@ -1667,6 +1669,72 @@ class EditorController extends ChangeNotifier {
       locator: locator,
     );
     insertText(citationStr, flushImmediately: true);
+  }
+
+  /// Returns the configured media folder path from YAML frontmatter (`draftdown.media`),
+  /// defaulting to `'media'`.
+  String resolveMediaFolderSetting() {
+    return YamlFrontmatterHelper.readMediaPathFromFrontmatter(_frontmatter) ??
+        'media';
+  }
+
+  /// Resolves the absolute directory path on disk where pasted images should be saved,
+  /// or `null` if the active document has not been saved to disk yet.
+  String? resolveMediaDirectoryPath() {
+    final docPath = _currentFilePath;
+    if (docPath == null || docPath.isEmpty) return null;
+    final mediaSetting = resolveMediaFolderSetting();
+    if (p.isAbsolute(mediaSetting)) {
+      return p.normalize(mediaSetting);
+    }
+    return p.normalize(p.join(p.dirname(docPath), mediaSetting));
+  }
+
+  /// Builds the Markdown image path for [filename] relative to the active document.
+  String buildMarkdownImagePath(String filename) {
+    final mediaSetting = resolveMediaFolderSetting();
+    if (!p.isAbsolute(mediaSetting)) {
+      final posixFolder = mediaSetting.replaceAll('\\', '/');
+      return p.posix.normalize(p.posix.join(posixFolder, filename));
+    }
+
+    final docPath = _currentFilePath;
+    if (docPath != null && docPath.isNotEmpty) {
+      final docDir = p.dirname(docPath);
+      final targetFile = p.join(p.normalize(mediaSetting), filename);
+      // Only use relative path if both share the same root (e.g. same Windows drive).
+      if (p.rootPrefix(docDir).toLowerCase() ==
+          p.rootPrefix(targetFile).toLowerCase()) {
+        return p.relative(targetFile, from: docDir).replaceAll('\\', '/');
+      }
+      return targetFile.replaceAll('\\', '/');
+    }
+    return filename;
+  }
+
+  /// Saves pasted image [bytes] as [filename] in the resolved media directory and
+  /// inserts a Markdown image tag at the current cursor position.
+  ///
+  /// Returns the inserted Markdown path, or `null` if the document is unsaved.
+  Future<String?> savePastedImage({
+    required Uint8List bytes,
+    required String filename,
+    String altText = '',
+  }) async {
+    final mediaDir = resolveMediaDirectoryPath();
+    if (mediaDir == null) return null;
+
+    final dir = Directory(mediaDir);
+    if (!await dir.exists()) {
+      await dir.create(recursive: true);
+    }
+
+    final targetPath = p.join(mediaDir, filename);
+    await File(targetPath).writeAsBytes(bytes);
+
+    final markdownPath = buildMarkdownImagePath(filename);
+    insertText('![$altText]($markdownPath)', flushImmediately: true);
+    return markdownPath;
   }
 
   /// Detect whether the editor cursor is currently situated within a citation string.

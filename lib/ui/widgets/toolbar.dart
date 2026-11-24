@@ -7,6 +7,7 @@ import '../theme/app_theme.dart';
 /// formatting tools, citation trigger, and Pandoc export.
 class AppToolbar extends StatelessWidget {
   final EditorController controller;
+  final VoidCallback onInsertImage;
   final VoidCallback onOpenCitationDialog;
   final VoidCallback onOpenExportDialog;
   final bool isDarkMode;
@@ -14,6 +15,7 @@ class AppToolbar extends StatelessWidget {
   const AppToolbar({
     super.key,
     required this.controller,
+    required this.onInsertImage,
     required this.onOpenCitationDialog,
     required this.onOpenExportDialog,
     required this.isDarkMode,
@@ -266,6 +268,12 @@ class AppToolbar extends StatelessWidget {
                       onTap: () => controller.insertText(
                         '\n| Header 1 | Header 2 |\n| :--- | :--- |\n| Value 1 | Value 2 |\n',
                       ),
+                    ),
+                    _buildDivider(borderColor),
+                    _buildFormatBtn(
+                      icon: Icons.image_outlined,
+                      tooltip: 'Insert Image',
+                      onTap: onInsertImage,
                     ),
                     _buildDivider(borderColor),
                     _buildCitationBtn(),
