@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
 
 import '../../controllers/editor_controller.dart';
 import '../theme/app_theme.dart';
@@ -9,6 +11,7 @@ import '../widgets/custom_title_bar.dart';
 import '../widgets/editor_view.dart';
 import '../widgets/export_dialog.dart';
 import '../widgets/markdown_preview.dart';
+import '../widgets/paste_image_dialog.dart';
 import '../widgets/settings_dialog.dart';
 import '../widgets/sidebar.dart';
 import '../widgets/toolbar.dart';
@@ -174,6 +177,28 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
+  Future<void> _insertImage() async {
+    final pickedPath = await widget.controller.fileService.pickImageFile();
+    if (pickedPath == null || !mounted) return;
+
+    final file = File(pickedPath);
+    if (!await file.exists() || !mounted) return;
+
+    final bytes = await file.readAsBytes();
+    if (!mounted) return;
+
+    final rawExt = p.extension(pickedPath).toLowerCase().replaceFirst('.', '');
+    final ext = rawExt.isEmpty ? 'png' : rawExt;
+
+    await PasteImageDialog.promptAndSaveImage(
+      context: context,
+      controller: widget.controller,
+      imageBytes: bytes,
+      defaultExtension: ext,
+      initialFilename: p.basename(pickedPath),
+    );
+  }
+
   void _openExportDialog() {
     showDialog(
       context: context,
@@ -262,6 +287,7 @@ class _MainScreenState extends State<MainScreen> {
                               RepaintBoundary(
                                 child: AppToolbar(
                                   controller: widget.controller,
+                                  onInsertImage: _insertImage,
                                   onOpenCitationDialog: _openCitationDialog,
                                   onOpenExportDialog: _openExportDialog,
                                   isDarkMode: widget.isDarkMode,

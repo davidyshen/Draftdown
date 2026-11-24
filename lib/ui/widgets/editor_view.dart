@@ -6,9 +6,11 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 
 import '../../controllers/editor_controller.dart';
+import '../../services/clipboard_image_service.dart';
 import '../../services/spell_check_service.dart';
 import '../../utils/yaml_frontmatter_helper.dart';
 import '../theme/app_theme.dart';
+import 'paste_image_dialog.dart';
 
 /// The core Markdown text editor widget with precision-synchronised
 /// monospace line-number gutter and desktop keyboard shortcuts.
@@ -75,6 +77,7 @@ class _EditorViewState extends State<EditorView> with WidgetsBindingObserver {
   int? _lastGutterLineOffset;
   late String _lastEditorFontFamily;
   late String _lastFrontmatter;
+  final ClipboardImageService _clipboardImageService = ClipboardImageService();
 
   @override
   void initState() {
@@ -678,7 +681,19 @@ class _EditorViewState extends State<EditorView> with WidgetsBindingObserver {
     BuildContext context,
     EditableTextState editableTextState,
   ) {
-    final defaultItems = editableTextState.contextMenuButtonItems;
+    final defaultItems = editableTextState.contextMenuButtonItems.map((item) {
+      if (item.type == ContextMenuButtonType.paste) {
+        return ContextMenuButtonItem(
+          type: item.type,
+          label: item.label,
+          onPressed: () {
+            editableTextState.hideToolbar();
+            _handlePaste();
+          },
+        );
+      }
+      return item;
+    }).toList();
 
     if (!widget.controller.isSpellCheckEnabled) {
       return AdaptiveTextSelectionToolbar.buttonItems(
@@ -727,6 +742,27 @@ class _EditorViewState extends State<EditorView> with WidgetsBindingObserver {
     return AdaptiveTextSelectionToolbar.buttonItems(
       anchors: editableTextState.contextMenuAnchors,
       buttonItems: items,
+    );
+  }
+
+  Future<void> _handlePaste() async {
+    final imageData = await _clipboardImageService.readImageFromClipboard();
+    if (imageData == null) {
+      final textData = await Clipboard.getData(Clipboard.kTextPlain);
+      final text = textData?.text;
+      if (text != null && text.isNotEmpty) {
+        widget.controller.insertText(text);
+      }
+      return;
+    }
+
+    if (!mounted) return;
+
+    await PasteImageDialog.promptAndSaveImage(
+      context: context,
+      controller: widget.controller,
+      imageBytes: imageData.bytes,
+      defaultExtension: imageData.extension,
     );
   }
 
@@ -933,96 +969,112 @@ class _EditorViewState extends State<EditorView> with WidgetsBindingObserver {
                                 widget.controller.outdentSelection();
                               },
                             },
-                            child: Stack(
-                              clipBehavior: Clip.hardEdge,
-                              children: [
-                                TextField(
-                                  key: _textFieldKey,
-                                  controller: widget.controller.textController,
-                                  focusNode: widget.controller.focusNode,
-                                  scrollController:
-                                      widget.controller.scrollController,
-                                  maxLines: null,
-                                  expands: true,
-                                  keyboardType: TextInputType.multiline,
-                                  style: editorTextStyle,
-                                  strutStyle: editorStrutStyle,
-                                  contextMenuBuilder: _buildContextMenu,
-                                  decoration: InputDecoration(
-                                    border: InputBorder.none,
-                                    contentPadding: EdgeInsets.fromLTRB(
-                                      _contentPaddingHorizontal,
-                                      effectiveTopPadding,
-                                      _contentPaddingHorizontal,
-                                      _contentPaddingBottom,
+                            child: Actions(
+                              actions: <Type, Action<Intent>>{
+                                PasteTextIntent:
+                                    CallbackAction<PasteTextIntent>(
+                                      onInvoke: (_) {
+                                        _handlePaste();
+                                        return null;
+                                      },
                                     ),
-                                    isDense: true,
-                                  ),
-                                ),
-                                if (hasFrontmatter)
-                                  AnimatedBuilder(
-                                    animation:
+                              },
+                              child: Stack(
+                                clipBehavior: Clip.hardEdge,
+                                children: [
+                                  TextField(
+                                    key: _textFieldKey,
+                                    controller:
+                                        widget.controller.textController,
+                                    focusNode: widget.controller.focusNode,
+                                    scrollController:
                                         widget.controller.scrollController,
-                                    builder: (context, child) {
-                                      final scrollOffset =
-                                          widget.controller.safeScrollOffset;
-                                      return Positioned(
-                                        top: _contentPaddingTop - scrollOffset,
-                                        left: _contentPaddingHorizontal,
-                                        child: child!,
-                                      );
-                                    },
-                                    child: Material(
-                                      color: isDark
-                                          ? Colors.white.withValues(alpha: 0.06)
-                                          : Colors.black.withValues(
-                                              alpha: 0.05,
-                                            ),
-                                      borderRadius: BorderRadius.circular(999),
-                                      child: InkWell(
+                                    maxLines: null,
+                                    expands: true,
+                                    keyboardType: TextInputType.multiline,
+                                    style: editorTextStyle,
+                                    strutStyle: editorStrutStyle,
+                                    contextMenuBuilder: _buildContextMenu,
+                                    decoration: InputDecoration(
+                                      border: InputBorder.none,
+                                      contentPadding: EdgeInsets.fromLTRB(
+                                        _contentPaddingHorizontal,
+                                        effectiveTopPadding,
+                                        _contentPaddingHorizontal,
+                                        _contentPaddingBottom,
+                                      ),
+                                      isDense: true,
+                                    ),
+                                  ),
+                                  if (hasFrontmatter)
+                                    AnimatedBuilder(
+                                      animation:
+                                          widget.controller.scrollController,
+                                      builder: (context, child) {
+                                        final scrollOffset =
+                                            widget.controller.safeScrollOffset;
+                                        return Positioned(
+                                          top:
+                                              _contentPaddingTop - scrollOffset,
+                                          left: _contentPaddingHorizontal,
+                                          child: child!,
+                                        );
+                                      },
+                                      child: Material(
+                                        color: isDark
+                                            ? Colors.white.withValues(
+                                                alpha: 0.06,
+                                              )
+                                            : Colors.black.withValues(
+                                                alpha: 0.05,
+                                              ),
                                         borderRadius: BorderRadius.circular(
                                           999,
                                         ),
-                                        onTap: _showFrontmatterDialog,
-                                        child: Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 10,
-                                            vertical: 3,
+                                        child: InkWell(
+                                          borderRadius: BorderRadius.circular(
+                                            999,
                                           ),
-                                          decoration: BoxDecoration(
-                                            borderRadius: BorderRadius.circular(
-                                              999,
+                                          onTap: _showFrontmatterDialog,
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 10,
+                                              vertical: 3,
                                             ),
-                                            border: Border.all(
-                                              color: borderColor.withValues(
-                                                alpha: 0.7,
-                                              ),
-                                            ),
-                                          ),
-                                          child: Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Icon(
-                                                Icons.data_object,
-                                                size: 12,
-                                                color: gutterTextColor,
-                                              ),
-                                              const SizedBox(width: 5),
-                                              Text(
-                                                'Frontmatter',
-                                                style: TextStyle(
-                                                  fontSize: 11,
-                                                  color: gutterTextColor,
-                                                  fontWeight: FontWeight.w500,
+                                            decoration: BoxDecoration(
+                                              borderRadius:
+                                                  BorderRadius.circular(999),
+                                              border: Border.all(
+                                                color: borderColor.withValues(
+                                                  alpha: 0.7,
                                                 ),
                                               ),
-                                            ],
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Icon(
+                                                  Icons.data_object,
+                                                  size: 12,
+                                                  color: gutterTextColor,
+                                                ),
+                                                const SizedBox(width: 5),
+                                                Text(
+                                                  'Frontmatter',
+                                                  style: TextStyle(
+                                                    fontSize: 11,
+                                                    color: gutterTextColor,
+                                                    fontWeight: FontWeight.w500,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
                                           ),
                                         ),
                                       ),
                                     ),
-                                  ),
-                              ],
+                                ],
+                              ),
                             ),
                           ),
                         ),

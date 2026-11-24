@@ -86,6 +86,69 @@ class YamlFrontmatterHelper {
     return value;
   }
 
+  /// Extract `draftdown.media` from leading YAML frontmatter, or `null` if absent.
+  static String? readMediaPathFromFrontmatter(String markdown) {
+    final match = _frontmatterRegex.firstMatch(markdown);
+    if (match == null) return null;
+    final body = match.group(1) ?? '';
+    final lines = body.replaceAll('\r\n', '\n').split('\n');
+
+    final draftdownKeyRegex = RegExp(
+      r'^([ \t]*)draftdown[ \t]*:[ \t]*(?:#.*)?$',
+    );
+    final mediaKeyRegex = RegExp(r'^([ \t]*)media[ \t]*:[ \t]*(.*?)[ \t]*$');
+
+    int? blockIndent;
+    for (final line in lines) {
+      if (blockIndent == null) {
+        final ddMatch = draftdownKeyRegex.firstMatch(line);
+        if (ddMatch != null) {
+          blockIndent = ddMatch.group(1)!.length;
+        }
+        continue;
+      }
+
+      final trimmed = line.trim();
+      if (trimmed.isEmpty || trimmed.startsWith('#')) {
+        continue;
+      }
+
+      final indent = line.length - line.trimLeft().length;
+      if (indent <= blockIndent) {
+        // Left the `draftdown:` block.
+        break;
+      }
+
+      final mediaMatch = mediaKeyRegex.firstMatch(line);
+      if (mediaMatch != null) {
+        var value = (mediaMatch.group(2) ?? '').trim();
+        if (value.isEmpty) return null;
+
+        final doubleQuoted = RegExp(r'^"([^"]*)"[ \t]*(?:#.*)?$')
+            .firstMatch(value);
+        final singleQuoted = RegExp(r"^'([^']*)'[ \t]*(?:#.*)?$")
+            .firstMatch(value);
+        if (doubleQuoted != null) {
+          value = doubleQuoted.group(1)!.trim();
+        } else if (singleQuoted != null) {
+          value = singleQuoted.group(1)!.trim();
+        } else {
+          // Strip unquoted inline YAML comment.
+          final commentIdx = value.indexOf(' #');
+          if (commentIdx != -1) {
+            value = value.substring(0, commentIdx).trim();
+          } else if (value.startsWith('#')) {
+            return null;
+          }
+        }
+
+        return value.isEmpty ? null : value;
+      }
+    }
+
+    return null;
+  }
+
   /// Update or insert `csl: <styleId>` in the document's leading YAML frontmatter.
   /// Preserves existing frontmatter keys and line-ending style.
   static String upsertCslInFrontmatter(String markdown, String styleId) {

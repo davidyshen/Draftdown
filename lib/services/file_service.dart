@@ -61,6 +61,21 @@ class FileService {
     }
   }
 
+  /// Open file picker dialog for image files
+  Future<String?> pickImageFile() async {
+    try {
+      final file = await FilePicker.pickFile(
+        dialogTitle: 'Select Image',
+        type: FileType.image,
+      );
+
+      return file?.path;
+    } catch (e) {
+      debugPrint('[FileService] Failed to pick image file: $e');
+      return null;
+    }
+  }
+
   /// Open file picker dialog for Export destination
   Future<String?> pickExportLocation({
     required String defaultName,
