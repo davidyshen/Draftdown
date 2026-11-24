@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -7,6 +8,7 @@ import 'package:path/path.dart' as p;
 
 import '../../controllers/editor_controller.dart';
 import '../../models/export_format.dart';
+import '../../services/direct_export_service.dart';
 import '../../services/markdown_render_service.dart'
     show MarkdownRenderPayload, MarkdownRenderResult, MarkdownRenderService;
 import '../../services/pandoc_service.dart';
@@ -40,7 +42,19 @@ class _ExportDialogState extends State<ExportDialog> {
   String _selectedPageSize = 'a4';
   String _selectedMarginSize = 'medium';
   double _fontScale = 1.0;
+  bool _useHrAsPageBreak = false;
   bool _showAdvancedOptions = false;
+
+  // Debounced & buffered preview state so rapid zoom/margin clicks stay instant
+  String _previewPageSize = 'a4';
+  String _previewMarginSize = 'medium';
+  double _previewFontScale = 1.0;
+  bool _previewUseHrAsPageBreak = false;
+  Timer? _previewDebounceTimer;
+  bool _isPreviewUpdating = false;
+  bool _hasQueuedPreviewUpdate = false;
+  Widget? _cachedPreviewSheet;
+  String? _cachedPreviewKey;
 
   late final MarkdownRenderResult _previewRender;
 
@@ -130,6 +144,7 @@ class _ExportDialogState extends State<ExportDialog> {
       pageSize: _selectedPageSize,
       marginSize: _selectedMarginSize,
       fontScale: _fontScale,
+      useHrAsPageBreak: _useHrAsPageBreak,
     );
 
     final result = await widget.controller.exportDocument(options);
@@ -140,8 +155,61 @@ class _ExportDialogState extends State<ExportDialog> {
     });
   }
 
+  void _schedulePreviewUpdate() {
+    _previewDebounceTimer?.cancel();
+    _previewDebounceTimer = Timer(
+      const Duration(milliseconds: 500),
+      _commitPreviewUpdate,
+    );
+  }
+
+  void _commitPreviewUpdate() {
+    if (!mounted) return;
+    if (_isPreviewUpdating) {
+      _hasQueuedPreviewUpdate = true;
+      return;
+    }
+
+    if (_previewPageSize == _selectedPageSize &&
+        _previewMarginSize == _selectedMarginSize &&
+        _previewFontScale == _fontScale &&
+        _previewUseHrAsPageBreak == _useHrAsPageBreak) {
+      return;
+    }
+
+    setState(() {
+      _isPreviewUpdating = true;
+      _previewPageSize = _selectedPageSize;
+      _previewMarginSize = _selectedMarginSize;
+      _previewFontScale = _fontScale;
+      _previewUseHrAsPageBreak = _useHrAsPageBreak;
+      _cachedPreviewSheet = null;
+    });
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      setState(() {
+        _isPreviewUpdating = false;
+      });
+
+      final hasPendingDelta =
+          _previewPageSize != _selectedPageSize ||
+          _previewMarginSize != _selectedMarginSize ||
+          _previewFontScale != _fontScale ||
+          _previewUseHrAsPageBreak != _useHrAsPageBreak;
+
+      if (_hasQueuedPreviewUpdate || hasPendingDelta) {
+        _hasQueuedPreviewUpdate = false;
+        if (!(_previewDebounceTimer?.isActive ?? false)) {
+          _commitPreviewUpdate();
+        }
+      }
+    });
+  }
+
   @override
   void dispose() {
+    _previewDebounceTimer?.cancel();
     _targetPathController.dispose();
     _customArgsController.dispose();
     super.dispose();
@@ -347,11 +415,14 @@ class _ExportDialogState extends State<ExportDialog> {
                                   ? AppTheme.darkSidebar
                                   : AppTheme.lightBg,
                             ),
-                            child: Wrap(
-                              spacing: 16,
-                              runSpacing: 4,
-                              crossAxisAlignment: WrapCrossAlignment.center,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
+                                Wrap(
+                                  spacing: 16,
+                                  runSpacing: 4,
+                                  crossAxisAlignment: WrapCrossAlignment.center,
+                                  children: [
                                 Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
@@ -384,7 +455,7 @@ class _ExportDialogState extends State<ExportDialog> {
                                     ),
                                   ],
                                 ),
-                                Row(
+                                    Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     Checkbox(
@@ -400,6 +471,39 @@ class _ExportDialogState extends State<ExportDialog> {
                                     ),
                                   ],
                                 ),
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Checkbox(
+                                      key: const ValueKey(
+                                        'hr-page-break-checkbox',
+                                      ),
+                                      value: _useHrAsPageBreak,
+                                      visualDensity: VisualDensity.compact,
+                                      onChanged: (val) {
+                                        setState(
+                                          () =>
+                                              _useHrAsPageBreak = val ?? false,
+                                        );
+                                        _schedulePreviewUpdate();
+                                      },
+                                    ),
+                                    const Text(
+                                      'Use --- as page breaks',
+                                      style: TextStyle(fontSize: 12),
+                                    ),
+                                  ],
+                                ),
+                                  ],
+                                ),
+                                if (showPreview) ...[
+                                  const SizedBox(height: 6),
+                                  Wrap(
+                                    spacing: 16,
+                                    runSpacing: 6,
+                                    crossAxisAlignment:
+                                        WrapCrossAlignment.center,
+                                    children: [
                                 if (_selectedFormat.type ==
                                     ExportFormatType.pdf) ...[
                                   Row(
@@ -463,6 +567,7 @@ class _ExportDialogState extends State<ExportDialog> {
                                                 setState(
                                                   () => _selectedPageSize = val,
                                                 );
+                                                _schedulePreviewUpdate();
                                               }
                                             },
                                           ),
@@ -541,6 +646,7 @@ class _ExportDialogState extends State<ExportDialog> {
                                                   () =>
                                                       _selectedMarginSize = val,
                                                 );
+                                                _schedulePreviewUpdate();
                                               }
                                             },
                                           ),
@@ -554,47 +660,96 @@ class _ExportDialogState extends State<ExportDialog> {
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
                                       const Text(
-                                        'Font Size:',
+                                        'Zoom:',
                                         style: TextStyle(fontSize: 12),
                                       ),
-                                      SizedBox(
-                                        width: 115,
-                                        child: SliderTheme(
-                                          data: SliderTheme.of(context).copyWith(
-                                            trackHeight: 2.5,
-                                            thumbShape:
-                                                const RoundSliderThumbShape(
-                                                  enabledThumbRadius: 6,
-                                                ),
-                                            overlayShape:
-                                                const RoundSliderOverlayShape(
-                                                  overlayRadius: 12,
-                                                ),
+                                      const SizedBox(width: 8),
+                                      Container(
+                                        height: 28,
+                                        decoration: BoxDecoration(
+                                          border: Border.all(
+                                            color: borderColor,
                                           ),
-                                          child: Slider(
-                                            key: const ValueKey(
-                                              'font-scale-slider',
+                                          borderRadius: BorderRadius.circular(
+                                            4,
+                                          ),
+                                          color: isDark
+                                              ? AppTheme.darkBg
+                                              : AppTheme.lightSurface,
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            InkWell(
+                                              key: const ValueKey(
+                                                'zoom-out-button',
+                                              ),
+                                              onTap: _fontScale > 0.701
+                                                  ? () {
+                                                      setState(
+                                                        () => _fontScale =
+                                                            ((_fontScale -
+                                                                        0.05) *
+                                                                    100)
+                                                                .round() /
+                                                            100.0,
+                                                      );
+                                                      _schedulePreviewUpdate();
+                                                    }
+                                                  : null,
+                                              child: const Padding(
+                                                padding: EdgeInsets.symmetric(
+                                                  horizontal: 6,
+                                                  vertical: 4,
+                                                ),
+                                                child: Icon(
+                                                  Icons.remove,
+                                                  size: 14,
+                                                ),
+                                              ),
                                             ),
-                                            value: _fontScale,
-                                            min: 0.7,
-                                            max: 1.5,
-                                            divisions: 16,
-                                            onChanged: (val) {
-                                              setState(() => _fontScale = val);
-                                            },
-                                          ),
+                                            SizedBox(
+                                              width: 40,
+                                              child: Text(
+                                                '${(_fontScale * 100).round()}%',
+                                                textAlign: TextAlign.center,
+                                                style: const TextStyle(
+                                                  fontSize: 11.5,
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                              ),
+                                            ),
+                                            InkWell(
+                                              key: const ValueKey(
+                                                'zoom-in-button',
+                                              ),
+                                              onTap: _fontScale < 1.499
+                                                  ? () {
+                                                      setState(
+                                                        () => _fontScale =
+                                                            ((_fontScale +
+                                                                        0.05) *
+                                                                    100)
+                                                                .round() /
+                                                            100.0,
+                                                      );
+                                                      _schedulePreviewUpdate();
+                                                    }
+                                                  : null,
+                                              child: const Padding(
+                                                padding: EdgeInsets.symmetric(
+                                                  horizontal: 6,
+                                                  vertical: 4,
+                                                ),
+                                                child: Icon(Icons.add, size: 14),
+                                              ),
+                                            ),
+                                          ],
                                         ),
                                       ),
-                                      SizedBox(
-                                        width: 38,
-                                        child: Text(
-                                          '${(_fontScale * 100).round()}%',
-                                          style: const TextStyle(
-                                            fontSize: 11.5,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                      ),
+                                    ],
+                                  ),
+                                ],
                                     ],
                                   ),
                                 ],
@@ -889,22 +1044,22 @@ class _ExportDialogState extends State<ExportDialog> {
     required Color mutedColor,
   }) {
     final isPdf = _selectedFormat.type == ExportFormatType.pdf;
-    final isLetter = isPdf && _selectedPageSize.toLowerCase() == 'letter';
+    final isLetter = isPdf && _previewPageSize.toLowerCase() == 'letter';
     final double pageWidth = isLetter ? 612.0 : 595.0;
     final double pageHeight = isLetter ? 792.0 : 842.0;
 
     final EdgeInsets pageMargins = !isPdf
         ? const EdgeInsets.all(56.0)
-        : switch (_selectedMarginSize) {
+        : switch (_previewMarginSize) {
             'thin' => const EdgeInsets.all(36.0),
             'thick' => const EdgeInsets.symmetric(
               vertical: 72.0,
               horizontal: 90.0,
             ),
-            _ => const EdgeInsets.all(72.0),
+            _ => const EdgeInsets.all(50.4),
           };
 
-    final double baseFont = 11.0 * _fontScale;
+    final double baseFont = 8.8 * _previewFontScale;
     final bodyFont = widget.controller.renderBodyFont;
     final headerFont = widget.controller.effectiveRenderHeaderFont;
     final codeFont = widget.controller.editorFontFamily;
@@ -1027,6 +1182,118 @@ class _ExportDialogState extends State<ExportDialog> {
     final summaryText = isPdf
         ? '${_selectedPageSize.toUpperCase()} • $marginLabel • ${(_fontScale * 100).round()}%'
         : 'HTML • ${(_fontScale * 100).round()}%';
+    final isPendingPreview =
+        _isPreviewUpdating ||
+        _previewPageSize != _selectedPageSize ||
+        _previewMarginSize != _selectedMarginSize ||
+        _previewFontScale != _fontScale ||
+        _previewUseHrAsPageBreak != _useHrAsPageBreak;
+
+    final previewKey =
+        '${_selectedFormat.type.name}|$_previewPageSize|$_previewMarginSize|$_previewFontScale|$_previewUseHrAsPageBreak';
+    if (_cachedPreviewSheet == null || _cachedPreviewKey != previewKey) {
+      _cachedPreviewKey = previewKey;
+      final previewMarkdown = _previewUseHrAsPageBreak
+          ? DirectExportService.replaceHrWithPageBreaks(
+              _previewRender.processedMarkdown,
+            ).split('<div class="page-break"></div>').first.trimRight()
+          : _previewRender.processedMarkdown;
+      _cachedPreviewSheet = RepaintBoundary(
+        child: AspectRatio(
+          aspectRatio: pageWidth / pageHeight,
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(2),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.16),
+                  blurRadius: 10,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ),
+            child: FittedBox(
+              fit: BoxFit.contain,
+              child: SizedBox(
+                width: pageWidth,
+                height: pageHeight,
+                child: Padding(
+                  padding: pageMargins,
+                  child: ClipRect(
+                    child: OverflowBox(
+                      alignment: Alignment.topLeft,
+                      minWidth: pageWidth - pageMargins.horizontal,
+                      maxWidth: pageWidth - pageMargins.horizontal,
+                      minHeight: 0,
+                      maxHeight: double.infinity,
+                      child: Theme(
+                        data: lightTheme,
+                        child: DefaultTextStyle(
+                          style: TextStyle(
+                            fontFamily: bodyFont,
+                            fontSize: baseFont,
+                            height: 1.6,
+                            color: textColor,
+                          ),
+                          child: MarkdownBody(
+                            data: previewMarkdown,
+                            extensionSet: md.ExtensionSet.gitHubFlavored,
+                            styleSheet: previewStyle,
+                            inlineSyntaxes: [
+                              DisplayMathSyntax(),
+                              InlineMathSyntax(),
+                              BracketedCitationSyntax(),
+                              InTextCitationSyntax(),
+                              SuperscriptSyntax(),
+                              SubscriptSyntax(),
+                            ],
+                            builders: {
+                              'displaymath': MathElementBuilder(
+                                isDisplay: true,
+                                textColor: textColor,
+                                codeFont: codeFont,
+                                baseFontSize: baseFont,
+                              ),
+                              'inlinemath': MathElementBuilder(
+                                isDisplay: false,
+                                textColor: textColor,
+                                codeFont: codeFont,
+                                baseFontSize: baseFont,
+                              ),
+                              'academiccitation': CitationElementBuilder(
+                                helper: helper,
+                                isDark: false,
+                              ),
+                              'code': MathCodeBlockBuilder(
+                                textColor: textColor,
+                                codeFont: codeFont,
+                                baseFontSize: baseFont,
+                              ),
+                              'img': MarkdownImageElementBuilder(
+                                controller: widget.controller,
+                                imageDirectory: imgDir,
+                                isDark: false,
+                                codeFont: codeFont,
+                                textColor: textColor,
+                                mutedColor: const Color(0xFF64748B),
+                              ),
+                              'input': InputElementBuilder(),
+                              'sup': SuperscriptElementBuilder(),
+                              'sub': SubscriptElementBuilder(),
+                            },
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
 
     return Column(
       key: const ValueKey('export-first-page-preview'),
@@ -1038,6 +1305,14 @@ class _ExportDialogState extends State<ExportDialog> {
               'First Page Preview',
               style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
             ),
+            if (isPendingPreview) ...[
+              const SizedBox(width: 6),
+              const SizedBox(
+                width: 10,
+                height: 10,
+                child: CircularProgressIndicator(strokeWidth: 1.5),
+              ),
+            ],
             const SizedBox(width: 8),
             Expanded(
               child: Text(
@@ -1058,98 +1333,7 @@ class _ExportDialogState extends State<ExportDialog> {
               borderRadius: BorderRadius.circular(8),
               border: Border.all(color: borderColor),
             ),
-            child: Center(
-              child: AspectRatio(
-                aspectRatio: pageWidth / pageHeight,
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(2),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.16),
-                        blurRadius: 10,
-                        offset: const Offset(0, 3),
-                      ),
-                    ],
-                  ),
-                  child: FittedBox(
-                    fit: BoxFit.contain,
-                    child: SizedBox(
-                      width: pageWidth,
-                      height: pageHeight,
-                      child: Padding(
-                        padding: pageMargins,
-                        child: ClipRect(
-                          child: OverflowBox(
-                            alignment: Alignment.topLeft,
-                            minWidth: pageWidth - pageMargins.horizontal,
-                            maxWidth: pageWidth - pageMargins.horizontal,
-                            minHeight: 0,
-                            maxHeight: double.infinity,
-                            child: Theme(
-                              data: lightTheme,
-                              child: DefaultTextStyle(
-                                style: TextStyle(
-                                  fontFamily: bodyFont,
-                                  fontSize: baseFont,
-                                  height: 1.6,
-                                  color: textColor,
-                                ),
-                                child: MarkdownBody(
-                                  data: _previewRender.processedMarkdown,
-                                  extensionSet: md.ExtensionSet.gitHubFlavored,
-                                  styleSheet: previewStyle,
-                                  inlineSyntaxes: [
-                                    DisplayMathSyntax(),
-                                    InlineMathSyntax(),
-                                    BracketedCitationSyntax(),
-                                    InTextCitationSyntax(),
-                                    SuperscriptSyntax(),
-                                    SubscriptSyntax(),
-                                  ],
-                                  builders: {
-                                    'displaymath': MathElementBuilder(
-                                      isDisplay: true,
-                                      textColor: textColor,
-                                      codeFont: codeFont,
-                                    ),
-                                    'inlinemath': MathElementBuilder(
-                                      isDisplay: false,
-                                      textColor: textColor,
-                                      codeFont: codeFont,
-                                    ),
-                                    'academiccitation': CitationElementBuilder(
-                                      helper: helper,
-                                      isDark: false,
-                                    ),
-                                    'code': MathCodeBlockBuilder(
-                                      textColor: textColor,
-                                      codeFont: codeFont,
-                                    ),
-                                    'img': MarkdownImageElementBuilder(
-                                      controller: widget.controller,
-                                      imageDirectory: imgDir,
-                                      isDark: false,
-                                      codeFont: codeFont,
-                                      textColor: textColor,
-                                      mutedColor: const Color(0xFF64748B),
-                                    ),
-                                    'input': InputElementBuilder(),
-                                    'sup': SuperscriptElementBuilder(),
-                                    'sub': SubscriptElementBuilder(),
-                                  },
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
+            child: Center(child: _cachedPreviewSheet!),
           ),
         ),
       ],

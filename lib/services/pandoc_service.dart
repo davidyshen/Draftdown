@@ -261,7 +261,7 @@ class PandocService {
           break;
         case 'medium':
         default:
-          args.addAll(['-V', 'geometry:margin=1in']);
+          args.addAll(['-V', 'geometry:margin=0.7in']);
           break;
       }
     } else {

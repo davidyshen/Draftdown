@@ -906,7 +906,7 @@ def shannon_index(counts):
     });
 
     test('DirectExportService resolvePageMargin and generateHtmlDocument support medium, thin, and thick margins', () {
-      expect(DirectExportService.resolvePageMargin('medium'), equals('1in'));
+      expect(DirectExportService.resolvePageMargin('medium'), equals('0.7in'));
       expect(DirectExportService.resolvePageMargin('thin'), equals('0.5in'));
       expect(
         DirectExportService.resolvePageMargin('thick'),
@@ -921,7 +921,7 @@ def shannon_index(counts):
         controller: controller,
         marginSize: 'medium',
       );
-      expect(htmlMedium, contains('margin: 1in;'));
+      expect(htmlMedium, contains('margin: 0.7in;'));
 
       final htmlThin = service.generateHtmlDocument(
         markdown: '# Document',
@@ -1070,14 +1070,60 @@ a_1 + b_2 = c_3
           markdown: '# Title',
           controller: controller,
         );
-        expect(htmlDefault, contains('font-size: 11.00pt;'));
+        expect(htmlDefault, contains('font-size: 8.80pt;'));
 
         final htmlScaled = service.generateHtmlDocument(
           markdown: '# Title',
           controller: controller,
           fontScale: 1.25,
         );
-        expect(htmlScaled, contains('font-size: 13.75pt;'));
+        expect(htmlScaled, contains('font-size: 11.00pt;'));
+      },
+    );
+
+    test(
+      'generateHtmlDocument treats --- as page breaks without rendering hr when useHrAsPageBreak is true',
+      () {
+        final controller = EditorController();
+        final service = controller.directExportService;
+
+        const doc = '''Page one content
+
+---
+
+Page two content
+
+```markdown
+---
+```
+''';
+
+        final htmlDefault = service.generateHtmlDocument(
+          markdown: doc,
+          controller: controller,
+          useHrAsPageBreak: false,
+        );
+        expect(htmlDefault, contains('<hr />'));
+        expect(htmlDefault, isNot(contains('<div class="page-break"></div>')));
+
+        final htmlPageBreak = service.generateHtmlDocument(
+          markdown: doc,
+          controller: controller,
+          useHrAsPageBreak: true,
+        );
+        expect(htmlPageBreak, isNot(contains('<hr />')));
+        expect(htmlPageBreak, contains('<div class="page-break"></div>'));
+        // Code block --- must remain untouched
+        expect(htmlPageBreak, contains('<code class="language-markdown">---'));
+
+        // Word (.docx) OpenXML page break replacement
+        final docxMd = DirectExportService.replaceHrWithPageBreaks(
+          doc,
+          pageBreakMarkup:
+              '```{=openxml}\n<w:p><w:r><w:br w:type="page"/></w:r></w:p>\n```',
+        );
+        expect(docxMd, contains('<w:br w:type="page"/>'));
+        expect(docxMd, contains('```markdown\n---\n```'));
       },
     );
   });

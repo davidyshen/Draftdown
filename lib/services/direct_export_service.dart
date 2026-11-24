@@ -94,6 +94,13 @@ class DirectExportService {
     r'<pre><code class="language-(?:math|latex)">([\s\S]*?)</code></pre>',
     caseSensitive: false,
   );
+  static final RegExp _fencedCodeRegex = RegExp(
+    r'^(?:```|~~~)[\s\S]*?^(?:```|~~~)[ \t]*\r?$',
+    multiLine: true,
+  );
+  static final RegExp _hrPageBreakRegex = RegExp(
+    r'(?:^|\r?\n[ \t]*\r?\n)[ \t]*-{3,}[ \t]*(?=\r?\n|$)',
+  );
 
   String? _cachedBrowserExecutable;
 
@@ -108,7 +115,8 @@ class DirectExportService {
         return '1in 1.25in';
       case 'medium':
       default:
-        return '1in';
+        // 30% thinner than 1in
+        return '0.7in';
     }
   }
 
@@ -599,6 +607,31 @@ class DirectExportService {
     return processed;
   }
 
+  /// Replace standalone `---` horizontal rules (outside fenced code blocks)
+  /// with [pageBreakMarkup] so no horizontal line is rendered.
+  static String replaceHrWithPageBreaks(
+    String markdown, {
+    String pageBreakMarkup = '<div class="page-break"></div>',
+  }) {
+    final codeTokens = <String>[];
+    var masked = markdown.replaceAllMapped(_fencedCodeRegex, (m) {
+      codeTokens.add(m.group(0)!);
+      return '%%CODE_BLOCK_${codeTokens.length - 1}%%';
+    });
+
+    masked = masked.replaceAllMapped(_hrPageBreakRegex, (m) {
+      return '\n\n$pageBreakMarkup\n\n';
+    });
+
+    if (codeTokens.isNotEmpty) {
+      masked = masked.replaceAllMapped(
+        _codeUnmaskRegex,
+        (m) => codeTokens[int.parse(m.group(1)!)],
+      );
+    }
+    return masked;
+  }
+
   /// Generate a complete, standalone HTML document mimicking the preview styles
   String generateHtmlDocument({
     required String markdown,
@@ -607,12 +640,16 @@ class DirectExportService {
     String pageSize = 'a4',
     String marginSize = 'medium',
     double fontScale = 1.0,
+    bool useHrAsPageBreak = false,
   }) {
     final docTitle = title ?? controller.currentFileName.replaceAll('.md', '');
-    final processedMarkdown = _processMarkdownForExport(
+    var processedMarkdown = _processMarkdownForExport(
       markdown: markdown,
       controller: controller,
     );
+    if (useHrAsPageBreak) {
+      processedMarkdown = replaceHrWithPageBreaks(processedMarkdown);
+    }
 
     // Convert markdown to HTML using GitHub Flavored Markdown + preview inline syntaxes
     var rawHtmlBody = md.markdownToHtml(
@@ -645,7 +682,7 @@ class DirectExportService {
         : 'A4';
     final effectiveMargin = resolvePageMargin(marginSize);
     final effectiveScale = fontScale.clamp(0.5, 2.0);
-    final effectiveFontSizePt = (11.0 * effectiveScale).toStringAsFixed(2);
+    final effectiveFontSizePt = (8.8 * effectiveScale).toStringAsFixed(2);
 
     return '''<!DOCTYPE html>
 <html lang="en-GB">
@@ -867,6 +904,16 @@ class DirectExportService {
       vertical-align: middle;
     }
 
+    /* Page Breaks (when using --- as page breaks) */
+    .page-break {
+      break-after: page;
+      page-break-after: always;
+      height: 0;
+      margin: 0;
+      padding: 0;
+      border: none;
+    }
+
     /* Print Stylesheet for exact Word Processor fidelity */
     @media print {
       body {
@@ -916,6 +963,7 @@ class DirectExportService {
     String? title,
     String pageSize = 'a4',
     double fontScale = 1.0,
+    bool useHrAsPageBreak = false,
   }) async {
     final stopwatch = Stopwatch()..start();
     try {
@@ -930,6 +978,7 @@ class DirectExportService {
         title: title,
         pageSize: pageSize,
         fontScale: fontScale,
+        useHrAsPageBreak: useHrAsPageBreak,
       );
 
       await targetFile.writeAsString(html);
@@ -967,6 +1016,7 @@ class DirectExportService {
     String pageSize = 'a4',
     String marginSize = 'medium',
     double fontScale = 1.0,
+    bool useHrAsPageBreak = false,
   }) async {
     final stopwatch = Stopwatch()..start();
     final browserExe = await findBrowserExecutable();
@@ -996,6 +1046,7 @@ class DirectExportService {
         pageSize: pageSize,
         marginSize: marginSize,
         fontScale: fontScale,
+        useHrAsPageBreak: useHrAsPageBreak,
       );
 
       final tempDir = await getTemporaryDirectory();

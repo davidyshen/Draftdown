@@ -113,6 +113,7 @@ class ExportOptions {
   final String pageSize;
   final String marginSize;
   final double fontScale;
+  final bool useHrAsPageBreak;
 
   const ExportOptions({
     required this.format,
@@ -126,6 +127,7 @@ class ExportOptions {
     this.pageSize = 'a4',
     this.marginSize = 'medium',
     this.fontScale = 1.0,
+    this.useHrAsPageBreak = false,
   });
 
   ExportOptions copyWith({
@@ -140,6 +142,7 @@ class ExportOptions {
     String? pageSize,
     String? marginSize,
     double? fontScale,
+    bool? useHrAsPageBreak,
   }) {
     return ExportOptions(
       format: format ?? this.format,
@@ -153,6 +156,7 @@ class ExportOptions {
       pageSize: pageSize ?? this.pageSize,
       marginSize: marginSize ?? this.marginSize,
       fontScale: fontScale ?? this.fontScale,
+      useHrAsPageBreak: useHrAsPageBreak ?? this.useHrAsPageBreak,
     );
   }
 }

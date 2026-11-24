@@ -560,14 +560,40 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Thick'), findsOneWidget);
 
-      // Verify first-page preview and Font Size slider are visible for PDF
+      // Verify first-page preview and + / - zoom buttons are visible for PDF
       expect(
         find.byKey(const ValueKey('export-first-page-preview')),
         findsOneWidget,
       );
       expect(find.text('First Page Preview'), findsOneWidget);
-      expect(find.byKey(const ValueKey('font-scale-slider')), findsOneWidget);
+      expect(find.byKey(const ValueKey('zoom-out-button')), findsOneWidget);
+      expect(find.byKey(const ValueKey('zoom-in-button')), findsOneWidget);
       expect(find.text('100%'), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('zoom-in-button')));
+      await tester.pump();
+      expect(find.text('105%'), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('zoom-in-button')));
+      await tester.pump();
+      expect(find.text('110%'), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('zoom-out-button')));
+      await tester.pump();
+      expect(find.text('105%'), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('zoom-out-button')));
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pumpAndSettle();
+      expect(find.text('100%'), findsOneWidget);
+
+      // Verify "Use --- as page breaks" checkbox is visible and toggleable for PDF
+      final hrCheckbox = find.byKey(const ValueKey('hr-page-break-checkbox'));
+      expect(hrCheckbox, findsOneWidget);
+      expect(find.text('Use --- as page breaks'), findsOneWidget);
+      await tester.tap(hrCheckbox);
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pumpAndSettle();
 
       // Switch to non-PDF format (Microsoft Word) and verify PDF-only options are hidden
       await tester.tap(find.text('Microsoft Word'));
@@ -1161,6 +1187,9 @@ void main() {
         DraftdownApp(controller: controller, initialDarkMode: false),
       );
       await tester.pumpAndSettle();
+      // Let the 1-second startup floating sidebar peek dismiss before tapping the editor
+      await tester.pump(const Duration(milliseconds: 1200));
+      await tester.pumpAndSettle();
 
       // Make an unsaved edit in the app
       controller.textController.text = '# Unsaved Local Edit';
@@ -1232,6 +1261,9 @@ void main() {
         DraftdownApp(controller: controller, initialDarkMode: false),
       );
       await tester.pumpAndSettle();
+      // Let the 1-second startup floating sidebar peek dismiss before tapping the editor
+      await tester.pump(const Duration(milliseconds: 1200));
+      await tester.pumpAndSettle();
 
       // Focus the editor TextField
       final editorField = find.descendant(
@@ -1276,6 +1308,74 @@ void main() {
       await tester.pump();
 
       expect(controller.content, equals('Line 1\nLine 2\nLine 3'));
+      await tester.pump(const Duration(seconds: 2));
+    },
+  );
+
+  testWidgets(
+    'Switching between split and edit view with frontmatter keeps Frontmatter pill and editor interactive without errors',
+    (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1400, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      SharedPreferences.setMockInitialValues({});
+      final controller = EditorController();
+      addTearDown(controller.dispose);
+      controller.setFrontmatter('title: Test Manuscript\ncsl: apa');
+
+      await tester.pumpWidget(
+        DraftdownApp(controller: controller, initialDarkMode: false),
+      );
+      await tester.pumpAndSettle();
+      // Let the 1-second startup floating sidebar peek dismiss before tapping the editor
+      await tester.pump(const Duration(milliseconds: 1200));
+      await tester.pumpAndSettle();
+
+      expect(controller.hasFrontmatter, isTrue);
+      expect(find.text('Frontmatter'), findsOneWidget);
+      expect(find.byType(ErrorWidget), findsNothing);
+
+      // Repeatedly toggle between split and edit view
+      for (final mode in [
+        EditorViewMode.edit,
+        EditorViewMode.split,
+        EditorViewMode.edit,
+        EditorViewMode.split,
+        EditorViewMode.preview,
+        EditorViewMode.edit,
+        EditorViewMode.split,
+      ]) {
+        controller.setViewMode(mode);
+        await tester.pump();
+        expect(tester.takeException(), isNull);
+        expect(find.byType(ErrorWidget), findsNothing);
+
+        if (mode != EditorViewMode.preview) {
+          expect(find.text('Frontmatter'), findsOneWidget);
+          expect(
+            controller.scrollController.positions.length,
+            equals(1),
+          );
+        }
+      }
+
+      // Verify editor TextField remains interactive and editable
+      final editorField = find.descendant(
+        of: find.byType(EditorView),
+        matching: find.byType(TextField),
+      );
+      await tester.enterText(editorField, '# Updated Heading');
+      await tester.pump();
+      expect(controller.content, equals('# Updated Heading'));
+
+      // Verify Frontmatter pill remains tappable and opens the dialog
+      await tester.tap(find.text('Frontmatter'));
+      await tester.pumpAndSettle();
+      expect(find.text('YAML Frontmatter'), findsOneWidget);
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+
       await tester.pump(const Duration(seconds: 2));
     },
   );
