@@ -1279,6 +1279,8 @@ class MarkdownSyntaxHighlighter {
     int? windowEnd,
     List<SpellErrorRange>? spellErrors,
     Color spellErrorColor = const Color(0xFFEF4444),
+    TextRange? searchHighlightRange,
+    Color searchHighlightColor = const Color(0x55F59E0B),
   }) {
     if (text.isEmpty) {
       return TextSpan(text: '', style: baseStyle);
@@ -1302,7 +1304,7 @@ class MarkdownSyntaxHighlighter {
     final int effWindowStart = windowStart ?? 0;
     final int effWindowEnd = windowEnd ?? text.length;
 
-    void appendStyledSlice(int start, int end, TextStyle style) {
+    void appendLeafSlice(int start, int end, TextStyle style) {
       if (start >= end) return;
       final piece = displayText.substring(start, end);
 
@@ -1346,6 +1348,33 @@ class MarkdownSyntaxHighlighter {
       }
 
       children.add(TextSpan(text: piece, style: style));
+    }
+
+    void appendStyledSlice(int start, int end, TextStyle style) {
+      if (start >= end) return;
+      if (searchHighlightRange != null &&
+          searchHighlightRange.isValid &&
+          !searchHighlightRange.isCollapsed) {
+        final hlStart = searchHighlightRange.start.clamp(0, text.length);
+        final hlEnd = searchHighlightRange.end.clamp(0, text.length);
+        if (start < hlEnd && end > hlStart) {
+          final intersectStart = start.clamp(hlStart, hlEnd);
+          final intersectEnd = end.clamp(hlStart, hlEnd);
+          if (intersectStart > start) {
+            appendLeafSlice(start, intersectStart, style);
+          }
+          appendLeafSlice(
+            intersectStart,
+            intersectEnd,
+            style.copyWith(backgroundColor: searchHighlightColor),
+          );
+          if (end > intersectEnd) {
+            appendLeafSlice(intersectEnd, end, style);
+          }
+          return;
+        }
+      }
+      appendLeafSlice(start, end, style);
     }
 
     void appendPiece(int start, int end, TextStyle style) {
@@ -1477,6 +1506,17 @@ class MarkdownSyntaxEditingController extends TextEditingController {
   bool? _lastSpellEnabled;
   String? _lastSpellLanguage;
   bool _spellDirty = true;
+  TextRange? _searchHighlightRange;
+
+  TextRange? get searchHighlightRange => _searchHighlightRange;
+
+  /// Sets or clears the active search match highlight in the editor.
+  void setSearchHighlight(TextRange? range) {
+    if (_searchHighlightRange == range) return;
+    _searchHighlightRange = range;
+    _cachedSpan = null;
+    notifyListeners();
+  }
 
   SpellCheckService? get spellCheckService => _spellCheckService;
   set spellCheckService(SpellCheckService? service) {
@@ -1655,6 +1695,9 @@ class MarkdownSyntaxEditingController extends TextEditingController {
       spellErrorColor: isDark
           ? const Color(0xFFFF5252)
           : const Color(0xFFDC2626),
+      searchHighlightRange: _searchHighlightRange,
+      searchHighlightColor: Theme.of(context).colorScheme.primary
+          .withValues(alpha: isDark ? 0.38 : 0.25),
     );
 
     if (composingRange == null && !isActivelyTyping) {

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 
 import '../../controllers/editor_controller.dart';
@@ -237,106 +238,116 @@ class _MainScreenState extends State<MainScreen> {
         final isSidebarOpen = widget.controller.isSidebarOpen;
         final showFloating = !isSidebarOpen && _showFloatingSidebar;
 
-        return Scaffold(
-          body: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              CustomTitleBar(
-                controller: widget.controller,
-                onHamburgerHoverChanged: _onHamburgerHoverChanged,
-                isDarkMode: widget.isDarkMode,
-              ),
-              Expanded(
-                child: Stack(
-                  children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        // Collapsible Docked Sidebar
-                        AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
-                          curve: Curves.easeInOut,
-                          width: isSidebarOpen ? 290 : 0,
-                          child: ClipRect(
-                            child: OverflowBox(
-                              alignment: Alignment.topLeft,
-                              minWidth: 290,
-                              maxWidth: 290,
-                              child: isSidebarOpen
-                                  ? RepaintBoundary(
-                                      child: AppSidebar(
-                                        controller: widget.controller,
-                                        onOpenFile: _handleOpenFile,
-                                        onNewFile: _handleNewFile,
-                                        onOpenSettingsDialog:
-                                            _openSettingsDialog,
-                                        onToggleTheme: widget.onToggleTheme,
-                                        onResolveConflict: _showConflictDialog,
-                                      ),
-                                    )
-                                  : const SizedBox.shrink(),
-                            ),
-                          ),
-                        ),
-
-                        // Main Editor Area
-                        Expanded(
-                          child: Column(
-                            children: [
-                              // Top App Toolbar
-                              RepaintBoundary(
-                                child: AppToolbar(
-                                  controller: widget.controller,
-                                  onInsertImage: _insertImage,
-                                  onOpenCitationDialog: _openCitationDialog,
-                                  onOpenExportDialog: _openExportDialog,
-                                  isDarkMode: widget.isDarkMode,
-                                ),
-                              ),
-
-                              // Editor / Preview Split or Single View
-                              Expanded(
-                                child: _buildEditorWorkspace(
-                                  viewMode,
-                                  borderColor,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-
-                    // Floating Hover Sidebar (also peeks for 1s on startup)
-                    if (!isSidebarOpen)
-                      AnimatedPositioned(
-                        duration: const Duration(milliseconds: 220),
-                        curve: Curves.easeOutCubic,
-                        left: showFloating ? 10 : -310,
-                        top: 10,
-                        bottom: 10,
-                        width: 290,
-                        child: MouseRegion(
-                          onEnter: (_) => _onFloatingSidebarHoverChanged(true),
-                          onExit: (_) => _onFloatingSidebarHoverChanged(false),
-                          child: RepaintBoundary(
-                            child: AppSidebar(
-                              key: const ValueKey('floating-sidebar'),
-                              controller: widget.controller,
-                              onOpenFile: _handleOpenFile,
-                              onNewFile: _handleNewFile,
-                              onOpenSettingsDialog: _openSettingsDialog,
-                              onToggleTheme: widget.onToggleTheme,
-                              onResolveConflict: _showConflictDialog,
-                              isFloating: true,
-                            ),
-                          ),
-                        ),
-                      ),
-                  ],
+        return CallbackShortcuts(
+          bindings: <ShortcutActivator, VoidCallback>{
+            const SingleActivator(LogicalKeyboardKey.keyF, control: true): () {
+              widget.controller.requestSearchFocus();
+            },
+          },
+          child: Scaffold(
+            body: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                CustomTitleBar(
+                  controller: widget.controller,
+                  onHamburgerHoverChanged: _onHamburgerHoverChanged,
+                  isDarkMode: widget.isDarkMode,
                 ),
-              ),
-            ],
+                Expanded(
+                  child: Stack(
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          // Collapsible Docked Sidebar
+                          AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            curve: Curves.easeInOut,
+                            width: isSidebarOpen ? 290 : 0,
+                            child: ClipRect(
+                              child: OverflowBox(
+                                alignment: Alignment.topLeft,
+                                minWidth: 290,
+                                maxWidth: 290,
+                                child: isSidebarOpen
+                                    ? RepaintBoundary(
+                                        child: AppSidebar(
+                                          controller: widget.controller,
+                                          onOpenFile: _handleOpenFile,
+                                          onNewFile: _handleNewFile,
+                                          onOpenSettingsDialog:
+                                              _openSettingsDialog,
+                                          onToggleTheme: widget.onToggleTheme,
+                                          onResolveConflict:
+                                              _showConflictDialog,
+                                        ),
+                                      )
+                                    : const SizedBox.shrink(),
+                              ),
+                            ),
+                          ),
+
+                          // Main Editor Area
+                          Expanded(
+                            child: Column(
+                              children: [
+                                // Top App Toolbar
+                                RepaintBoundary(
+                                  child: AppToolbar(
+                                    controller: widget.controller,
+                                    onInsertImage: _insertImage,
+                                    onOpenCitationDialog: _openCitationDialog,
+                                    onOpenExportDialog: _openExportDialog,
+                                    isDarkMode: widget.isDarkMode,
+                                  ),
+                                ),
+
+                                // Editor / Preview Split or Single View
+                                Expanded(
+                                  child: _buildEditorWorkspace(
+                                    viewMode,
+                                    borderColor,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+
+                      // Floating Hover Sidebar (also peeks for 1s on startup)
+                      if (!isSidebarOpen)
+                        AnimatedPositioned(
+                          duration: const Duration(milliseconds: 220),
+                          curve: Curves.easeOutCubic,
+                          left: showFloating ? 10 : -310,
+                          top: 10,
+                          bottom: 10,
+                          width: 290,
+                          child: MouseRegion(
+                            onEnter: (_) =>
+                                _onFloatingSidebarHoverChanged(true),
+                            onExit: (_) =>
+                                _onFloatingSidebarHoverChanged(false),
+                            child: RepaintBoundary(
+                              child: AppSidebar(
+                                key: const ValueKey('floating-sidebar'),
+                                controller: widget.controller,
+                                onOpenFile: _handleOpenFile,
+                                onNewFile: _handleNewFile,
+                                onOpenSettingsDialog: _openSettingsDialog,
+                                onToggleTheme: widget.onToggleTheme,
+                                onResolveConflict: _showConflictDialog,
+                                isFloating: true,
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         );
       },
@@ -374,6 +385,7 @@ class _MainScreenState extends State<MainScreen> {
             headerFont: widget.controller.effectiveRenderHeaderFont,
             codeFont: widget.controller.editorFontFamily,
             controller: widget.controller,
+            scrollController: widget.controller.previewScrollController,
             isFullView: true,
           );
         },
@@ -395,6 +407,7 @@ class _MainScreenState extends State<MainScreen> {
           headerFont: widget.controller.effectiveRenderHeaderFont,
           codeFont: widget.controller.editorFontFamily,
           controller: widget.controller,
+          scrollController: widget.controller.previewScrollController,
           isFullView: false,
         );
       },

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../controllers/editor_controller.dart';
 import '../theme/app_theme.dart';
@@ -134,12 +135,18 @@ class AppToolbar extends StatelessWidget {
                     // Centred View Mode Switcher: Edit, Split, Preview
                     _buildViewModeSegmented(isCompact),
 
-                    // Right area: Export button
+                    // Right area: Search & Export button
                     Expanded(
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.end,
                         mainAxisSize: MainAxisSize.min,
                         children: [
+                          _ToolbarSearchPill(
+                            controller: controller,
+                            isDarkMode: isDarkMode,
+                            borderColor: borderColor,
+                          ),
+                          const SizedBox(width: 8),
                           // Export Button
                           if (isCompact)
                             IconButton(
@@ -149,20 +156,27 @@ class AppToolbar extends StatelessWidget {
                               onPressed: onOpenExportDialog,
                             )
                           else
-                            FilledButton.icon(
-                              icon: const Icon(Icons.output, size: 16),
-                              label: const Text(
-                                'Export',
-                                style: TextStyle(fontSize: 12),
-                              ),
-                              style: FilledButton.styleFrom(
-                                visualDensity: VisualDensity.compact,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 10,
-                                  vertical: 6,
+                            SizedBox(
+                              height: 32,
+                              child: FilledButton.icon(
+                                key: const ValueKey('toolbar-export-btn'),
+                                icon: const Icon(Icons.output, size: 16),
+                                label: const Text(
+                                  'Export',
+                                  style: TextStyle(fontSize: 12),
                                 ),
+                                style: FilledButton.styleFrom(
+                                  minimumSize: const Size(0, 32),
+                                  tapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
+                                  visualDensity: VisualDensity.compact,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 0,
+                                  ),
+                                ),
+                                onPressed: onOpenExportDialog,
                               ),
-                              onPressed: onOpenExportDialog,
                             ),
                         ],
                       ),
@@ -364,6 +378,216 @@ class AppToolbar extends StatelessWidget {
       height: 16,
       margin: const EdgeInsets.symmetric(horizontal: 6),
       color: borderColor.withValues(alpha: 0.6),
+    );
+  }
+}
+
+class _ToolbarSearchPill extends StatefulWidget {
+  final EditorController controller;
+  final bool isDarkMode;
+  final Color borderColor;
+
+  const _ToolbarSearchPill({
+    required this.controller,
+    required this.isDarkMode,
+    required this.borderColor,
+  });
+
+  @override
+  State<_ToolbarSearchPill> createState() => _ToolbarSearchPillState();
+}
+
+class _ToolbarSearchPillState extends State<_ToolbarSearchPill> {
+  bool _isExpanded = false;
+  final TextEditingController _searchController = TextEditingController();
+  final FocusNode _focusNode = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    _focusNode.addListener(_onFocusChanged);
+    widget.controller.searchFocusRequests.addListener(_onSearchFocusRequested);
+  }
+
+  @override
+  void didUpdateWidget(covariant _ToolbarSearchPill oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller.searchFocusRequests.removeListener(
+        _onSearchFocusRequested,
+      );
+      widget.controller.searchFocusRequests.addListener(
+        _onSearchFocusRequested,
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _focusNode.removeListener(_onFocusChanged);
+    widget.controller.searchFocusRequests.removeListener(
+      _onSearchFocusRequested,
+    );
+    _searchController.dispose();
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  void _onFocusChanged() {
+    if (!_focusNode.hasFocus &&
+        _isExpanded &&
+        _searchController.text.trim().isEmpty) {
+      _collapse();
+    }
+  }
+
+  void _onSearchFocusRequested() {
+    if (!_isExpanded) {
+      _expand();
+    } else {
+      _focusNode.requestFocus();
+      _searchController.selection = TextSelection(
+        baseOffset: 0,
+        extentOffset: _searchController.text.length,
+      );
+    }
+  }
+
+  void _expand() {
+    if (_isExpanded) return;
+    setState(() => _isExpanded = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _isExpanded) {
+        _focusNode.requestFocus();
+      }
+    });
+  }
+
+  void _collapse() {
+    if (!_isExpanded) return;
+    _searchController.clear();
+    widget.controller.clearSearch();
+    setState(() => _isExpanded = false);
+  }
+
+  void _submitSearch() {
+    final query = _searchController.text;
+    if (query.isEmpty) {
+      widget.controller.clearSearch();
+      return;
+    }
+    widget.controller.searchNext(query);
+    _focusNode.requestFocus();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final accent = theme.colorScheme.primary;
+    final activeIconColor = accent.computeLuminance() > 0.55
+        ? Colors.black87
+        : Colors.white;
+    final pillBg = widget.isDarkMode
+        ? Colors.white.withValues(alpha: 0.06)
+        : Colors.black.withValues(alpha: 0.04);
+    final mutedText = widget.isDarkMode
+        ? AppTheme.darkTextMuted
+        : AppTheme.lightTextMuted;
+
+    return CallbackShortcuts(
+      bindings: {const SingleActivator(LogicalKeyboardKey.escape): _collapse},
+      child: AnimatedContainer(
+        key: const ValueKey('toolbar-search-pill'),
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOutCubic,
+        width: _isExpanded ? 210 : 32,
+        height: 32,
+        decoration: BoxDecoration(
+          color: pillBg,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: widget.borderColor),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: _isExpanded
+            ? OverflowBox(
+                alignment: Alignment.centerRight,
+                minWidth: 210,
+                maxWidth: 210,
+                child: Row(
+                  children: [
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: TextField(
+                        key: const ValueKey('toolbar-search-input'),
+                        controller: _searchController,
+                        focusNode: _focusNode,
+                        style: const TextStyle(fontSize: 12),
+                        textInputAction: TextInputAction.search,
+                        decoration: InputDecoration(
+                          hintText: 'Search...',
+                          hintStyle: TextStyle(fontSize: 12, color: mutedText),
+                          isDense: true,
+                          contentPadding: EdgeInsets.zero,
+                          border: InputBorder.none,
+                        ),
+                        onSubmitted: (_) => _submitSearch(),
+                        onChanged: (val) {
+                          if (val.isEmpty) {
+                            widget.controller.clearSearch();
+                          }
+                        },
+                      ),
+                    ),
+                    Tooltip(
+                      message: 'Close search (Esc)',
+                      child: InkWell(
+                        key: const ValueKey('toolbar-search-close-btn'),
+                        borderRadius: BorderRadius.circular(999),
+                        onTap: _collapse,
+                        child: Padding(
+                          padding: const EdgeInsets.all(4),
+                          child: Icon(Icons.close, size: 14, color: mutedText),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 2),
+                    Tooltip(
+                      message: 'Find next (Enter)',
+                      child: Material(
+                        color: accent,
+                        shape: const CircleBorder(),
+                        child: InkWell(
+                          key: const ValueKey('toolbar-search-action-btn'),
+                          customBorder: const CircleBorder(),
+                          onTap: _submitSearch,
+                          child: SizedBox(
+                            width: 26,
+                            height: 26,
+                            child: Icon(
+                              Icons.search,
+                              size: 15,
+                              color: activeIconColor,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 2),
+                  ],
+                ),
+              )
+            : Tooltip(
+                message: 'Search in document (Ctrl+F)',
+                child: InkWell(
+                  key: const ValueKey('toolbar-search-toggle-btn'),
+                  customBorder: const CircleBorder(),
+                  onTap: _expand,
+                  child: Center(
+                    child: Icon(Icons.search, size: 16, color: mutedText),
+                  ),
+                ),
+              ),
+      ),
     );
   }
 }

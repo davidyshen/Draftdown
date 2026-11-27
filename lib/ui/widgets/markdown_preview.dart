@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:flutter_math_fork/flutter_math.dart';
 import 'package:markdown/markdown.dart' as md;
@@ -1265,6 +1266,7 @@ class MarkdownPreviewView extends StatefulWidget {
   final EditorController? controller;
   final bool? isFullView;
   final String? imageDirectory;
+  final ScrollController? scrollController;
 
   const MarkdownPreviewView({
     super.key,
@@ -1275,6 +1277,7 @@ class MarkdownPreviewView extends StatefulWidget {
     this.controller,
     this.isFullView,
     this.imageDirectory,
+    this.scrollController,
   });
 
   /// Base directory for resolving relative image paths
@@ -1364,6 +1367,114 @@ class _MarkdownPreviewViewState extends State<MarkdownPreviewView> {
   MarkdownStyleSheet? _cachedStyleSheet;
   Map<String, MarkdownElementBuilder>? _cachedBuilders;
   Widget Function(bool isChecked, int checkboxIndex)? _cachedCheckboxBuilder;
+
+  final GlobalKey _scrollViewKey = GlobalKey();
+  ScrollController? _fallbackScrollController;
+  List<md.Node>? _lastRenderedAstNodes;
+  double _lastDeskVerticalPadding = 16.0;
+  double _lastInnerVerticalPadding = 28.0;
+
+  ScrollController get _effectiveScrollController =>
+      widget.scrollController ??
+      widget.controller?.previewScrollController ??
+      (_fallbackScrollController ??= ScrollController());
+
+  @override
+  void initState() {
+    super.initState();
+    widget.controller?.registerPreviewScrollHandlers(
+      scrollToBlock: _scrollToBlock,
+      scrollToHeading: _scrollToHeading,
+    );
+  }
+
+  @override
+  void didUpdateWidget(covariant MarkdownPreviewView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller?.registerPreviewScrollHandlers();
+      widget.controller?.registerPreviewScrollHandlers(
+        scrollToBlock: _scrollToBlock,
+        scrollToHeading: _scrollToHeading,
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.controller?.registerPreviewScrollHandlers();
+    _fallbackScrollController?.dispose();
+    super.dispose();
+  }
+
+  RenderSliverMultiBoxAdaptor? _findSliverListRenderObject() {
+    final ctx = _scrollViewKey.currentContext;
+    if (ctx == null) return null;
+    RenderSliverMultiBoxAdaptor? result;
+    void visitor(Element element) {
+      if (result != null) return;
+      final ro = element.renderObject;
+      if (ro is RenderSliverMultiBoxAdaptor) {
+        result = ro;
+        return;
+      }
+      element.visitChildren(visitor);
+    }
+
+    ctx.visitChildElements(visitor);
+    return result;
+  }
+
+  void _scrollToBlock(int blockIndex, double fraction) {
+    final controller = _effectiveScrollController;
+    if (!controller.hasClients) return;
+    final position = controller.positions.last;
+    final sliverList = _findSliverListRenderObject();
+    if (sliverList == null) return;
+
+    RenderBox? targetChild = sliverList.firstChild;
+    RenderBox? lastChild;
+    while (targetChild != null) {
+      lastChild = targetChild;
+      final parentData =
+          targetChild.parentData as SliverMultiBoxAdaptorParentData;
+      final idx = parentData.index ?? 0;
+      if (idx >= blockIndex) {
+        final layoutOffset = parentData.layoutOffset ?? 0.0;
+        final childHeight = targetChild.hasSize ? targetChild.size.height : 0.0;
+        final topPadding = _lastDeskVerticalPadding + _lastInnerVerticalPadding;
+        final targetOffset =
+            topPadding + layoutOffset + (fraction * childHeight);
+        controller.jumpTo(targetOffset.clamp(0.0, position.maxScrollExtent));
+        return;
+      }
+      targetChild = sliverList.childAfter(targetChild);
+    }
+
+    if (lastChild != null) {
+      controller.jumpTo(position.maxScrollExtent);
+    }
+  }
+
+  void _scrollToHeading(int headingIndex) {
+    final nodes =
+        _lastRenderedAstNodes ??
+        MarkdownRenderService.parseAst(widget.markdown);
+    if (nodes.isEmpty) return;
+
+    const headingTags = {'h1', 'h2', 'h3', 'h4', 'h5', 'h6'};
+    int seenHeadings = 0;
+    for (int i = 0; i < nodes.length; i++) {
+      final node = nodes[i];
+      if (node is md.Element && headingTags.contains(node.tag)) {
+        if (seenHeadings == headingIndex) {
+          _scrollToBlock(i, 0.0);
+          return;
+        }
+        seenHeadings++;
+      }
+    }
+  }
 
   @override
   void reassemble() {
@@ -1838,6 +1949,9 @@ class _MarkdownPreviewViewState extends State<MarkdownPreviewView> {
     final astNodes = (controller?.previewMarkdown == effectiveMarkdown)
         ? controller?.astNodes
         : null;
+    _lastRenderedAstNodes = astNodes;
+    _lastDeskVerticalPadding = deskVerticalPadding;
+    _lastInnerVerticalPadding = innerVerticalPadding;
 
     return Container(
       color: canvasBg,
@@ -1856,6 +1970,9 @@ class _MarkdownPreviewViewState extends State<MarkdownPreviewView> {
 
           return SelectionArea(
             child: CustomScrollView(
+              key: _scrollViewKey,
+              controller: _effectiveScrollController,
+              scrollCacheExtent: const ScrollCacheExtent.pixels(1000000.0),
               slivers: [
                 SliverPadding(
                   padding: EdgeInsets.symmetric(
