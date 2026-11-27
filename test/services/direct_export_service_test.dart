@@ -82,12 +82,31 @@ void main() {
       );
 
       expect(html, contains('class="page-container with-line-numbers"'));
+      expect(html, contains('margin: 50.4pt 50.4pt 50.4pt 22.4pt;'));
       expect(html, contains('.line-number-label'));
       expect(html, contains('overflow: visible !important;'));
       expect(html, contains('.math-display'));
+      expect(html, contains('.math-inline'));
+      expect(html, contains('inlineEl.getClientRects()'));
+      expect(html, contains('table, img'));
       expect(html, contains('range.getClientRects()'));
       expect(html, contains("window.addEventListener('beforeprint'"));
       expect(html, contains("window.matchMedia('print')"));
+    });
+
+    test('keeps thin margin line numbers within printable page bounds on A4 and Letter', () {
+      for (final pageSize in ['a4', 'letter']) {
+        final html = service.generateHtmlDocument(
+          markdown: 'Line one.',
+          controller: controller,
+          pageSize: pageSize,
+          marginSize: 'thin',
+          showLineNumbers: true,
+        );
+
+        expect(html, contains('margin: 36pt 36pt 36pt 8pt;'));
+        expect(html, contains('padding-left: 28pt !important;'));
+      }
     });
   });
 }

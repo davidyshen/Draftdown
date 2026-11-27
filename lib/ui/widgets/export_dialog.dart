@@ -1437,14 +1437,6 @@ class _ExportDialogState extends State<ExportDialog> {
           : _previewRender.processedMarkdown;
       final showPreviewLineNumbers = isPdf && _previewShowLineNumbers;
       final showPreviewPageNumbers = isPdf && _previewShowPageNumbers;
-      final effectiveContentMargins = showPreviewLineNumbers
-          ? EdgeInsets.fromLTRB(
-              pageMargins.left + 26.0,
-              pageMargins.top,
-              pageMargins.right,
-              pageMargins.bottom,
-            )
-          : pageMargins;
       final previewLineStep = baseFont * bodyLineHeight;
       final sampleLineCount =
           ((pageHeight - pageMargins.vertical) / previewLineStep).floor().clamp(
@@ -1474,14 +1466,12 @@ class _ExportDialogState extends State<ExportDialog> {
                 child: Stack(
                   children: [
                     Padding(
-                      padding: effectiveContentMargins,
+                      padding: pageMargins,
                       child: ClipRect(
                         child: OverflowBox(
                           alignment: Alignment.topLeft,
-                          minWidth:
-                              pageWidth - effectiveContentMargins.horizontal,
-                          maxWidth:
-                              pageWidth - effectiveContentMargins.horizontal,
+                          minWidth: pageWidth - pageMargins.horizontal,
+                          maxWidth: pageWidth - pageMargins.horizontal,
                           minHeight: 0,
                           maxHeight: double.infinity,
                           child: Theme(
@@ -1547,7 +1537,10 @@ class _ExportDialogState extends State<ExportDialog> {
                     ),
                     if (showPreviewLineNumbers)
                       Positioned(
-                        left: pageMargins.left,
+                        left: (pageMargins.left - 24.0).clamp(
+                          2.0,
+                          double.infinity,
+                        ),
                         top: pageMargins.top,
                         bottom: pageMargins.bottom,
                         width: 20,

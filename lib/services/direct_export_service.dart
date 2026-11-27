@@ -105,8 +105,25 @@ class DirectExportService {
 
   String? _cachedBrowserExecutable;
 
-  /// Resolve page margin stylesheet definition based on selected margin mode
-  static String resolvePageMargin(String marginSize) {
+  /// Resolve page margin stylesheet definition based on selected margin mode.
+  /// When [reserveLineNumberGutter] is true, the left `@page` margin is reduced
+  /// by 28pt so the 28pt line-number gutter sits outside the text margin while
+  /// keeping the left and right text margins symmetrical.
+  static String resolvePageMargin(
+    String marginSize, {
+    bool reserveLineNumberGutter = false,
+  }) {
+    if (reserveLineNumberGutter) {
+      switch (marginSize.toLowerCase()) {
+        case 'thin':
+          return '36pt 36pt 36pt 8pt';
+        case 'thick':
+          return '72pt 90pt 72pt 62pt';
+        case 'medium':
+        default:
+          return '50.4pt 50.4pt 50.4pt 22.4pt';
+      }
+    }
     switch (marginSize.toLowerCase()) {
       case 'thin':
         // 50% thinner than medium (1in * 0.5 = 0.5in)
@@ -696,17 +713,23 @@ class DirectExportService {
     final effectivePageSize = pageSize.toLowerCase() == 'letter'
         ? 'letter'
         : 'A4';
-    final effectiveMargin = resolvePageMargin(marginSize);
+    final effectiveMargin = resolvePageMargin(
+      marginSize,
+      reserveLineNumberGutter: showLineNumbers,
+    );
     final effectiveScale = fontScale.clamp(0.5, 2.0);
     final effectiveFontSizePt = (8.8 * effectiveScale).toStringAsFixed(2);
     final effectiveLineHeight = resolveLineHeight(lineSpacing);
+    final footerPaddingLeft = showLineNumbers
+        ? '\n        padding-left: 28pt;'
+        : '';
     final pageFooterCss = showPageNumbers
         ? '''
       @bottom-center {
         content: "Page " counter(page) " of " counter(pages);
         font-family: var(--body-font);
         font-size: 8.5pt;
-        color: #64748b;
+        color: #64748b;$footerPaddingLeft
       }'''
         : '';
     final lineNumberCss = showLineNumbers
@@ -725,8 +748,6 @@ class DirectExportService {
     .page-container.with-line-numbers li,
     .page-container.with-line-numbers blockquote,
     .page-container.with-line-numbers pre,
-    .page-container.with-line-numbers td,
-    .page-container.with-line-numbers th,
     .page-container.with-line-numbers .math-display {
       position: relative;
     }
@@ -736,7 +757,7 @@ class DirectExportService {
     }
     .line-number-label {
       position: absolute;
-      width: 20pt;
+      width: 22pt;
       padding-right: 6pt;
       text-align: right;
       font-family: var(--code-font);
@@ -761,7 +782,7 @@ class DirectExportService {
         ? '''
   <script>
     (function () {
-      var blockSelector = 'h1, h2, h3, h4, h5, h6, p, li, blockquote, pre, td, th, .math-display';
+      var blockSelector = 'h1, h2, h3, h4, h5, h6, p, li, blockquote, pre, .math-display';
 
       function renderLineNumbers() {
         var container = document.querySelector('.page-container');
@@ -780,7 +801,7 @@ class DirectExportService {
             }
             var parent = node.parentElement;
             if (!parent) return NodeFilter.FILTER_REJECT;
-            if (parent.closest('.line-number-label, .katex-mathml, .math-display, script, style')) {
+            if (parent.closest('.line-number-label, .katex, .katex-mathml, .math-inline, .math-display, table, img, script, style')) {
               return NodeFilter.FILTER_REJECT;
             }
             return NodeFilter.FILTER_ACCEPT;
@@ -800,7 +821,26 @@ class DirectExportService {
             rawLines.push({
               top: rect.top,
               height: rect.height,
+              mid: rect.top + rect.height / 2,
               block: block
+            });
+          }
+        }
+
+        var inlineMaths = container.querySelectorAll('.math-inline');
+        for (var im = 0; im < inlineMaths.length; im++) {
+          var inlineEl = inlineMaths[im];
+          if (inlineEl.closest('table')) continue;
+          var inlineBlock = inlineEl.closest(blockSelector) || container;
+          var inlineRects = inlineEl.getClientRects();
+          for (var ir = 0; ir < inlineRects.length; ir++) {
+            var inlineRect = inlineRects[ir];
+            if (inlineRect.width <= 0 || inlineRect.height <= 0) continue;
+            rawLines.push({
+              top: inlineRect.top,
+              height: inlineRect.height,
+              mid: inlineRect.top + inlineRect.height / 2,
+              block: inlineBlock
             });
           }
         }
@@ -808,21 +848,25 @@ class DirectExportService {
         var displayMaths = container.querySelectorAll('.math-display');
         for (var m = 0; m < displayMaths.length; m++) {
           var mathEl = displayMaths[m];
+          if (mathEl.closest('table')) continue;
           var mathRect = mathEl.getBoundingClientRect();
           if (mathRect.width <= 0 || mathRect.height <= 0) continue;
           rawLines.push({
             top: mathRect.top,
             height: mathRect.height,
+            mid: mathRect.top + mathRect.height / 2,
             block: mathEl
           });
         }
 
-        rawLines.sort(function (a, b) { return a.top - b.top; });
+        rawLines.sort(function (a, b) { return a.mid - b.mid; });
 
         var lines = [];
         for (var j = 0; j < rawLines.length; j++) {
           var current = rawLines[j];
-          if (lines.length === 0 || Math.abs(current.top - lines[lines.length - 1].top) > 3) {
+          var prev = lines.length > 0 ? lines[lines.length - 1] : null;
+          var threshold = prev ? Math.max(6, Math.min(current.height, prev.height) * 0.5) : 0;
+          if (!prev || Math.abs(current.mid - prev.mid) > threshold) {
             lines.push(current);
           }
         }
@@ -927,15 +971,11 @@ $lineNumberCss
 
     h1 {
       font-size: 2.1em;
-      border-bottom: 1px solid #e2e8f0;
-      padding-bottom: 0.3em;
       margin-top: 0;
     }
 
     h2 {
       font-size: 1.55em;
-      border-bottom: 1px solid #f1f5f9;
-      padding-bottom: 0.25em;
     }
 
     h3 { font-size: 1.25em; }
