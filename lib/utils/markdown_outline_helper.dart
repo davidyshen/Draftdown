@@ -42,8 +42,14 @@ class MarkdownHeading {
           blockIndex == other.blockIndex;
 
   @override
-  int get hashCode =>
-      Object.hash(level, title, lineIndex, charOffset, headingIndex, blockIndex);
+  int get hashCode => Object.hash(
+    level,
+    title,
+    lineIndex,
+    charOffset,
+    headingIndex,
+    blockIndex,
+  );
 }
 
 /// Maps a top-level rendered Markdown block to its source line range.
@@ -64,10 +70,7 @@ class MarkdownOutline {
   final List<MarkdownHeading> headings;
   final List<MarkdownBlockRange> blockRanges;
 
-  const MarkdownOutline({
-    required this.headings,
-    required this.blockRanges,
-  });
+  const MarkdownOutline({required this.headings, required this.blockRanges});
 
   static const MarkdownOutline empty = MarkdownOutline(
     headings: <MarkdownHeading>[],
@@ -183,11 +186,7 @@ class MarkdownOutlineHelper {
           ),
         );
         blockRanges.add(
-          MarkdownBlockRange(
-            blockIndex: blockIdx,
-            startLine: i,
-            endLine: i,
-          ),
+          MarkdownBlockRange(blockIndex: blockIdx, startLine: i, endLine: i),
         );
         i++;
         continue;
@@ -235,7 +234,8 @@ class MarkdownOutlineHelper {
           if (next.trim().isEmpty) {
             // Loose list check: if next non-empty line is another list item or indented, continue
             int lookahead = i + 1;
-            while (lookahead < lines.length && lines[lookahead].trim().isEmpty) {
+            while (lookahead < lines.length &&
+                lines[lookahead].trim().isEmpty) {
               lookahead++;
             }
             if (lookahead < lines.length &&

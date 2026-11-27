@@ -1458,7 +1458,8 @@ class _MarkdownPreviewViewState extends State<MarkdownPreviewView> {
 
   void _scrollToHeading(int headingIndex) {
     final nodes =
-        _lastRenderedAstNodes ?? MarkdownRenderService.parseAst(widget.markdown);
+        _lastRenderedAstNodes ??
+        MarkdownRenderService.parseAst(widget.markdown);
     if (nodes.isEmpty) return;
 
     const headingTags = {'h1', 'h2', 'h3', 'h4', 'h5', 'h6'};

@@ -137,8 +137,10 @@ class _AppSidebarState extends State<AppSidebar> {
             builder: (context, constraints) {
               const handleHeight = 10.0;
               final availableHeight =
-                  (constraints.maxHeight - handleHeight - 74.0)
-                      .clamp(96.0, double.infinity);
+                  (constraints.maxHeight - handleHeight - 74.0).clamp(
+                    96.0,
+                    double.infinity,
+                  );
               final navCardHeight =
                   (availableHeight *
                           widget.controller.sidebarNavigationFraction)
@@ -164,8 +166,7 @@ class _AppSidebarState extends State<AppSidebar> {
                       behavior: HitTestBehavior.opaque,
                       onVerticalDragUpdate: (details) {
                         if (availableHeight <= 0) return;
-                        final newNavHeight =
-                            navCardHeight - details.delta.dy;
+                        final newNavHeight = navCardHeight - details.delta.dy;
                         widget.controller.setSidebarNavigationFraction(
                           newNavHeight / availableHeight,
                         );

@@ -100,9 +100,7 @@ class _EditorViewState extends State<EditorView> with WidgetsBindingObserver {
       oldWidget.controller.textController.removeListener(
         _handleTextChangedForHover,
       );
-      oldWidget.controller.scrollController.removeListener(
-        _handleEditorScroll,
-      );
+      oldWidget.controller.scrollController.removeListener(_handleEditorScroll);
       oldWidget.controller.registerEditorJumpToLine(null);
       _lastEditorFontFamily = widget.controller.editorFontFamily;
       _lastFrontmatter = widget.controller.frontmatter;
@@ -152,7 +150,9 @@ class _EditorViewState extends State<EditorView> with WidgetsBindingObserver {
     if (text.isEmpty) return 0;
     final lineStarts = _getLineStartOffsets(text);
     final renderEditable = _findRenderEditable();
-    if (renderEditable != null && renderEditable.hasSize && renderEditable.attached) {
+    if (renderEditable != null &&
+        renderEditable.hasSize &&
+        renderEditable.attached) {
       final topGlobal = renderEditable.localToGlobal(const Offset(4.0, 4.0));
       final charOffset = renderEditable.getPositionForPoint(topGlobal).offset;
       // Binary search lineStarts for charOffset
@@ -183,7 +183,9 @@ class _EditorViewState extends State<EditorView> with WidgetsBindingObserver {
     final clampedLine = lineIndex.clamp(0, lineStarts.length - 1);
     final renderEditable = _findRenderEditable();
     double targetOffset;
-    if (renderEditable != null && renderEditable.hasSize && renderEditable.attached) {
+    if (renderEditable != null &&
+        renderEditable.hasSize &&
+        renderEditable.attached) {
       final charOffset = lineStarts[clampedLine].clamp(0, text.length);
       final endpoints = renderEditable.getEndpointsForSelection(
         TextSelection.collapsed(offset: charOffset),
@@ -1062,11 +1064,11 @@ class _EditorViewState extends State<EditorView> with WidgetsBindingObserver {
                                           widget.controller.safeScrollOffset;
                                       final dynamicTopGap = hasFrontmatter
                                           ? (_frontmatterPillOffset -
-                                                  scrollOffset)
-                                              .clamp(
-                                                0.0,
-                                                _frontmatterPillOffset,
-                                              )
+                                                    scrollOffset)
+                                                .clamp(
+                                                  0.0,
+                                                  _frontmatterPillOffset,
+                                                )
                                           : 0.0;
                                       return Padding(
                                         padding: EdgeInsets.only(

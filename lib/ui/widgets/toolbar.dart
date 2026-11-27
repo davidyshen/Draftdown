@@ -495,9 +495,7 @@ class _ToolbarSearchPillState extends State<_ToolbarSearchPill> {
         : AppTheme.lightTextMuted;
 
     return CallbackShortcuts(
-      bindings: {
-        const SingleActivator(LogicalKeyboardKey.escape): _collapse,
-      },
+      bindings: {const SingleActivator(LogicalKeyboardKey.escape): _collapse},
       child: AnimatedContainer(
         key: const ValueKey('toolbar-search-pill'),
         duration: const Duration(milliseconds: 200),

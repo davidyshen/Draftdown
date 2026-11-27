@@ -335,7 +335,8 @@ class EditorController extends ChangeNotifier {
   }
 
   /// Current preview scroll offset, or `0.0` when no [ScrollPosition] is attached.
-  double get safePreviewScrollOffset => activePreviewScrollPosition?.pixels ?? 0.0;
+  double get safePreviewScrollOffset =>
+      activePreviewScrollPosition?.pixels ?? 0.0;
 
   EditorController({
     FileService? fileService,

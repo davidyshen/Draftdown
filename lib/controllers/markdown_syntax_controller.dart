@@ -1696,9 +1696,8 @@ class MarkdownSyntaxEditingController extends TextEditingController {
           ? const Color(0xFFFF5252)
           : const Color(0xFFDC2626),
       searchHighlightRange: _searchHighlightRange,
-      searchHighlightColor: Theme.of(
-        context,
-      ).colorScheme.primary.withValues(alpha: isDark ? 0.38 : 0.25),
+      searchHighlightColor: Theme.of(context).colorScheme.primary
+          .withValues(alpha: isDark ? 0.38 : 0.25),
     );
 
     if (composingRange == null && !isActivelyTyping) {
