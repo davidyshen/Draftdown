@@ -1537,7 +1537,10 @@ class _ExportDialogState extends State<ExportDialog> {
                     ),
                     if (showPreviewLineNumbers)
                       Positioned(
-                        left: (pageMargins.left - 24.0).clamp(2.0, double.infinity),
+                        left: (pageMargins.left - 24.0).clamp(
+                          2.0,
+                          double.infinity,
+                        ),
                         top: pageMargins.top,
                         bottom: pageMargins.bottom,
                         width: 20,

@@ -720,7 +720,9 @@ class DirectExportService {
     final effectiveScale = fontScale.clamp(0.5, 2.0);
     final effectiveFontSizePt = (8.8 * effectiveScale).toStringAsFixed(2);
     final effectiveLineHeight = resolveLineHeight(lineSpacing);
-    final footerPaddingLeft = showLineNumbers ? '\n        padding-left: 28pt;' : '';
+    final footerPaddingLeft = showLineNumbers
+        ? '\n        padding-left: 28pt;'
+        : '';
     final pageFooterCss = showPageNumbers
         ? '''
       @bottom-center {
