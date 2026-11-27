@@ -1898,6 +1898,30 @@ class EditorController extends ChangeNotifier {
     );
   }
 
+  static const String _exportPreferencesKey = 'draftdown_export_preferences';
+
+  /// Load previously saved export dialog options, if any.
+  Future<Map<String, dynamic>?> loadExportPreferences() async {
+    try {
+      final prefs = await _getPrefs();
+      final raw = prefs.getString(_exportPreferencesKey);
+      if (raw == null || raw.isEmpty) return null;
+      final decoded = jsonDecode(raw);
+      if (decoded is Map<String, dynamic>) {
+        return decoded;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  /// Persist the user's export dialog options for future sessions.
+  Future<void> saveExportPreferences(Map<String, dynamic> data) async {
+    try {
+      final prefs = await _getPrefs();
+      await prefs.setString(_exportPreferencesKey, jsonEncode(data));
+    } catch (_) {}
+  }
+
   /// Execute document export (direct high-fidelity export for HTML and PDF, Pandoc for other formats)
   Future<PandocResult> exportDocument(ExportOptions options) async {
     // 1. Direct preview-faithful HTML export
@@ -1924,6 +1948,9 @@ class EditorController extends ChangeNotifier {
         marginSize: options.marginSize,
         fontScale: options.fontScale,
         useHrAsPageBreak: options.useHrAsPageBreak,
+        showLineNumbers: options.showLineNumbers,
+        showPageNumbers: options.showPageNumbers,
+        lineSpacing: options.lineSpacing,
       );
     }
 

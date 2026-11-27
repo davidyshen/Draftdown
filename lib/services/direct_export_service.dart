@@ -9,6 +9,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../controllers/editor_controller.dart';
 import '../models/citation_item.dart';
+import '../models/export_format.dart';
 import '../utils/yaml_frontmatter_helper.dart';
 import 'markdown_render_service.dart';
 import 'pandoc_service.dart';
@@ -632,6 +633,18 @@ class DirectExportService {
     return masked;
   }
 
+  /// Resolve CSS line-height value for the selected line spacing option
+  static String resolveLineHeight(ExportLineSpacing lineSpacing) {
+    switch (lineSpacing) {
+      case ExportLineSpacing.onePointFive:
+        return '2.4';
+      case ExportLineSpacing.doubleSpacing:
+        return '3.2';
+      case ExportLineSpacing.single:
+        return '1.6';
+    }
+  }
+
   /// Generate a complete, standalone HTML document mimicking the preview styles
   String generateHtmlDocument({
     required String markdown,
@@ -641,6 +654,9 @@ class DirectExportService {
     String marginSize = 'medium',
     double fontScale = 1.0,
     bool useHrAsPageBreak = false,
+    bool showLineNumbers = false,
+    bool showPageNumbers = false,
+    ExportLineSpacing lineSpacing = ExportLineSpacing.single,
   }) {
     final docTitle = title ?? controller.currentFileName.replaceAll('.md', '');
     var processedMarkdown = _processMarkdownForExport(
@@ -683,6 +699,168 @@ class DirectExportService {
     final effectiveMargin = resolvePageMargin(marginSize);
     final effectiveScale = fontScale.clamp(0.5, 2.0);
     final effectiveFontSizePt = (8.8 * effectiveScale).toStringAsFixed(2);
+    final effectiveLineHeight = resolveLineHeight(lineSpacing);
+    final pageFooterCss = showPageNumbers
+        ? '''
+      @bottom-center {
+        content: "Page " counter(page) " of " counter(pages);
+        font-family: var(--body-font);
+        font-size: 8.5pt;
+        color: #64748b;
+      }'''
+        : '';
+    final lineNumberCss = showLineNumbers
+        ? '''
+    .page-container.with-line-numbers {
+      position: relative;
+      padding-left: calc(64px + 28pt);
+    }
+    .page-container.with-line-numbers h1,
+    .page-container.with-line-numbers h2,
+    .page-container.with-line-numbers h3,
+    .page-container.with-line-numbers h4,
+    .page-container.with-line-numbers h5,
+    .page-container.with-line-numbers h6,
+    .page-container.with-line-numbers p,
+    .page-container.with-line-numbers li,
+    .page-container.with-line-numbers blockquote,
+    .page-container.with-line-numbers pre,
+    .page-container.with-line-numbers td,
+    .page-container.with-line-numbers th,
+    .page-container.with-line-numbers .math-display {
+      position: relative;
+    }
+    .page-container.with-line-numbers pre,
+    .page-container.with-line-numbers .math-display {
+      overflow: visible !important;
+    }
+    .line-number-label {
+      position: absolute;
+      width: 20pt;
+      padding-right: 6pt;
+      text-align: right;
+      font-family: var(--code-font);
+      font-size: 7.5pt;
+      line-height: 1;
+      color: #94a3b8;
+      pointer-events: none;
+      user-select: none;
+    }'''
+        : '';
+    final lineNumberPrintCss = showLineNumbers
+        ? '''
+      .page-container.with-line-numbers {
+        padding-left: 28pt !important;
+      }'''
+        : '';
+    final containerClass = showLineNumbers
+        ? 'page-container with-line-numbers'
+        : 'page-container';
+    const lineNumberGutterHtml = '';
+    final lineNumberScript = showLineNumbers
+        ? '''
+  <script>
+    (function () {
+      var blockSelector = 'h1, h2, h3, h4, h5, h6, p, li, blockquote, pre, td, th, .math-display';
+
+      function renderLineNumbers() {
+        var container = document.querySelector('.page-container');
+        if (!container) return;
+
+        var existing = container.querySelectorAll('.line-number-label');
+        for (var e = 0; e < existing.length; e++) {
+          existing[e].remove();
+        }
+
+        var containerLeft = container.getBoundingClientRect().left;
+        var walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, {
+          acceptNode: function (node) {
+            if (!node.nodeValue || !node.nodeValue.trim()) {
+              return NodeFilter.FILTER_REJECT;
+            }
+            var parent = node.parentElement;
+            if (!parent) return NodeFilter.FILTER_REJECT;
+            if (parent.closest('.line-number-label, .katex-mathml, .math-display, script, style')) {
+              return NodeFilter.FILTER_REJECT;
+            }
+            return NodeFilter.FILTER_ACCEPT;
+          }
+        });
+
+        var rawLines = [];
+        var range = document.createRange();
+        var textNode;
+        while ((textNode = walker.nextNode())) {
+          var block = textNode.parentElement.closest(blockSelector) || container;
+          range.selectNodeContents(textNode);
+          var rects = range.getClientRects();
+          for (var i = 0; i < rects.length; i++) {
+            var rect = rects[i];
+            if (rect.width <= 0 || rect.height <= 0) continue;
+            rawLines.push({
+              top: rect.top,
+              height: rect.height,
+              block: block
+            });
+          }
+        }
+
+        var displayMaths = container.querySelectorAll('.math-display');
+        for (var m = 0; m < displayMaths.length; m++) {
+          var mathEl = displayMaths[m];
+          var mathRect = mathEl.getBoundingClientRect();
+          if (mathRect.width <= 0 || mathRect.height <= 0) continue;
+          rawLines.push({
+            top: mathRect.top,
+            height: mathRect.height,
+            block: mathEl
+          });
+        }
+
+        rawLines.sort(function (a, b) { return a.top - b.top; });
+
+        var lines = [];
+        for (var j = 0; j < rawLines.length; j++) {
+          var current = rawLines[j];
+          if (lines.length === 0 || Math.abs(current.top - lines[lines.length - 1].top) > 3) {
+            lines.push(current);
+          }
+        }
+
+        var blockRectCache = new Map();
+        for (var k = 0; k < lines.length; k++) {
+          var line = lines[k];
+          var blockRect = blockRectCache.get(line.block);
+          if (!blockRect) {
+            blockRect = line.block.getBoundingClientRect();
+            blockRectCache.set(line.block, blockRect);
+          }
+
+          var label = document.createElement('span');
+          label.className = 'line-number-label';
+          label.setAttribute('aria-hidden', 'true');
+          label.textContent = String(k + 1);
+          var offsetTop = (line.top - blockRect.top) + Math.max(0, (line.height - 10) / 2);
+          var offsetLeft = containerLeft - blockRect.left;
+          label.style.top = offsetTop.toFixed(1) + 'px';
+          label.style.left = offsetLeft.toFixed(1) + 'px';
+          line.block.appendChild(label);
+        }
+      }
+
+      window.addEventListener('load', renderLineNumbers);
+      window.addEventListener('beforeprint', renderLineNumbers);
+      if (window.matchMedia) {
+        var printMedia = window.matchMedia('print');
+        if (printMedia.addEventListener) {
+          printMedia.addEventListener('change', function (mql) {
+            if (mql.matches) renderLineNumbers();
+          });
+        }
+      }
+    })();
+  </script>'''
+        : '';
 
     return '''<!DOCTYPE html>
 <html lang="en-GB">
@@ -707,7 +885,7 @@ class DirectExportService {
 
     @page {
       size: $effectivePageSize portrait;
-      margin: $effectiveMargin;
+      margin: $effectiveMargin;$pageFooterCss
     }
 
     *, *::before, *::after {
@@ -717,7 +895,7 @@ class DirectExportService {
     body {
       font-family: var(--body-font);
       font-size: ${effectiveFontSizePt}pt;
-      line-height: 1.6;
+      line-height: $effectiveLineHeight;
       color: #0f172a;
       background: #f8fafc;
       margin: 0;
@@ -735,6 +913,7 @@ class DirectExportService {
       border-radius: 2px;
       box-shadow: 0 4px 16px rgba(15, 23, 42, 0.08), 0 1px 4px rgba(15, 23, 42, 0.04);
     }
+$lineNumberCss
 
     /* Headings */
     h1, h2, h3, h4, h5, h6 {
@@ -926,7 +1105,7 @@ class DirectExportService {
         padding: 0 !important;
         max-width: none !important;
         margin: 0 !important;
-      }
+      }$lineNumberPrintCss
       img {
         max-width: 100%;
         height: auto;
@@ -947,9 +1126,9 @@ class DirectExportService {
   </style>
 </head>
 <body>
-  <div class="page-container">
-    $htmlBody
-  </div>
+  <div class="$containerClass">
+    $lineNumberGutterHtml$htmlBody
+  </div>$lineNumberScript
 </body>
 </html>
 ''';
@@ -1017,6 +1196,9 @@ class DirectExportService {
     String marginSize = 'medium',
     double fontScale = 1.0,
     bool useHrAsPageBreak = false,
+    bool showLineNumbers = false,
+    bool showPageNumbers = false,
+    ExportLineSpacing lineSpacing = ExportLineSpacing.single,
   }) async {
     final stopwatch = Stopwatch()..start();
     final browserExe = await findBrowserExecutable();
@@ -1047,6 +1229,9 @@ class DirectExportService {
         marginSize: marginSize,
         fontScale: fontScale,
         useHrAsPageBreak: useHrAsPageBreak,
+        showLineNumbers: showLineNumbers,
+        showPageNumbers: showPageNumbers,
+        lineSpacing: lineSpacing,
       );
 
       final tempDir = await getTemporaryDirectory();

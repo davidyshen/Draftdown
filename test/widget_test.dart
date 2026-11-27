@@ -513,8 +513,8 @@ void main() {
         findsNothing,
       );
       expect(find.text('Include Citations & References'), findsOneWidget);
-      expect(find.text('Standalone Document'), findsOneWidget);
-      expect(find.text('Table of Contents'), findsOneWidget);
+      expect(find.text('Standalone Document'), findsNothing);
+      expect(find.text('Table of Contents'), findsNothing);
       expect(find.text('Advanced Options'), findsOneWidget);
 
       // Verify PDF is selected by default and Page Size dropdown is visible with A4
