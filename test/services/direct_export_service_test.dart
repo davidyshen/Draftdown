@@ -21,18 +21,21 @@ void main() {
   });
 
   group('DirectExportService PDF layout options', () {
-    test('defaults to single line spacing (1.6) without line or page numbers', () {
-      final html = service.generateHtmlDocument(
-        markdown: '# Heading\n\nParagraph text.\n\n```\ncode\n```',
-        controller: controller,
-      );
+    test(
+      'defaults to single line spacing (1.6) without line or page numbers',
+      () {
+        final html = service.generateHtmlDocument(
+          markdown: '# Heading\n\nParagraph text.\n\n```\ncode\n```',
+          controller: controller,
+        );
 
-      expect(html, contains('line-height: 1.6;'));
-      expect(html, contains('line-height: 1.35;'));
-      expect(html, contains('line-height: 1.5;'));
-      expect(html, isNot(contains('@bottom-center')));
-      expect(html, isNot(contains('with-line-numbers')));
-    });
+        expect(html, contains('line-height: 1.6;'));
+        expect(html, contains('line-height: 1.35;'));
+        expect(html, contains('line-height: 1.5;'));
+        expect(html, isNot(contains('@bottom-center')));
+        expect(html, isNot(contains('with-line-numbers')));
+      },
+    );
 
     test('applies 1.5 and double line spacing proportionally', () {
       final html15 = service.generateHtmlDocument(
@@ -54,19 +57,22 @@ void main() {
       expect(htmlDouble, contains('line-height: 1.5;'));
     });
 
-    test('emits centred Page 1 of N footer CSS when showPageNumbers is true', () {
-      final html = service.generateHtmlDocument(
-        markdown: 'Body text.',
-        controller: controller,
-        showPageNumbers: true,
-      );
+    test(
+      'emits centred Page 1 of N footer CSS when showPageNumbers is true',
+      () {
+        final html = service.generateHtmlDocument(
+          markdown: 'Body text.',
+          controller: controller,
+          showPageNumbers: true,
+        );
 
-      expect(html, contains('@bottom-center'));
-      expect(
-        html,
-        contains('content: "Page " counter(page) " of " counter(pages);'),
-      );
-    });
+        expect(html, contains('@bottom-center'));
+        expect(
+          html,
+          contains('content: "Page " counter(page) " of " counter(pages);'),
+        );
+      },
+    );
 
     test('emits margin line number styles and beforeprint script when showLineNumbers is true', () {
       final html = service.generateHtmlDocument(

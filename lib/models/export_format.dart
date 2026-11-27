@@ -101,11 +101,7 @@ class ExportFormat {
 }
 
 /// Line spacing options for PDF export
-enum ExportLineSpacing {
-  single,
-  onePointFive,
-  doubleSpacing,
-}
+enum ExportLineSpacing { single, onePointFive, doubleSpacing }
 
 /// Options configured when running a Pandoc export
 class ExportOptions {
