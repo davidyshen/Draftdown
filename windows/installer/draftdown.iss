@@ -2,7 +2,7 @@
 ; Compile with: iscc windows\installer\draftdown.iss
 
 #ifndef MyAppVersion
-  #define MyAppVersion "1.4.0"
+  #error "MyAppVersion must be defined (run windows\installer\build_installer.ps1 or pass /DMyAppVersion=x.y.z)"
 #endif
 
 #ifndef MyAppArch
