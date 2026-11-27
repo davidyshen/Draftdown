@@ -22,6 +22,7 @@ import '../services/pandoc_service.dart';
 import '../services/spell_check_service.dart';
 import '../services/zotero_service.dart';
 import '../ui/theme/app_theme.dart';
+import '../utils/markdown_outline_helper.dart';
 import '../utils/yaml_frontmatter_helper.dart';
 import 'markdown_syntax_controller.dart';
 
@@ -48,6 +49,7 @@ class OpenDocument {
   String content;
   TextSelection selection;
   double scrollOffset;
+  double previewScrollOffset;
   bool isModified;
   bool hasConflict;
   bool hasPromptedConflict;
@@ -71,6 +73,7 @@ class OpenDocument {
     this.content = '',
     this.selection = const TextSelection.collapsed(offset: 0),
     this.scrollOffset = 0.0,
+    this.previewScrollOffset = 0.0,
     this.isModified = false,
     this.hasConflict = false,
     this.hasPromptedConflict = false,
@@ -127,6 +130,7 @@ class EditorController extends ChangeNotifier {
       MarkdownSyntaxEditingController();
   final FocusNode focusNode = FocusNode();
   final ScrollController scrollController = ScrollController();
+  final ScrollController previewScrollController = ScrollController();
 
   // Metrics
   int _wordCount = 0;
@@ -137,6 +141,26 @@ class EditorController extends ChangeNotifier {
   // View state
   EditorViewMode _viewMode = EditorViewMode.split;
   bool _isSidebarOpen = false;
+  bool _isLinkedScrolling = true;
+  int _currentTopVisibleLine = 0;
+  double _sidebarNavigationFraction = 0.45;
+
+  // Outline & Scroll Sync state
+  String? _outlineSourceText;
+  MarkdownOutline _cachedOutline = MarkdownOutline.empty;
+  void Function(int lineIndex)? _editorJumpToLineHandler;
+  void Function(int blockIndex, double fraction)? _previewScrollToBlockHandler;
+  void Function(int headingIndex)? _previewScrollToHeadingHandler;
+
+  // Search state
+  String? _lastSearchQuery;
+  TextRange? _activeSearchMatch;
+  final ValueNotifier<int> searchFocusRequests = ValueNotifier<int>(0);
+
+  /// Requests the toolbar search pill to expand and focus its input.
+  void requestSearchFocus() {
+    searchFocusRequests.value++;
+  }
 
   // Bibliography & Zotero state
   String? _bibliographyPath;
@@ -225,6 +249,28 @@ class EditorController extends ChangeNotifier {
   List<md.Node>? get astNodes => _astNodes;
   EditorViewMode get viewMode => _viewMode;
   bool get isSidebarOpen => _isSidebarOpen;
+  bool get isLinkedScrolling => _isLinkedScrolling;
+  int get currentTopVisibleLine => _currentTopVisibleLine;
+  double get sidebarNavigationFraction => _sidebarNavigationFraction;
+
+  void setSidebarNavigationFraction(double fraction) {
+    final clamped = fraction.clamp(0.15, 0.78);
+    if ((_sidebarNavigationFraction - clamped).abs() < 0.001) return;
+    _sidebarNavigationFraction = clamped;
+    notifyListeners();
+  }
+
+  MarkdownOutline get outline {
+    final text = textController.text;
+    if (_outlineSourceText != text) {
+      _outlineSourceText = text;
+      _cachedOutline = MarkdownOutlineHelper.parse(text);
+    }
+    return _cachedOutline;
+  }
+
+  List<MarkdownHeading> get headings => outline.headings;
+  List<MarkdownBlockRange> get blockRanges => outline.blockRanges;
   int get wordCount => _wordCount;
   int get charCount => _charCount;
   int get lineCount => _lineCount;
@@ -280,6 +326,16 @@ class EditorController extends ChangeNotifier {
 
   /// Current editor scroll offset, or `0.0` when no [ScrollPosition] is attached.
   double get safeScrollOffset => activeScrollPosition?.pixels ?? 0.0;
+
+  /// Returns the currently active preview [ScrollPosition] safely.
+  ScrollPosition? get activePreviewScrollPosition {
+    final positions = previewScrollController.positions;
+    if (positions.isEmpty) return null;
+    return positions.length == 1 ? positions.first : positions.last;
+  }
+
+  /// Current preview scroll offset, or `0.0` when no [ScrollPosition] is attached.
+  double get safePreviewScrollOffset => activePreviewScrollPosition?.pixels ?? 0.0;
 
   EditorController({
     FileService? fileService,
@@ -385,6 +441,10 @@ class EditorController extends ChangeNotifier {
       );
       if (customWords != null) {
         spellCheckService.loadCustomWords(customWords);
+      }
+      final linkedScroll = prefs.getBool('draftdown_linked_scrolling');
+      if (linkedScroll != null) {
+        _isLinkedScrolling = linkedScroll;
       }
       textController.invalidateSpellCheck();
     } catch (_) {}
@@ -902,7 +962,9 @@ class EditorController extends ChangeNotifier {
     doc.fileName = _currentFileName;
     doc.content = textController.text;
     doc.selection = textController.selection;
-    doc.scrollOffset = safeScrollOffset;
+    doc.scrollOffset = activeScrollPosition?.pixels ?? doc.scrollOffset;
+    doc.previewScrollOffset =
+        activePreviewScrollPosition?.pixels ?? doc.previewScrollOffset;
     doc.isModified = _isModified;
     doc.hasConflict = _hasConflict;
     doc.hasPromptedConflict = _hasPromptedConflict;
@@ -956,6 +1018,13 @@ class EditorController extends ChangeNotifier {
     if (position != null) {
       final maxExtent = position.maxScrollExtent;
       scrollController.jumpTo(doc.scrollOffset.clamp(0.0, maxExtent));
+    }
+    final previewPos = activePreviewScrollPosition;
+    if (previewPos != null) {
+      final maxExtent = previewPos.maxScrollExtent;
+      previewScrollController.jumpTo(
+        doc.previewScrollOffset.clamp(0.0, maxExtent),
+      );
     }
   }
 
@@ -1345,8 +1414,166 @@ class EditorController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Switch editor view mode (edit, split, preview)
+  /// Toggles or sets editor-driven linked scrolling and persists the preference.
+  Future<void> setLinkedScrolling(bool enabled) async {
+    if (_isLinkedScrolling == enabled) return;
+    _isLinkedScrolling = enabled;
+    if (enabled && _viewMode != EditorViewMode.edit) {
+      syncPreviewToEditorLine(_currentTopVisibleLine);
+    }
+    notifyListeners();
+    try {
+      final prefs = await _getPrefs();
+      await prefs.setBool('draftdown_linked_scrolling', enabled);
+    } catch (_) {}
+  }
+
+  /// Registers the active editor's line-jump callback.
+  void registerEditorJumpToLine(void Function(int lineIndex)? handler) {
+    _editorJumpToLineHandler = handler;
+  }
+
+  /// Registers the active preview's block/heading scroll callbacks.
+  void registerPreviewScrollHandlers({
+    void Function(int blockIndex, double fraction)? scrollToBlock,
+    void Function(int headingIndex)? scrollToHeading,
+  }) {
+    _previewScrollToBlockHandler = scrollToBlock;
+    _previewScrollToHeadingHandler = scrollToHeading;
+  }
+
+  /// Updates the top-most visible logical line in the editor and, when linked
+  /// scrolling is enabled, scrolls the preview to match.
+  void updateTopVisibleEditorLine(int lineIndex, {bool syncPreview = true}) {
+    if (_currentTopVisibleLine == lineIndex && !syncPreview) return;
+    _currentTopVisibleLine = lineIndex;
+    if (syncPreview && _isLinkedScrolling && _viewMode != EditorViewMode.edit) {
+      syncPreviewToEditorLine(lineIndex);
+    }
+  }
+
+  /// Scrolls the preview pane to match [lineIndex] (or the current top line).
+  void syncPreviewToEditorLine([int? lineIndex]) {
+    final targetLine = lineIndex ?? _currentTopVisibleLine;
+    final pos = MarkdownOutlineHelper.blockPositionForLine(
+      blockRanges,
+      targetLine,
+    );
+    _previewScrollToBlockHandler?.call(pos.blockIndex, pos.fraction);
+  }
+
+  /// Jumps the editor and/or preview to the given [heading].
+  void jumpToHeading(MarkdownHeading heading) {
+    final textLen = textController.text.length;
+    final safeOffset = heading.charOffset.clamp(0, textLen);
+    textController.selection = TextSelection.collapsed(offset: safeOffset);
+    _currentTopVisibleLine = heading.lineIndex;
+
+    if (_editorJumpToLineHandler != null) {
+      _editorJumpToLineHandler!(heading.lineIndex);
+    } else if (activeDocument != null) {
+      activeDocument!.scrollOffset = heading.lineIndex * 20.0;
+    }
+
+    _previewScrollToHeadingHandler?.call(heading.headingIndex);
+  }
+
+  /// Searches case-insensitively for [query], starting from the currently
+  /// visible line on a new query or advancing to the next match on repeat calls,
+  /// wrapping back to the top when reaching the end of the document.
+  bool searchNext(String query) {
+    if (query.isEmpty) {
+      clearSearch();
+      return false;
+    }
+
+    final text = textController.text;
+    if (text.isEmpty) {
+      clearSearch();
+      return false;
+    }
+
+    final lowerText = text.toLowerCase();
+    final lowerQuery = query.toLowerCase();
+
+    int startOffset;
+    if (_lastSearchQuery == lowerQuery && _activeSearchMatch != null) {
+      startOffset = (_activeSearchMatch!.start + 1).clamp(0, text.length);
+    } else {
+      startOffset = _charOffsetForLine(_currentTopVisibleLine, text);
+    }
+
+    int idx = lowerText.indexOf(lowerQuery, startOffset);
+    if (idx == -1 && startOffset > 0) {
+      idx = lowerText.indexOf(lowerQuery, 0);
+    }
+
+    if (idx == -1) {
+      _lastSearchQuery = lowerQuery;
+      _activeSearchMatch = null;
+      textController.setSearchHighlight(null);
+      return false;
+    }
+
+    final match = TextRange(start: idx, end: idx + query.length);
+    _lastSearchQuery = lowerQuery;
+    _activeSearchMatch = match;
+    textController.setSearchHighlight(match);
+
+    int matchLine = 0;
+    for (int i = 0; i < idx; i++) {
+      if (text.codeUnitAt(i) == 10) matchLine++;
+    }
+
+    updateTopVisibleEditorLine(matchLine);
+    if (_editorJumpToLineHandler != null) {
+      _editorJumpToLineHandler!(matchLine);
+    } else if (activeDocument != null) {
+      activeDocument!.scrollOffset = matchLine * 20.0;
+    }
+    return true;
+  }
+
+  /// Clears the active search highlight and match state.
+  void clearSearch() {
+    _lastSearchQuery = null;
+    _activeSearchMatch = null;
+    textController.setSearchHighlight(null);
+  }
+
+  int _charOffsetForLine(int lineIndex, String text) {
+    if (lineIndex <= 0 || text.isEmpty) return 0;
+    int currentLine = 0;
+    for (int i = 0; i < text.length; i++) {
+      if (text.codeUnitAt(i) == 10) {
+        currentLine++;
+        if (currentLine >= lineIndex) {
+          return (i + 1).clamp(0, text.length);
+        }
+      }
+    }
+    return 0;
+  }
+
+  /// Switch editor view mode (edit, split, preview), preserving scroll positions.
   void setViewMode(EditorViewMode mode) {
+    if (_viewMode == mode) return;
+    final previousMode = _viewMode;
+
+    // Persist current scroll positions and top visible line before widgets
+    // are unmounted or reparented.
+    final savedTopLine = _currentTopVisibleLine;
+    final savedEditorOffset =
+        activeScrollPosition?.pixels ?? activeDocument?.scrollOffset ?? 0.0;
+    final savedPreviewOffset =
+        activePreviewScrollPosition?.pixels ??
+        activeDocument?.previewScrollOffset ??
+        0.0;
+    if (activeDocument != null) {
+      activeDocument!.scrollOffset = savedEditorOffset;
+      activeDocument!.previewScrollOffset = savedPreviewOffset;
+    }
+
     _viewMode = mode;
     if (mode != EditorViewMode.edit) {
       textController.reconcileFullHighlight();
@@ -1354,6 +1581,36 @@ class EditorController extends ChangeNotifier {
       flushPendingRenderUpdate();
     }
     notifyListeners();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_isDisposed) return;
+
+      if (mode != EditorViewMode.preview) {
+        if (_editorJumpToLineHandler != null && savedTopLine > 0) {
+          _editorJumpToLineHandler!(savedTopLine);
+        } else {
+          final editorPos = activeScrollPosition;
+          if (editorPos != null) {
+            scrollController.jumpTo(
+              savedEditorOffset.clamp(0.0, editorPos.maxScrollExtent),
+            );
+          }
+        }
+      }
+
+      if (mode != EditorViewMode.edit) {
+        if (_isLinkedScrolling && previousMode == EditorViewMode.edit) {
+          syncPreviewToEditorLine(savedTopLine);
+        } else {
+          final previewPos = activePreviewScrollPosition;
+          if (previewPos != null) {
+            previewScrollController.jumpTo(
+              savedPreviewOffset.clamp(0.0, previewPos.maxScrollExtent),
+            );
+          }
+        }
+      }
+    });
   }
 
   /// Insert text at current cursor position
@@ -2370,10 +2627,12 @@ Try writing your thoughts, inserting literature references, and exporting to Wor
     stopFileWatching();
     _debounceTimer?.cancel();
     previewNotifier.dispose();
+    searchFocusRequests.dispose();
     textController.removeListener(_onTextChanged);
     textController.dispose();
     focusNode.dispose();
     scrollController.dispose();
+    previewScrollController.dispose();
     zoteroService.dispose();
     spellCheckService.dispose();
     super.dispose();

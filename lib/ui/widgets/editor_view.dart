@@ -39,9 +39,9 @@ class _EditorViewState extends State<EditorView> with WidgetsBindingObserver {
   static const double _lineHeightMultiplier = 1.5;
   static const double _lineBoxHeight =
       20.0; // Exact strut-rounded line height in SkParagraph
-  static const double _contentPaddingTop = 16.0;
+  static const double _contentPaddingTop = 2.0;
   static const double _frontmatterPillOffset = 30.0;
-  static const double _contentPaddingBottom = 40.0;
+  static const double _contentPaddingBottom = 0.0;
   static const double _contentPaddingHorizontal = 16.0;
   static const double _gutterWidth = 52.0;
 
@@ -88,7 +88,8 @@ class _EditorViewState extends State<EditorView> with WidgetsBindingObserver {
     _lastHoverTextSnapshot = widget.controller.textController.text;
     widget.controller.addListener(_handleControllerChanged);
     widget.controller.textController.addListener(_handleTextChangedForHover);
-    widget.controller.scrollController.addListener(_dismissSpellHoverMenu);
+    widget.controller.scrollController.addListener(_handleEditorScroll);
+    widget.controller.registerEditorJumpToLine(_jumpToLine);
   }
 
   @override
@@ -100,14 +101,16 @@ class _EditorViewState extends State<EditorView> with WidgetsBindingObserver {
         _handleTextChangedForHover,
       );
       oldWidget.controller.scrollController.removeListener(
-        _dismissSpellHoverMenu,
+        _handleEditorScroll,
       );
+      oldWidget.controller.registerEditorJumpToLine(null);
       _lastEditorFontFamily = widget.controller.editorFontFamily;
       _lastFrontmatter = widget.controller.frontmatter;
       _lastHoverTextSnapshot = widget.controller.textController.text;
       widget.controller.addListener(_handleControllerChanged);
       widget.controller.textController.addListener(_handleTextChangedForHover);
-      widget.controller.scrollController.addListener(_dismissSpellHoverMenu);
+      widget.controller.scrollController.addListener(_handleEditorScroll);
+      widget.controller.registerEditorJumpToLine(_jumpToLine);
       _dismissSpellHoverMenu();
     }
   }
@@ -118,7 +121,8 @@ class _EditorViewState extends State<EditorView> with WidgetsBindingObserver {
     _dismissSpellHoverMenu();
     widget.controller.removeListener(_handleControllerChanged);
     widget.controller.textController.removeListener(_handleTextChangedForHover);
-    widget.controller.scrollController.removeListener(_dismissSpellHoverMenu);
+    widget.controller.scrollController.removeListener(_handleEditorScroll);
+    widget.controller.registerEditorJumpToLine(null);
     super.dispose();
   }
 
@@ -135,6 +139,68 @@ class _EditorViewState extends State<EditorView> with WidgetsBindingObserver {
       _lastHoverTextSnapshot = current;
       _dismissSpellHoverMenu();
     }
+  }
+
+  void _handleEditorScroll() {
+    _dismissSpellHoverMenu();
+    final topLine = _computeTopVisibleLine();
+    widget.controller.updateTopVisibleEditorLine(topLine);
+  }
+
+  int _computeTopVisibleLine() {
+    final text = widget.controller.textController.text;
+    if (text.isEmpty) return 0;
+    final lineStarts = _getLineStartOffsets(text);
+    final renderEditable = _findRenderEditable();
+    if (renderEditable != null && renderEditable.hasSize && renderEditable.attached) {
+      final topGlobal = renderEditable.localToGlobal(const Offset(4.0, 4.0));
+      final charOffset = renderEditable.getPositionForPoint(topGlobal).offset;
+      // Binary search lineStarts for charOffset
+      int low = 0;
+      int high = lineStarts.length - 1;
+      int result = 0;
+      while (low <= high) {
+        final mid = (low + high) >> 1;
+        if (lineStarts[mid] <= charOffset) {
+          result = mid;
+          low = mid + 1;
+        } else {
+          high = mid - 1;
+        }
+      }
+      return result;
+    }
+    final offset = widget.controller.safeScrollOffset;
+    return (offset / _lineBoxHeight).floor().clamp(0, lineStarts.length - 1);
+  }
+
+  void _jumpToLine(int lineIndex) {
+    final position = widget.controller.activeScrollPosition;
+    if (position == null) return;
+    final text = widget.controller.textController.text;
+    final lineStarts = _getLineStartOffsets(text);
+    if (lineStarts.isEmpty) return;
+    final clampedLine = lineIndex.clamp(0, lineStarts.length - 1);
+    final renderEditable = _findRenderEditable();
+    double targetOffset;
+    if (renderEditable != null && renderEditable.hasSize && renderEditable.attached) {
+      final charOffset = lineStarts[clampedLine].clamp(0, text.length);
+      final endpoints = renderEditable.getEndpointsForSelection(
+        TextSelection.collapsed(offset: charOffset),
+      );
+      if (endpoints.isNotEmpty) {
+        final singleLineHeight = renderEditable.preferredLineHeight;
+        final lineTopInViewport = endpoints.first.point.dy - singleLineHeight;
+        targetOffset = position.pixels + lineTopInViewport;
+      } else {
+        targetOffset = clampedLine * _lineBoxHeight;
+      }
+    } else {
+      targetOffset = clampedLine * _lineBoxHeight;
+    }
+    widget.controller.scrollController.jumpTo(
+      targetOffset.clamp(0.0, position.maxScrollExtent),
+    );
   }
 
   Future<void> _showFrontmatterDialog() async {
@@ -838,9 +904,7 @@ class _EditorViewState extends State<EditorView> with WidgetsBindingObserver {
               final frontmatterLineCount = hasFrontmatter
                   ? '\n'.allMatches(widget.controller.frontmatter).length
                   : 0;
-              final effectiveTopPadding = hasFrontmatter
-                  ? _contentPaddingTop + _frontmatterPillOffset
-                  : _contentPaddingTop;
+              const effectiveTopPadding = _contentPaddingTop;
               final editorWidth =
                   (constraints.maxWidth -
                           _gutterWidth -
@@ -882,6 +946,14 @@ class _EditorViewState extends State<EditorView> with WidgetsBindingObserver {
                           final currentText =
                               widget.controller.textController.text;
                           final fontFamily = widget.controller.editorFontFamily;
+                          final dynamicTopGap = hasFrontmatter
+                              ? (_frontmatterPillOffset - scrollOffset).clamp(
+                                  0.0,
+                                  _frontmatterPillOffset,
+                                )
+                              : 0.0;
+                          final gutterTopPadding =
+                              _contentPaddingTop + dynamicTopGap;
 
                           if (_cachedGutterSubtree != null &&
                               _lastGutterText == currentText &&
@@ -911,7 +983,7 @@ class _EditorViewState extends State<EditorView> with WidgetsBindingObserver {
                                   scrollOffset: scrollOffset,
                                   viewportHeight: viewportHeight,
                                   lineBoxHeight: _lineBoxHeight,
-                                  contentPaddingTop: effectiveTopPadding,
+                                  contentPaddingTop: gutterTopPadding,
                                   lineNumberOffset: frontmatterLineCount,
                                   gutterTextColor: gutterTextColor,
                                   fontFamily: fontFamily,
@@ -982,28 +1054,50 @@ class _EditorViewState extends State<EditorView> with WidgetsBindingObserver {
                               child: Stack(
                                 clipBehavior: Clip.hardEdge,
                                 children: [
-                                  TextField(
-                                    key: _textFieldKey,
-                                    controller:
-                                        widget.controller.textController,
-                                    focusNode: widget.controller.focusNode,
-                                    scrollController:
+                                  AnimatedBuilder(
+                                    animation:
                                         widget.controller.scrollController,
-                                    maxLines: null,
-                                    expands: true,
-                                    keyboardType: TextInputType.multiline,
-                                    style: editorTextStyle,
-                                    strutStyle: editorStrutStyle,
-                                    contextMenuBuilder: _buildContextMenu,
-                                    decoration: InputDecoration(
-                                      border: InputBorder.none,
-                                      contentPadding: EdgeInsets.fromLTRB(
-                                        _contentPaddingHorizontal,
-                                        effectiveTopPadding,
-                                        _contentPaddingHorizontal,
-                                        _contentPaddingBottom,
+                                    builder: (context, child) {
+                                      final scrollOffset =
+                                          widget.controller.safeScrollOffset;
+                                      final dynamicTopGap = hasFrontmatter
+                                          ? (_frontmatterPillOffset -
+                                                  scrollOffset)
+                                              .clamp(
+                                                0.0,
+                                                _frontmatterPillOffset,
+                                              )
+                                          : 0.0;
+                                      return Padding(
+                                        padding: EdgeInsets.only(
+                                          top: dynamicTopGap,
+                                        ),
+                                        child: child,
+                                      );
+                                    },
+                                    child: TextField(
+                                      key: _textFieldKey,
+                                      controller:
+                                          widget.controller.textController,
+                                      focusNode: widget.controller.focusNode,
+                                      scrollController:
+                                          widget.controller.scrollController,
+                                      maxLines: null,
+                                      expands: true,
+                                      keyboardType: TextInputType.multiline,
+                                      style: editorTextStyle,
+                                      strutStyle: editorStrutStyle,
+                                      contextMenuBuilder: _buildContextMenu,
+                                      decoration: InputDecoration(
+                                        border: InputBorder.none,
+                                        contentPadding: EdgeInsets.fromLTRB(
+                                          _contentPaddingHorizontal,
+                                          effectiveTopPadding,
+                                          _contentPaddingHorizontal,
+                                          _contentPaddingBottom,
+                                        ),
+                                        isDense: true,
                                       ),
-                                      isDense: true,
                                     ),
                                   ),
                                   if (hasFrontmatter)
@@ -1013,6 +1107,10 @@ class _EditorViewState extends State<EditorView> with WidgetsBindingObserver {
                                       builder: (context, child) {
                                         final scrollOffset =
                                             widget.controller.safeScrollOffset;
+                                        if (scrollOffset >
+                                            _frontmatterPillOffset) {
+                                          return const SizedBox.shrink();
+                                        }
                                         return Positioned(
                                           top:
                                               _contentPaddingTop - scrollOffset,
@@ -1255,10 +1353,9 @@ class _LineNumberPainter extends CustomPainter {
 
     // When YAML frontmatter is hidden, paint line number 1 aligned with the
     // Frontmatter pill above the Markdown body.
-    if (lineNumberOffset > 0) {
-      final pillY =
-          (contentPaddingTop - _EditorViewState._frontmatterPillOffset) -
-          scrollOffset;
+    if (lineNumberOffset > 0 &&
+        scrollOffset <= _EditorViewState._frontmatterPillOffset) {
+      final pillY = _EditorViewState._contentPaddingTop - scrollOffset;
       if (pillY + singleLineHeight >= 0 && pillY <= viewportHeight) {
         final pillPainter = _getOrLayoutPainter(1, maxLabelWidth);
         final double pillX = size.width - pillPainter.width - 12.0;

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 
 import '../../controllers/editor_controller.dart';
@@ -237,8 +238,14 @@ class _MainScreenState extends State<MainScreen> {
         final isSidebarOpen = widget.controller.isSidebarOpen;
         final showFloating = !isSidebarOpen && _showFloatingSidebar;
 
-        return Scaffold(
-          body: Column(
+        return CallbackShortcuts(
+          bindings: <ShortcutActivator, VoidCallback>{
+            const SingleActivator(LogicalKeyboardKey.keyF, control: true): () {
+              widget.controller.requestSearchFocus();
+            },
+          },
+          child: Scaffold(
+            body: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               CustomTitleBar(
@@ -338,6 +345,7 @@ class _MainScreenState extends State<MainScreen> {
               ),
             ],
           ),
+        ),
         );
       },
     );
@@ -374,6 +382,7 @@ class _MainScreenState extends State<MainScreen> {
             headerFont: widget.controller.effectiveRenderHeaderFont,
             codeFont: widget.controller.editorFontFamily,
             controller: widget.controller,
+            scrollController: widget.controller.previewScrollController,
             isFullView: true,
           );
         },
@@ -395,6 +404,7 @@ class _MainScreenState extends State<MainScreen> {
           headerFont: widget.controller.effectiveRenderHeaderFont,
           codeFont: widget.controller.editorFontFamily,
           controller: widget.controller,
+          scrollController: widget.controller.previewScrollController,
           isFullView: false,
         );
       },

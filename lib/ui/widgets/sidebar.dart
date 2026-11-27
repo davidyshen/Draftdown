@@ -131,13 +131,82 @@ class _AppSidebarState extends State<AppSidebar> {
         // History header with clear action
         _buildHistorySectionHeader(theme, lightTextColor),
 
-        // History list
+        // History + Resizable Navigation split area
         Expanded(
-          child: _buildHistoryList(theme, isDark, lightTextColor, borderColor),
-        ),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              const handleHeight = 10.0;
+              final availableHeight =
+                  (constraints.maxHeight - handleHeight - 74.0)
+                      .clamp(96.0, double.infinity);
+              final navCardHeight =
+                  (availableHeight *
+                          widget.controller.sidebarNavigationFraction)
+                      .clamp(48.0, availableHeight - 48.0);
 
-        // Bibliography & Zotero status bar
-        _buildBibliographyStatusBar(theme, isDark, lightTextColor, borderColor),
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(
+                    child: _buildHistoryList(
+                      theme,
+                      isDark,
+                      lightTextColor,
+                      borderColor,
+                    ),
+                  ),
+
+                  // Vertical resize handle between File History and Navigation
+                  MouseRegion(
+                    key: const ValueKey('sidebar-nav-resize-handle'),
+                    cursor: SystemMouseCursors.resizeRow,
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onVerticalDragUpdate: (details) {
+                        if (availableHeight <= 0) return;
+                        final newNavHeight =
+                            navCardHeight - details.delta.dy;
+                        widget.controller.setSidebarNavigationFraction(
+                          newNavHeight / availableHeight,
+                        );
+                      },
+                      child: SizedBox(
+                        height: handleHeight,
+                        child: Center(
+                          child: Container(
+                            width: 36,
+                            height: 3,
+                            decoration: BoxDecoration(
+                              color: borderColor,
+                              borderRadius: BorderRadius.circular(2),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  // Navigation section header
+                  _buildNavigationSectionHeader(theme, lightTextColor),
+
+                  // Navigation headings card
+                  SizedBox(
+                    height: navCardHeight,
+                    child: _buildNavigationCard(
+                      theme,
+                      isDark,
+                      lightTextColor,
+                      borderColor,
+                    ),
+                  ),
+
+                  // Sync scroll checkbox below Navigation card
+                  _buildSyncScrollToggle(theme, isDark, lightTextColor),
+                ],
+              );
+            },
+          ),
+        ),
 
         // Bottom quick action buttons
         _buildBottomActions(theme, borderColor),
@@ -1027,48 +1096,149 @@ class _AppSidebarState extends State<AppSidebar> {
     );
   }
 
-  Widget _buildBibliographyStatusBar(
+  Widget _buildNavigationSectionHeader(ThemeData theme, Color lightTextColor) {
+    return AnimatedBuilder(
+      animation: widget.controller.textController,
+      builder: (context, _) {
+        final headingCount = widget.controller.headings.length;
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(16, 10, 12, 6),
+          child: Row(
+            children: [
+              Icon(Icons.format_list_bulleted, size: 14, color: lightTextColor),
+              const SizedBox(width: 6),
+              Text(
+                'NAVIGATION ($headingCount)',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  color: lightTextColor,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildNavigationCard(
     ThemeData theme,
     bool isDark,
     Color lightTextColor,
     Color borderColor,
   ) {
-    final status = widget.controller.bibliographyStatus;
-    final isZotero = widget.controller.isZoteroConnected;
+    final surfaceColor = isDark ? AppTheme.darkSurface : AppTheme.lightSurface;
+    final primaryTextColor = isDark
+        ? AppTheme.darkTextPrimary
+        : AppTheme.lightTextPrimary;
+    final secondaryTextColor = isDark
+        ? AppTheme.darkTextSecondary
+        : AppTheme.lightTextSecondary;
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: isDark ? AppTheme.darkSurface : AppTheme.lightSurface,
-        border: Border(
-          top: BorderSide(color: borderColor.withValues(alpha: 0.6)),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: Container(
+        key: const ValueKey('sidebar-navigation-card'),
+        decoration: BoxDecoration(
+          color: surfaceColor,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: borderColor),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: AnimatedBuilder(
+          animation: widget.controller.textController,
+          builder: (context, _) {
+            final headings = widget.controller.headings;
+            if (headings.isEmpty) {
+              return Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Text(
+                    'No headings in document',
+                    style: TextStyle(fontSize: 11.5, color: lightTextColor),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              );
+            }
+
+            return ListView.builder(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+              itemCount: headings.length,
+              itemBuilder: (context, index) {
+                final heading = headings[index];
+                final indent = (heading.level - 1) * 12.0;
+                final isPrimaryHeading = heading.level <= 2;
+
+                return _NavigationHeadingItem(
+                  key: ValueKey('sidebar-nav-heading-${heading.headingIndex}'),
+                  title: heading.title,
+                  level: heading.level,
+                  indent: indent,
+                  textColor: isPrimaryHeading
+                      ? primaryTextColor
+                      : secondaryTextColor,
+                  accentColor: theme.colorScheme.primary,
+                  isDark: isDark,
+                  onTap: () => widget.controller.jumpToHeading(heading),
+                );
+              },
+            );
+          },
         ),
       ),
-      child: Row(
-        children: [
-          Icon(
-            isZotero ? Icons.sync : Icons.book_outlined,
-            size: 14,
-            color: isZotero ? Colors.green : lightTextColor,
+    );
+  }
+
+  Widget _buildSyncScrollToggle(
+    ThemeData theme,
+    bool isDark,
+    Color lightTextColor,
+  ) {
+    final isLinked = widget.controller.isLinkedScrolling;
+    final textColor = isDark
+        ? AppTheme.darkTextPrimary
+        : AppTheme.lightTextPrimary;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 6, 12, 8),
+      child: InkWell(
+        key: const ValueKey('sidebar-sync-scroll-row'),
+        borderRadius: BorderRadius.circular(6),
+        onTap: () => widget.controller.setLinkedScrolling(!isLinked),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 20,
+                height: 20,
+                child: Checkbox(
+                  key: const ValueKey('sidebar-sync-scroll-checkbox'),
+                  value: isLinked,
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  visualDensity: VisualDensity.compact,
+                  onChanged: (val) {
+                    if (val != null) {
+                      widget.controller.setLinkedScrolling(val);
+                    }
+                  },
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Sync scroll',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: textColor,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              status,
-              style: TextStyle(fontSize: 10.5, color: lightTextColor),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.refresh, size: 14),
-            tooltip: 'Check Zotero & Bibliography',
-            splashRadius: 14,
-            onPressed: () async {
-              await widget.controller.checkZoteroConnection();
-            },
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -1105,6 +1275,80 @@ class _AppSidebarState extends State<AppSidebar> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _NavigationHeadingItem extends StatefulWidget {
+  final String title;
+  final int level;
+  final double indent;
+  final Color textColor;
+  final Color accentColor;
+  final bool isDark;
+  final VoidCallback onTap;
+
+  const _NavigationHeadingItem({
+    super.key,
+    required this.title,
+    required this.level,
+    required this.indent,
+    required this.textColor,
+    required this.accentColor,
+    required this.isDark,
+    required this.onTap,
+  });
+
+  @override
+  State<_NavigationHeadingItem> createState() => _NavigationHeadingItemState();
+}
+
+class _NavigationHeadingItemState extends State<_NavigationHeadingItem> {
+  bool _isHovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final hoverBg = widget.accentColor.withValues(
+      alpha: widget.isDark ? 0.18 : 0.10,
+    );
+    final hoverBorder = widget.accentColor.withValues(
+      alpha: widget.isDark ? 0.45 : 0.35,
+    );
+
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 100),
+          margin: const EdgeInsets.symmetric(vertical: 1),
+          padding: EdgeInsets.fromLTRB(8.0 + widget.indent, 5, 8, 5),
+          decoration: BoxDecoration(
+            color: _isHovered ? hoverBg : Colors.transparent,
+            borderRadius: BorderRadius.circular(5),
+            border: Border.all(
+              color: _isHovered ? hoverBorder : Colors.transparent,
+            ),
+          ),
+          child: Text(
+            widget.title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: widget.level == 1
+                  ? 12.5
+                  : (widget.level == 2 ? 12.0 : 11.5),
+              fontWeight: widget.level == 1
+                  ? FontWeight.w700
+                  : (widget.level == 2 ? FontWeight.w600 : FontWeight.w400),
+              color: _isHovered ? widget.accentColor : widget.textColor,
+            ),
+          ),
+        ),
       ),
     );
   }
