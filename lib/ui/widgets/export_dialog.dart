@@ -36,13 +36,14 @@ class _ExportDialogState extends State<ExportDialog> {
   final TextEditingController _targetPathController = TextEditingController();
   final TextEditingController _customArgsController = TextEditingController();
 
-  bool _standalone = true;
-  bool _tableOfContents = false;
   bool _useCiteproc = true;
   String _selectedPageSize = 'a4';
   String _selectedMarginSize = 'medium';
   double _fontScale = 1.0;
   bool _useHrAsPageBreak = false;
+  bool _showLineNumbers = false;
+  bool _showPageNumbers = false;
+  ExportLineSpacing _lineSpacing = ExportLineSpacing.single;
   bool _showAdvancedOptions = false;
 
   // Debounced & buffered preview state so rapid zoom/margin clicks stay instant
@@ -50,6 +51,9 @@ class _ExportDialogState extends State<ExportDialog> {
   String _previewMarginSize = 'medium';
   double _previewFontScale = 1.0;
   bool _previewUseHrAsPageBreak = false;
+  bool _previewShowLineNumbers = false;
+  bool _previewShowPageNumbers = false;
+  ExportLineSpacing _previewLineSpacing = ExportLineSpacing.single;
   Timer? _previewDebounceTimer;
   bool _isPreviewUpdating = false;
   bool _hasQueuedPreviewUpdate = false;
@@ -65,6 +69,7 @@ class _ExportDialogState extends State<ExportDialog> {
   void initState() {
     super.initState();
     _initialiseDefaultTargetPath();
+    _loadSavedExportPreferences();
     _previewRender = MarkdownRenderService.executeMarkdownRender(
       MarkdownRenderPayload(
         renderId: 0,
@@ -76,6 +81,96 @@ class _ExportDialogState extends State<ExportDialog> {
         isNumericCitation: widget.controller.activeCslStyle.isNumeric,
       ),
     );
+  }
+
+  Future<void> _loadSavedExportPreferences() async {
+    final saved = await widget.controller.loadExportPreferences();
+    if (saved == null || !mounted) return;
+
+    setState(() {
+      final formatId = saved['formatId'] as String?;
+      if (formatId != null) {
+        final matched = ExportFormat.supportedFormats
+            .where((f) => f.id == formatId)
+            .firstOrNull;
+        if (matched != null) {
+          _selectedFormat = matched;
+          _updateTargetExtension(matched.extension);
+        }
+      }
+      if (saved['useCiteproc'] is bool) {
+        _useCiteproc = saved['useCiteproc'] as bool;
+      }
+      if (saved['useHrAsPageBreak'] is bool) {
+        _useHrAsPageBreak = saved['useHrAsPageBreak'] as bool;
+      }
+      if (saved['pageSize'] is String) {
+        final ps = saved['pageSize'] as String;
+        if (ps == 'a4' || ps == 'letter') _selectedPageSize = ps;
+      }
+      if (saved['marginSize'] is String) {
+        final ms = saved['marginSize'] as String;
+        if (ms == 'thin' || ms == 'medium' || ms == 'thick') {
+          _selectedMarginSize = ms;
+        }
+      }
+      if (saved['fontScale'] is num) {
+        _fontScale = (saved['fontScale'] as num).toDouble().clamp(0.7, 1.5);
+      }
+      if (saved['showLineNumbers'] is bool) {
+        _showLineNumbers = saved['showLineNumbers'] as bool;
+      }
+      if (saved['showPageNumbers'] is bool) {
+        _showPageNumbers = saved['showPageNumbers'] as bool;
+      }
+      if (saved['lineSpacing'] is String) {
+        final lsName = saved['lineSpacing'] as String;
+        _lineSpacing = ExportLineSpacing.values.firstWhere(
+          (v) => v.name == lsName,
+          orElse: () => ExportLineSpacing.single,
+        );
+      }
+      if (saved['customArguments'] is String) {
+        _customArgsController.text = saved['customArguments'] as String;
+      }
+
+      _previewPageSize = _selectedPageSize;
+      _previewMarginSize = _selectedMarginSize;
+      _previewFontScale = _fontScale;
+      _previewUseHrAsPageBreak = _useHrAsPageBreak;
+      _previewShowLineNumbers = _showLineNumbers;
+      _previewShowPageNumbers = _showPageNumbers;
+      _previewLineSpacing = _lineSpacing;
+      _cachedPreviewSheet = null;
+    });
+  }
+
+  void _persistExportPreferences() {
+    widget.controller.saveExportPreferences({
+      'formatId': _selectedFormat.id,
+      'useCiteproc': _useCiteproc,
+      'useHrAsPageBreak': _useHrAsPageBreak,
+      'pageSize': _selectedPageSize,
+      'marginSize': _selectedMarginSize,
+      'fontScale': _fontScale,
+      'showLineNumbers': _showLineNumbers,
+      'showPageNumbers': _showPageNumbers,
+      'lineSpacing': _lineSpacing.name,
+      'customArguments': _customArgsController.text.trim(),
+    });
+  }
+
+  void _updateTargetExtension(String extension) {
+    final current = _targetPathController.text;
+    if (current.isNotEmpty) {
+      final lastDot = current.lastIndexOf('.');
+      if (lastDot != -1) {
+        _targetPathController.text =
+            '${current.substring(0, lastDot)}.$extension';
+      } else {
+        _targetPathController.text = '$current.$extension';
+      }
+    }
   }
 
   void _initialiseDefaultTargetPath() {
@@ -97,17 +192,9 @@ class _ExportDialogState extends State<ExportDialog> {
   void _onFormatChanged(ExportFormat format) {
     setState(() {
       _selectedFormat = format;
-      final current = _targetPathController.text;
-      if (current.isNotEmpty) {
-        final lastDot = current.lastIndexOf('.');
-        if (lastDot != -1) {
-          _targetPathController.text =
-              '${current.substring(0, lastDot)}.${format.extension}';
-        } else {
-          _targetPathController.text = '$current.${format.extension}';
-        }
-      }
+      _updateTargetExtension(format.extension);
     });
+    _persistExportPreferences();
   }
 
   Future<void> _browseDestination() async {
@@ -132,11 +219,11 @@ class _ExportDialogState extends State<ExportDialog> {
       _lastResult = null;
     });
 
+    _persistExportPreferences();
+
     final options = ExportOptions(
       format: _selectedFormat,
       targetPath: target,
-      standalone: _standalone,
-      tableOfContents: _tableOfContents,
       useCiteproc: _useCiteproc,
       bibliographyPath: widget.controller.bibliographyPath,
       cslStylePath: widget.controller.activeEffectiveCslPath,
@@ -145,6 +232,9 @@ class _ExportDialogState extends State<ExportDialog> {
       marginSize: _selectedMarginSize,
       fontScale: _fontScale,
       useHrAsPageBreak: _useHrAsPageBreak,
+      showLineNumbers: _showLineNumbers,
+      showPageNumbers: _showPageNumbers,
+      lineSpacing: _lineSpacing,
     );
 
     final result = await widget.controller.exportDocument(options);
@@ -156,6 +246,7 @@ class _ExportDialogState extends State<ExportDialog> {
   }
 
   void _schedulePreviewUpdate() {
+    _persistExportPreferences();
     _previewDebounceTimer?.cancel();
     _previewDebounceTimer = Timer(
       const Duration(milliseconds: 500),
@@ -173,7 +264,10 @@ class _ExportDialogState extends State<ExportDialog> {
     if (_previewPageSize == _selectedPageSize &&
         _previewMarginSize == _selectedMarginSize &&
         _previewFontScale == _fontScale &&
-        _previewUseHrAsPageBreak == _useHrAsPageBreak) {
+        _previewUseHrAsPageBreak == _useHrAsPageBreak &&
+        _previewShowLineNumbers == _showLineNumbers &&
+        _previewShowPageNumbers == _showPageNumbers &&
+        _previewLineSpacing == _lineSpacing) {
       return;
     }
 
@@ -183,6 +277,9 @@ class _ExportDialogState extends State<ExportDialog> {
       _previewMarginSize = _selectedMarginSize;
       _previewFontScale = _fontScale;
       _previewUseHrAsPageBreak = _useHrAsPageBreak;
+      _previewShowLineNumbers = _showLineNumbers;
+      _previewShowPageNumbers = _showPageNumbers;
+      _previewLineSpacing = _lineSpacing;
       _cachedPreviewSheet = null;
     });
 
@@ -196,7 +293,10 @@ class _ExportDialogState extends State<ExportDialog> {
           _previewPageSize != _selectedPageSize ||
           _previewMarginSize != _selectedMarginSize ||
           _previewFontScale != _fontScale ||
-          _previewUseHrAsPageBreak != _useHrAsPageBreak;
+          _previewUseHrAsPageBreak != _useHrAsPageBreak ||
+          _previewShowLineNumbers != _showLineNumbers ||
+          _previewShowPageNumbers != _showPageNumbers ||
+          _previewLineSpacing != _lineSpacing;
 
       if (_hasQueuedPreviewUpdate || hasPendingDelta) {
         _hasQueuedPreviewUpdate = false;
@@ -429,45 +529,15 @@ class _ExportDialogState extends State<ExportDialog> {
                                         Checkbox(
                                           value: _useCiteproc,
                                           visualDensity: VisualDensity.compact,
-                                          onChanged: (val) => setState(
-                                            () => _useCiteproc = val ?? true,
-                                          ),
+                                          onChanged: (val) {
+                                            setState(
+                                              () => _useCiteproc = val ?? true,
+                                            );
+                                            _persistExportPreferences();
+                                          },
                                         ),
                                         const Text(
                                           'Include Citations & References',
-                                          style: TextStyle(fontSize: 12),
-                                        ),
-                                      ],
-                                    ),
-                                    Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Checkbox(
-                                          value: _standalone,
-                                          visualDensity: VisualDensity.compact,
-                                          onChanged: (val) => setState(
-                                            () => _standalone = val ?? true,
-                                          ),
-                                        ),
-                                        const Text(
-                                          'Standalone Document',
-                                          style: TextStyle(fontSize: 12),
-                                        ),
-                                      ],
-                                    ),
-                                    Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Checkbox(
-                                          value: _tableOfContents,
-                                          visualDensity: VisualDensity.compact,
-                                          onChanged: (val) => setState(
-                                            () =>
-                                                _tableOfContents = val ?? false,
-                                          ),
-                                        ),
-                                        const Text(
-                                          'Table of Contents',
                                           style: TextStyle(fontSize: 12),
                                         ),
                                       ],
@@ -495,10 +565,65 @@ class _ExportDialogState extends State<ExportDialog> {
                                         ),
                                       ],
                                     ),
+                                    if (_selectedFormat.type ==
+                                        ExportFormatType.pdf) ...[
+                                      Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Checkbox(
+                                            key: const ValueKey(
+                                              'line-numbers-checkbox',
+                                            ),
+                                            value: _showLineNumbers,
+                                            visualDensity:
+                                                VisualDensity.compact,
+                                            onChanged: (val) {
+                                              setState(
+                                                () => _showLineNumbers =
+                                                    val ?? false,
+                                              );
+                                              _schedulePreviewUpdate();
+                                            },
+                                          ),
+                                          const Text(
+                                            'Line Numbers',
+                                            style: TextStyle(fontSize: 12),
+                                          ),
+                                        ],
+                                      ),
+                                      Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Checkbox(
+                                            key: const ValueKey(
+                                              'page-numbers-checkbox',
+                                            ),
+                                            value: _showPageNumbers,
+                                            visualDensity:
+                                                VisualDensity.compact,
+                                            onChanged: (val) {
+                                              setState(
+                                                () => _showPageNumbers =
+                                                    val ?? false,
+                                              );
+                                              _schedulePreviewUpdate();
+                                            },
+                                          ),
+                                          const Text(
+                                            'Page Numbers (Footer)',
+                                            style: TextStyle(fontSize: 12),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
                                   ],
                                 ),
                                 if (showPreview) ...[
-                                  const SizedBox(height: 6),
+                                  Divider(
+                                    height: 14,
+                                    thickness: 1,
+                                    color: borderColor,
+                                  ),
                                   Wrap(
                                     spacing: 16,
                                     runSpacing: 6,
@@ -656,6 +781,96 @@ class _ExportDialogState extends State<ExportDialog> {
                                                     }
                                                   },
                                                 ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            const Text(
+                                              'Line Spacing:',
+                                              style: TextStyle(fontSize: 12),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Container(
+                                              height: 28,
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 8,
+                                                  ),
+                                              decoration: BoxDecoration(
+                                                border: Border.all(
+                                                  color: borderColor,
+                                                ),
+                                                borderRadius:
+                                                    BorderRadius.circular(4),
+                                                color: isDark
+                                                    ? AppTheme.darkBg
+                                                    : AppTheme.lightSurface,
+                                              ),
+                                              child: DropdownButtonHideUnderline(
+                                                child:
+                                                    DropdownButton<
+                                                      ExportLineSpacing
+                                                    >(
+                                                      key: const ValueKey(
+                                                        'line-spacing-dropdown',
+                                                      ),
+                                                      value: _lineSpacing,
+                                                      isDense: true,
+                                                      focusColor:
+                                                          Colors.transparent,
+                                                      icon: const Icon(
+                                                        Icons
+                                                            .keyboard_arrow_down,
+                                                        size: 16,
+                                                      ),
+                                                      items: const [
+                                                        DropdownMenuItem(
+                                                          value:
+                                                              ExportLineSpacing
+                                                                  .single,
+                                                          child: Text(
+                                                            '1.0',
+                                                            style: TextStyle(
+                                                              fontSize: 12,
+                                                            ),
+                                                          ),
+                                                        ),
+                                                        DropdownMenuItem(
+                                                          value:
+                                                              ExportLineSpacing
+                                                                  .onePointFive,
+                                                          child: Text(
+                                                            '1.5',
+                                                            style: TextStyle(
+                                                              fontSize: 12,
+                                                            ),
+                                                          ),
+                                                        ),
+                                                        DropdownMenuItem(
+                                                          value:
+                                                              ExportLineSpacing
+                                                                  .doubleSpacing,
+                                                          child: Text(
+                                                            '2.0',
+                                                            style: TextStyle(
+                                                              fontSize: 12,
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      ],
+                                                      onChanged: (val) {
+                                                        if (val != null) {
+                                                          setState(
+                                                            () => _lineSpacing =
+                                                                val,
+                                                          );
+                                                          _schedulePreviewUpdate();
+                                                        }
+                                                      },
+                                                    ),
                                               ),
                                             ),
                                           ],
@@ -1072,6 +1287,13 @@ class _ExportDialogState extends State<ExportDialog> {
           };
 
     final double baseFont = 8.8 * _previewFontScale;
+    final double bodyLineHeight = isPdf
+        ? switch (_previewLineSpacing) {
+            ExportLineSpacing.onePointFive => 2.4,
+            ExportLineSpacing.doubleSpacing => 3.2,
+            ExportLineSpacing.single => 1.6,
+          }
+        : 1.6;
     final bodyFont = widget.controller.renderBodyFont;
     final headerFont = widget.controller.effectiveRenderHeaderFont;
     final codeFont = widget.controller.editorFontFamily;
@@ -1085,7 +1307,7 @@ class _ExportDialogState extends State<ExportDialog> {
           p: TextStyle(
             fontFamily: bodyFont,
             fontSize: baseFont,
-            height: 1.6,
+            height: bodyLineHeight,
             color: textColor,
           ),
           h1: TextStyle(
@@ -1199,10 +1421,13 @@ class _ExportDialogState extends State<ExportDialog> {
         _previewPageSize != _selectedPageSize ||
         _previewMarginSize != _selectedMarginSize ||
         _previewFontScale != _fontScale ||
-        _previewUseHrAsPageBreak != _useHrAsPageBreak;
+        _previewUseHrAsPageBreak != _useHrAsPageBreak ||
+        _previewShowLineNumbers != _showLineNumbers ||
+        _previewShowPageNumbers != _showPageNumbers ||
+        _previewLineSpacing != _lineSpacing;
 
     final previewKey =
-        '${_selectedFormat.type.name}|$_previewPageSize|$_previewMarginSize|$_previewFontScale|$_previewUseHrAsPageBreak';
+        '${_selectedFormat.type.name}|$_previewPageSize|$_previewMarginSize|$_previewFontScale|$_previewUseHrAsPageBreak|$_previewShowLineNumbers|$_previewShowPageNumbers|${_previewLineSpacing.name}';
     if (_cachedPreviewSheet == null || _cachedPreviewKey != previewKey) {
       _cachedPreviewKey = previewKey;
       final previewMarkdown = _previewUseHrAsPageBreak
@@ -1210,6 +1435,22 @@ class _ExportDialogState extends State<ExportDialog> {
               _previewRender.processedMarkdown,
             ).split('<div class="page-break"></div>').first.trimRight()
           : _previewRender.processedMarkdown;
+      final showPreviewLineNumbers = isPdf && _previewShowLineNumbers;
+      final showPreviewPageNumbers = isPdf && _previewShowPageNumbers;
+      final effectiveContentMargins = showPreviewLineNumbers
+          ? EdgeInsets.fromLTRB(
+              pageMargins.left + 26.0,
+              pageMargins.top,
+              pageMargins.right,
+              pageMargins.bottom,
+            )
+          : pageMargins;
+      final previewLineStep = baseFont * bodyLineHeight;
+      final sampleLineCount =
+          ((pageHeight - pageMargins.vertical) / previewLineStep).floor().clamp(
+            1,
+            40,
+          );
       _cachedPreviewSheet = RepaintBoundary(
         child: AspectRatio(
           aspectRatio: pageWidth / pageHeight,
@@ -1230,75 +1471,125 @@ class _ExportDialogState extends State<ExportDialog> {
               child: SizedBox(
                 width: pageWidth,
                 height: pageHeight,
-                child: Padding(
-                  padding: pageMargins,
-                  child: ClipRect(
-                    child: OverflowBox(
-                      alignment: Alignment.topLeft,
-                      minWidth: pageWidth - pageMargins.horizontal,
-                      maxWidth: pageWidth - pageMargins.horizontal,
-                      minHeight: 0,
-                      maxHeight: double.infinity,
-                      child: Theme(
-                        data: lightTheme,
-                        child: DefaultTextStyle(
-                          style: TextStyle(
-                            fontFamily: bodyFont,
-                            fontSize: baseFont,
-                            height: 1.6,
-                            color: textColor,
-                          ),
-                          child: MarkdownBody(
-                            data: previewMarkdown,
-                            extensionSet: md.ExtensionSet.gitHubFlavored,
-                            styleSheet: previewStyle,
-                            inlineSyntaxes: [
-                              DisplayMathSyntax(),
-                              InlineMathSyntax(),
-                              BracketedCitationSyntax(),
-                              InTextCitationSyntax(),
-                              SuperscriptSyntax(),
-                              SubscriptSyntax(),
-                            ],
-                            builders: {
-                              'displaymath': MathElementBuilder(
-                                isDisplay: true,
-                                textColor: textColor,
-                                codeFont: codeFont,
-                                baseFontSize: baseFont,
+                child: Stack(
+                  children: [
+                    Padding(
+                      padding: effectiveContentMargins,
+                      child: ClipRect(
+                        child: OverflowBox(
+                          alignment: Alignment.topLeft,
+                          minWidth:
+                              pageWidth - effectiveContentMargins.horizontal,
+                          maxWidth:
+                              pageWidth - effectiveContentMargins.horizontal,
+                          minHeight: 0,
+                          maxHeight: double.infinity,
+                          child: Theme(
+                            data: lightTheme,
+                            child: DefaultTextStyle(
+                              style: TextStyle(
+                                fontFamily: bodyFont,
+                                fontSize: baseFont,
+                                height: bodyLineHeight,
+                                color: textColor,
                               ),
-                              'inlinemath': MathElementBuilder(
-                                isDisplay: false,
-                                textColor: textColor,
-                                codeFont: codeFont,
-                                baseFontSize: baseFont,
+                              child: MarkdownBody(
+                                data: previewMarkdown,
+                                extensionSet: md.ExtensionSet.gitHubFlavored,
+                                styleSheet: previewStyle,
+                                inlineSyntaxes: [
+                                  DisplayMathSyntax(),
+                                  InlineMathSyntax(),
+                                  BracketedCitationSyntax(),
+                                  InTextCitationSyntax(),
+                                  SuperscriptSyntax(),
+                                  SubscriptSyntax(),
+                                ],
+                                builders: {
+                                  'displaymath': MathElementBuilder(
+                                    isDisplay: true,
+                                    textColor: textColor,
+                                    codeFont: codeFont,
+                                    baseFontSize: baseFont,
+                                  ),
+                                  'inlinemath': MathElementBuilder(
+                                    isDisplay: false,
+                                    textColor: textColor,
+                                    codeFont: codeFont,
+                                    baseFontSize: baseFont,
+                                  ),
+                                  'academiccitation': CitationElementBuilder(
+                                    helper: helper,
+                                    isDark: false,
+                                  ),
+                                  'code': MathCodeBlockBuilder(
+                                    textColor: textColor,
+                                    codeFont: codeFont,
+                                    baseFontSize: baseFont,
+                                  ),
+                                  'img': MarkdownImageElementBuilder(
+                                    controller: widget.controller,
+                                    imageDirectory: imgDir,
+                                    isDark: false,
+                                    codeFont: codeFont,
+                                    textColor: textColor,
+                                    mutedColor: const Color(0xFF64748B),
+                                  ),
+                                  'input': InputElementBuilder(),
+                                  'sup': SuperscriptElementBuilder(),
+                                  'sub': SubscriptElementBuilder(),
+                                },
                               ),
-                              'academiccitation': CitationElementBuilder(
-                                helper: helper,
-                                isDark: false,
-                              ),
-                              'code': MathCodeBlockBuilder(
-                                textColor: textColor,
-                                codeFont: codeFont,
-                                baseFontSize: baseFont,
-                              ),
-                              'img': MarkdownImageElementBuilder(
-                                controller: widget.controller,
-                                imageDirectory: imgDir,
-                                isDark: false,
-                                codeFont: codeFont,
-                                textColor: textColor,
-                                mutedColor: const Color(0xFF64748B),
-                              ),
-                              'input': InputElementBuilder(),
-                              'sup': SuperscriptElementBuilder(),
-                              'sub': SubscriptElementBuilder(),
-                            },
+                            ),
                           ),
                         ),
                       ),
                     ),
-                  ),
+                    if (showPreviewLineNumbers)
+                      Positioned(
+                        left: pageMargins.left,
+                        top: pageMargins.top,
+                        bottom: pageMargins.bottom,
+                        width: 20,
+                        child: ClipRect(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: List.generate(
+                              sampleLineCount,
+                              (index) => SizedBox(
+                                height: previewLineStep,
+                                child: Align(
+                                  alignment: Alignment.centerRight,
+                                  child: Text(
+                                    '${index + 1}',
+                                    style: TextStyle(
+                                      fontFamily: codeFont,
+                                      fontSize: 7.5,
+                                      height: 1.0,
+                                      color: const Color(0xFF94A3B8),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    if (showPreviewPageNumbers)
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        bottom: (pageMargins.bottom / 2) - 6,
+                        child: const Text(
+                          'Page 1 of 1',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 8.5,
+                            color: Color(0xFF64748B),
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
               ),
             ),

@@ -100,6 +100,9 @@ class ExportFormat {
   ];
 }
 
+/// Line spacing options for PDF export
+enum ExportLineSpacing { single, onePointFive, doubleSpacing }
+
 /// Options configured when running a Pandoc export
 class ExportOptions {
   final ExportFormat format;
@@ -114,6 +117,9 @@ class ExportOptions {
   final String marginSize;
   final double fontScale;
   final bool useHrAsPageBreak;
+  final bool showLineNumbers;
+  final bool showPageNumbers;
+  final ExportLineSpacing lineSpacing;
 
   const ExportOptions({
     required this.format,
@@ -128,6 +134,9 @@ class ExportOptions {
     this.marginSize = 'medium',
     this.fontScale = 1.0,
     this.useHrAsPageBreak = false,
+    this.showLineNumbers = false,
+    this.showPageNumbers = false,
+    this.lineSpacing = ExportLineSpacing.single,
   });
 
   ExportOptions copyWith({
@@ -143,6 +152,9 @@ class ExportOptions {
     String? marginSize,
     double? fontScale,
     bool? useHrAsPageBreak,
+    bool? showLineNumbers,
+    bool? showPageNumbers,
+    ExportLineSpacing? lineSpacing,
   }) {
     return ExportOptions(
       format: format ?? this.format,
@@ -157,6 +169,9 @@ class ExportOptions {
       marginSize: marginSize ?? this.marginSize,
       fontScale: fontScale ?? this.fontScale,
       useHrAsPageBreak: useHrAsPageBreak ?? this.useHrAsPageBreak,
+      showLineNumbers: showLineNumbers ?? this.showLineNumbers,
+      showPageNumbers: showPageNumbers ?? this.showPageNumbers,
+      lineSpacing: lineSpacing ?? this.lineSpacing,
     );
   }
 }
